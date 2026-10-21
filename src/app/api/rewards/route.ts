@@ -8,8 +8,12 @@ import { createReward, listDeletedRewards } from "@/lib/server/rewards";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Create a reward → 201 (200 with the existing record for a repeated clientRequestId). */
-export const POST = apiHandler({ permission: "reward.create" }, async ({ req, user, ip }) => {
+/**
+ * Create a reward → 201 (200 with the existing record for a repeated clientRequestId).
+ * `reward.propose`: callers without `reward.create` (GVCN) may only propose for their own classes (status forced
+ * "Mới ghi nhận", `proposed: true`).
+ */
+export const POST = apiHandler({ permission: "reward.propose" }, async ({ req, user, ip }) => {
   const input = await parseBody(req, RewardCreateSchema);
   const { reward, created: isNew } = await createReward({ user, ip }, input);
   return isNew ? created(reward) : withStatus(200, reward);

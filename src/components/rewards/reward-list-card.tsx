@@ -1,12 +1,22 @@
 "use client";
-import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
-import { BadgeCheck, CircleCheck, Clock, Gift, Info, Minus, Pencil, Trash } from "lucide-react";
+import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { BadgeCheck, CircleCheck, Clock, Gift, HandHeart, Info, Minus, Pencil, Trash } from "lucide-react";
 import { PeriodBadge, useNow } from "@/components/app/widgets";
-import { Badge, Button, Card, DataTable, EmptyState, IconButton, StatusBadge, type DataTableColumn } from "@/components/ui";
+import { Badge, Button, Card, DataTable, EmptyState, IconButton, Pill, StatusBadge, type DataTableColumn } from "@/components/ui";
 import { fmtDate, fmtNumber } from "@/lib/client/format";
 import { useSession } from "@/lib/client/session";
 import type { GlobalFilters, LevelDataset, Reward, RewardStatus } from "@/lib/types";
-import { canDeleteReward, canEditReward, quickStatusActions, rewardSummary, type RewardRow } from "./lib/reward-list";
+import {
+  canDeleteReward,
+  canEditReward,
+  filterProposedRows,
+  ignoredRewardFilters,
+  isProposedReward,
+  proposalCounts,
+  quickStatusActions,
+  rewardSummary,
+  type RewardRow,
+} from "./lib/reward-list";
 
 export interface RewardListCardProps {
   ds: LevelDataset;
@@ -17,7 +27,18 @@ export interface RewardListCardProps {
   onEdit: (reward: Reward) => void;
   onDelete: (reward: Reward) => void;
   onStatus: (reward: Reward, to: RewardStatus) => void;
+  /** GVCN: the rows are the rewards of own classes (title / empty state say so). */
+  ownClassesOnly?: boolean;
   className?: string;
+}
+
+/** "GVCN đề xuất" badge of a proposed reward (icon + text). */
+export function ProposedBadge({ size = "sm" }: { size?: "sm" | "md" }) {
+  return (
+    <Badge tone="star" size={size} icon={HandHeart}>
+      GVCN đề xuất
+    </Badge>
+  );
 }
 
 const stop = (e: MouseEvent | KeyboardEvent) => e.stopPropagation();
@@ -29,9 +50,12 @@ function shortName(name: string): string {
 }
 
 /** "Điểm thưởng trong kỳ": summary chips + sortable table (cards on phones) with the status workflow. */
-export function RewardListCard({ ds, rows, filters, busyId, onOpen, onEdit, onDelete, onStatus, className }: RewardListCardProps) {
+export function RewardListCard({ ds, rows: allRows, filters, busyId, onOpen, onEdit, onDelete, onStatus, ownClassesOnly, className }: RewardListCardProps) {
   const { profile } = useSession();
   const now = useNow();
+  const [onlyProposed, setOnlyProposed] = useState(false);
+  const proposals = useMemo(() => proposalCounts(allRows), [allRows]);
+  const rows = useMemo(() => filterProposedRows(allRows, onlyProposed && proposals.total > 0), [allRows, onlyProposed, proposals.total]);
   const summary = useMemo(() => rewardSummary(rows), [rows]);
 
   const columns = useMemo<DataTableColumn<RewardRow>[]>(
@@ -63,7 +87,8 @@ export function RewardListCard({ ds, rows, filters, busyId, onOpen, onEdit, onDe
         header: "Nội dung",
         className: "min-w-44",
         cell: (r) => (
-          <span className="flex flex-col">
+          <span className="flex flex-col items-start gap-0.5">
+            {isProposedReward(r.reward) ? <ProposedBadge /> : null}
             <span className="line-clamp-2 text-slate-800">{r.reward.reason}</span>
             {r.reward.note ? <span className="line-clamp-1 text-xs text-slate-500">{r.reward.note}</span> : null}
             <span className="text-xs text-slate-500 2xl:hidden">Người ghi: {r.reward.reporter ?? r.reward.createdByName}</span>
@@ -151,14 +176,14 @@ export function RewardListCard({ ds, rows, filters, busyId, onOpen, onEdit, onDe
     [profile, now, busyId, onEdit, onDelete, onStatus],
   );
 
-  const filterNote = filters.category || filters.errorCode;
+  const ignored = ignoredRewardFilters(filters);
 
   return (
     <Card
       padding="none"
       headingLevel={2}
       icon={Gift}
-      title="Điểm thưởng trong kỳ"
+      title={ownClassesOnly ? "Điểm thưởng của lớp chủ nhiệm" : "Điểm thưởng trong kỳ"}
       subtitle={<PeriodBadge period={filters.period} semesters={ds.config.semesters} size="sm" className="mt-1" />}
       className={className}
       actions={
@@ -172,10 +197,21 @@ export function RewardListCard({ ds, rows, filters, busyId, onOpen, onEdit, onDe
         </div>
       }
     >
-      {filterNote ? (
+      {proposals.total > 0 && !ownClassesOnly ? (
+        <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 sm:mx-5" role="group" aria-label="Lọc điểm thưởng">
+          <Pill active={!onlyProposed} onClick={() => setOnlyProposed(false)}>
+            Tất cả · {fmtNumber(allRows.length)}
+          </Pill>
+          <Pill tone="star" icon={HandHeart} active={onlyProposed} onClick={() => setOnlyProposed((v) => !v)}>
+            Đề xuất của GVCN · {fmtNumber(proposals.total)}
+            {proposals.pending > 0 ? ` (${fmtNumber(proposals.pending)} chờ xác minh)` : ""}
+          </Pill>
+        </div>
+      ) : null}
+      {ignored.length > 0 ? (
         <p className="mx-4 mb-3 flex items-center gap-1.5 text-xs text-slate-500 sm:mx-5">
           <Info aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
-          Bộ lọc Mảng / Lỗi không áp dụng cho điểm thưởng.
+          Bộ lọc {ignored.join(" / ")} không áp dụng cho điểm thưởng.
         </p>
       ) : null}
       <DataTable<RewardRow>
@@ -193,8 +229,12 @@ export function RewardListCard({ ds, rows, filters, busyId, onOpen, onEdit, onDe
           <EmptyState
             size="sm"
             icon={Gift}
-            title="Chưa có điểm thưởng trong kỳ này"
-            description="Điểm thưởng ghi nhận trong kỳ đang lọc sẽ hiện ở đây. Thử đổi kỳ, khối hoặc lớp ở bộ lọc phía trên."
+            title={onlyProposed ? "Chưa có đề xuất của GVCN trong kỳ này" : "Chưa có điểm thưởng trong kỳ này"}
+            description={
+              ownClassesOnly
+                ? "Điểm thưởng và đề xuất của lớp chủ nhiệm trong kỳ đang lọc sẽ hiện ở đây."
+                : "Điểm thưởng ghi nhận trong kỳ đang lọc sẽ hiện ở đây. Thử đổi kỳ, khối hoặc lớp ở bộ lọc phía trên."
+            }
           />
         }
       />
@@ -226,6 +266,7 @@ function RewardMobileCard({ row: { reward: r, counted } }: { row: RewardRow }) {
         <span className="num text-xs text-slate-500">{fmtDate(r.date)}</span>
         <span className="num ml-auto text-base font-bold text-ok-strong">+{fmtNumber(r.points)}</span>
       </span>
+      {isProposedReward(r) ? <ProposedBadge /> : null}
       <span className="line-clamp-2 text-sm font-medium text-slate-900">{r.reason}</span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <StatusBadge status={r.status} size="sm" />

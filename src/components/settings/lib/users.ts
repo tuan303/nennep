@@ -42,9 +42,9 @@ export const ROLE_TONES: Record<Role, "brand" | "star" | "ok" | "muted"> = { ADM
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   ADMIN: "Toàn quyền: cấu hình, người dùng, nhập/xuất, xóa và khôi phục.",
-  EDITOR: "Ghi nhận sự việc, điểm thưởng; sửa bản ghi của mình trong 24 giờ.",
+  EDITOR: "Ghi nhận sự việc, điểm thưởng, đợt kiểm tra và biện pháp khắc phục; sửa bản ghi của mình trong 24 giờ.",
   VIEWER: "Xem số liệu, xếp hạng và báo cáo (BGH, người theo dõi).",
-  GVCN: "Xem chi tiết lớp chủ nhiệm, phản hồi sự việc của lớp mình.",
+  GVCN: "Xem chi tiết lớp chủ nhiệm, phản hồi và ghi biện pháp khắc phục sự việc của lớp mình, đề xuất điểm thưởng cho lớp.",
 };
 
 export const ROLE_OPTIONS = ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));

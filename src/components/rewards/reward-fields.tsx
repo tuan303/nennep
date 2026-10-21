@@ -3,19 +3,21 @@ import { useRef } from "react";
 import { Lightbulb } from "lucide-react";
 import { ClassPicker, PhotoCapture, type PhotoUploadSummary } from "@/components/app/widgets";
 import { EvidenceLinks } from "@/components/entry/evidence-links";
-import { DateInput, Field, Input, NumberStepper, Pill, Select, Textarea } from "@/components/ui";
+import { DateInput, Field, Input, Pill, Select, Textarea } from "@/components/ui";
+import { REWARD_REASON_MIN_LENGTH } from "@/lib/constants";
 import { isIsoDate, weekdayLabelVN } from "@/lib/engine/dates";
 import { calendarStart } from "@/lib/engine/period";
 import type { LevelDataset, RewardStatus } from "@/lib/types";
 import {
-  REWARD_POINTS_MAX,
-  REWARD_POINTS_MIN,
-  REWARD_POINT_PRESETS,
+  REWARD_REASON_MAX,
   REWARD_REASON_SUGGESTIONS,
   applyReasonSuggestion,
+  isRewardPointLevel,
   rewardStatusOptions,
   type RewardForm,
+  type RewardMode,
 } from "./lib/reward-form";
+import { RewardPointsPicker } from "./reward-points-picker";
 
 export interface RewardFieldsProps {
   ds: LevelDataset;
@@ -24,6 +26,12 @@ export interface RewardFieldsProps {
   today: string;
   /** reward.verify: may pick "Đã xác nhận". */
   canVerify: boolean;
+  /** "propose" (GVCN): own classes only, no status field (always "Mới ghi nhận"). */
+  mode?: RewardMode;
+  /** Proposal mode: the GVCN's classes. */
+  ownClasses?: readonly string[];
+  /** Edit mode: stored points outside 1–5 (shown as "+10 (mức cũ)"). */
+  legacyPoints?: number;
   /** Changing it remounts the photo/link inputs (after a reset). */
   round?: number;
   /** Evidence photos uploading / failed (block saving meanwhile – see photoSaveBlocker). */
@@ -31,11 +39,13 @@ export interface RewardFieldsProps {
 }
 
 /** Fields of the reward form (create card and edit dialog). Single column in narrow containers, two columns from 32rem. */
-export function RewardFields({ ds, form, onChange, today, canVerify, round = 0, onUploadsChange }: RewardFieldsProps) {
+export function RewardFields({ ds, form, onChange, today, canVerify, mode = "manage", ownClasses, legacyPoints, round = 0, onUploadsChange }: RewardFieldsProps) {
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const statusOptions = rewardStatusOptions(canVerify).map((s) => ({ value: s, label: s }));
   // Keep the current status listed (e.g. a verified reward opened by an admin) even if it is not pickable.
   if (!statusOptions.some((o) => o.value === form.status)) statusOptions.push({ value: form.status, label: form.status });
+  const reasonLength = form.reason.trim().length;
+  const proposing = mode === "propose";
 
   const suggest = (s: string) => {
     onChange({ reason: applyReasonSuggestion(form.reason, s) });
@@ -47,22 +57,51 @@ export function RewardFields({ ds, form, onChange, today, canVerify, round = 0, 
     });
   };
 
+  const pointsHint =
+    form.points === null
+      ? "Chọn mức điểm cộng (1–5)."
+      : legacyPoints !== undefined && form.points === legacyPoints
+        ? "Mức cũ được giữ nguyên; chọn 1–5 nếu muốn đổi."
+        : isRewardPointLevel(form.points)
+          ? `Cộng ${form.points} điểm vào điểm thi đua của lớp khi được tính.`
+          : undefined;
+
   return (
     <div className="@container">
       <div className="grid min-w-0 gap-4 @lg:grid-cols-2">
         <Field label="Ngày" required hint={isIsoDate(form.date) ? weekdayLabelVN(form.date) : "Không chọn được ngày trong tương lai."}>
           <DateInput value={form.date} onChange={(v) => onChange({ date: v })} min={calendarStart(ds.weeks)} max={today} size="lg" />
         </Field>
-        <Field label="Lớp" required>
-          <ClassPicker ds={ds} value={form.classCode || undefined} onChange={(c) => onChange({ classCode: c })} size="lg" />
+        <Field label="Lớp" required hint={proposing ? "Chỉ lớp thầy/cô chủ nhiệm." : undefined}>
+          <ClassPicker
+            ds={ds}
+            value={form.classCode || undefined}
+            onChange={(c) => onChange({ classCode: c })}
+            restrictTo={proposing ? (ownClasses ?? []) : undefined}
+            size="lg"
+          />
         </Field>
 
-        <Field label="Nội dung thưởng" required className="@lg:col-span-2" labelAside={`${form.reason.length}/500`}>
+        <Field label="Mức điểm cộng" required className="@lg:col-span-2" hint={pointsHint}>
+          <RewardPointsPicker value={form.points} onChange={(n) => onChange({ points: n })} legacy={legacyPoints} />
+        </Field>
+
+        <Field
+          label="Lý do cộng điểm"
+          required
+          className="@lg:col-span-2"
+          hint={reasonLength < REWARD_REASON_MIN_LENGTH ? `Nêu rõ vì sao lớp được cộng điểm (tối thiểu ${REWARD_REASON_MIN_LENGTH} ký tự).` : undefined}
+          labelAside={
+            <span className="num">
+              {form.reason.length}/{REWARD_REASON_MAX}
+            </span>
+          }
+        >
           <Textarea
             ref={reasonRef}
             value={form.reason}
             onChange={(e) => onChange({ reason: e.target.value })}
-            maxLength={500}
+            maxLength={REWARD_REASON_MAX}
             rows={2}
             placeholder="Ví dụ: Đạt giải Nhì hội thi văn nghệ chào mừng 20/11"
           />
@@ -79,34 +118,15 @@ export function RewardFields({ ds, form, onChange, today, canVerify, round = 0, 
           ))}
         </div>
 
-        <Field label="Điểm thưởng" required hint={`Từ ${REWARD_POINTS_MIN} đến ${REWARD_POINTS_MAX} điểm.`}>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <NumberStepper
-              value={form.points}
-              onChange={(n) => onChange({ points: n })}
-              min={REWARD_POINTS_MIN}
-              max={REWARD_POINTS_MAX}
-              suffix="điểm"
-              size="lg"
-              className="w-full max-w-60"
-            />
-            <div className="flex gap-1.5" role="group" aria-label="Chọn nhanh số điểm">
-              {REWARD_POINT_PRESETS.map((p) => (
-                <Pill key={p} tone="ok" active={form.points === p} onClick={() => onChange({ points: p })} aria-label={`${p} điểm`}>
-                  <span className="num font-semibold">+{p}</span>
-                </Pill>
-              ))}
-            </div>
-          </div>
-        </Field>
-        <Field label="Trạng thái" hint={canVerify ? "Chọn “Đã xác nhận” khi đã kiểm tra minh chứng." : "“Đã xác nhận” do Quản trị xác minh."}>
-          <Select<RewardStatus> options={statusOptions} value={form.status} onChange={(v) => v && onChange({ status: v })} size="lg" />
-        </Field>
-
+        {proposing ? null : (
+          <Field label="Trạng thái" hint={canVerify ? "Chọn “Đã xác nhận” khi đã kiểm tra minh chứng." : "“Đã xác nhận” do Quản trị xác minh."}>
+            <Select<RewardStatus> options={statusOptions} value={form.status} onChange={(v) => v && onChange({ status: v })} size="lg" />
+          </Field>
+        )}
         <Field label="Người ghi" hint={form.reporter.trim() ? undefined : "Để trống: dùng tên tài khoản của thầy/cô."}>
           <Input value={form.reporter} onChange={(e) => onChange({ reporter: e.target.value })} maxLength={120} autoComplete="name" enterKeyHint="done" />
         </Field>
-        <Field label="Ghi chú" labelAside={form.note ? `${form.note.length}/1000` : undefined}>
+        <Field label="Ghi chú thêm" labelAside={form.note ? `${form.note.length}/1000` : undefined} className={proposing ? undefined : "@lg:col-span-2"}>
           <Textarea value={form.note} onChange={(e) => onChange({ note: e.target.value })} maxLength={1000} rows={1} className="min-h-12" placeholder="Không bắt buộc" />
         </Field>
 

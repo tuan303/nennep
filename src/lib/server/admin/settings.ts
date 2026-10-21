@@ -1,13 +1,13 @@
 /**
- * Cài đặt (settings.manage): config, error catalog, classes, school weeks of a level.
+ * Cài đặt (settings.manage): config, early-warning thresholds, error catalog, classes, school weeks of a level.
  * Catalog and classes use REPLACE semantics without hard deletes: items missing from the list become inactive.
  * Every write goes through saveReferenceParts (canonical diff + `__ref` digest + version bump + audit in the last batch).
  */
 import type { z } from "zod";
 import { LEVELS } from "../../constants";
-import type { CatalogPutSchema, ClassesPutSchema, ConfigUpdateSchema, WeeksPutSchema } from "../../contract";
+import type { CatalogPutSchema, ClassesPutSchema, ConfigUpdateSchema, EarlyWarningPutSchema, WeeksPutSchema } from "../../contract";
 import { generateWeeks, mondayOf } from "../../engine/dates";
-import type { AuditAction, CatalogItem, ClassInfo, LevelConfig, LevelId, SchoolWeek } from "../../types";
+import type { AuditAction, CatalogItem, ClassInfo, EarlyWarningConfig, LevelConfig, LevelId, SchoolWeek } from "../../types";
 import { auditDiff, auditOf, writeAudit } from "../audit";
 import { requireLevel } from "../auth";
 import { checkRemovedWeeks, type HiddenRecords } from "../calendar";
@@ -22,6 +22,7 @@ export type ConfigUpdateData = z.output<typeof ConfigUpdateSchema>;
 export type CatalogPutData = z.output<typeof CatalogPutSchema>;
 export type ClassesPutData = z.output<typeof ClassesPutSchema>;
 export type WeeksPutData = z.output<typeof WeeksPutSchema>;
+export type EarlyWarningPutData = z.output<typeof EarlyWarningPutSchema>;
 
 export const CONFIG_FIELDS = [
   "schoolYear",
@@ -86,6 +87,36 @@ export async function putConfig(ctx: ServiceCtx, levelId: LevelId, input: Config
       : undefined;
   const saved: LevelConfig = { ...next, updatedAt: nowIso(), updatedBy: ctx.user.email };
   const ref = await save(ctx, levelId, { config: saved }, "UPDATE_CONFIG", "config", { changes, ...(hidden ? hiddenDetail(hidden) : {}) });
+  return ref.config;
+}
+
+/** Stored form of the thresholds: fixed key order (stable audit diff), unique trimmed serious groups. */
+export function normalizeEarlyWarning(input: EarlyWarningPutData): EarlyWarningConfig {
+  return {
+    risingPct: input.risingPct,
+    risingMinPoints: input.risingMinPoints,
+    risingBaselineWeeks: input.risingBaselineWeeks,
+    prolongedWeeks: input.prolongedWeeks,
+    seriousGroups: [...new Set(input.seriousGroups.map((g) => g.trim()).filter(Boolean))],
+    seriousMinPenalty: input.seriousMinPenalty,
+  };
+}
+
+/**
+ * PUT /api/settings/:level/early-warning — replaces `config.earlyWarning` (REQ_V2 §5.6) through the same path as
+ * putConfig (`__ref` + version bump + audit UPDATE_CONFIG `detail.changes.earlyWarning { before, after }`).
+ * Unchanged → no write. putConfig and the workbook config import spread the stored config, so they keep it.
+ */
+export async function putEarlyWarning(ctx: ServiceCtx, levelId: LevelId, input: EarlyWarningPutData): Promise<LevelConfig> {
+  requireLevel(ctx.user, levelId);
+  const existing = await readCanonicalReference(levelId);
+  const before = existing.config;
+  const earlyWarning = normalizeEarlyWarning(input);
+  // Firestore returns map keys sorted: compare canonical JSON, not insertion order.
+  if (before.earlyWarning && canonicalJson(before.earlyWarning) === canonicalJson(earlyWarning)) return before;
+  const changes = { earlyWarning: { before: before.earlyWarning ?? null, after: earlyWarning } };
+  const saved: LevelConfig = { ...before, earlyWarning, levelId, updatedAt: nowIso(), updatedBy: ctx.user.email };
+  const ref = await save(ctx, levelId, { config: saved }, "UPDATE_CONFIG", "config", { changes });
   return ref.config;
 }
 

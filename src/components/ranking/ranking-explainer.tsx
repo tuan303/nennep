@@ -14,7 +14,7 @@ export interface RankingExplainerProps {
   inProgress: boolean;
   /** Class highlighted by the global filter (population unchanged). */
   highlightClass?: string;
-  /** A category / error filter is active (ignored by the ranking). */
+  /** A category / error / group / student filter is active (ignored by the ranking). */
   issueFilterActive: boolean;
   /** No incident and no counted reward in the period: every class is tied at the base score. */
   quiet?: boolean;
@@ -69,7 +69,7 @@ export function RankingExplainer({ config, period, countedWeeks, inProgress, hig
             lớp của khối.
           </Note>
         ) : null}
-        {issueFilterActive ? <Note icon={Filter}>Bộ lọc mảng/lỗi không áp dụng cho xếp hạng – điểm thi đua luôn tính mọi lỗi.</Note> : null}
+        {issueFilterActive ? <Note icon={Filter}>Bộ lọc mảng, nhóm lỗi, lỗi và học sinh không áp dụng cho xếp hạng – điểm thi đua luôn tính mọi lỗi.</Note> : null}
 
         <div
           id="ranking-rules"

@@ -1,7 +1,7 @@
 /** Tabs of the Cài đặt screen: ids (deep link `?tab=`), labels and the permission each one needs. */
 import type { Permission } from "@/lib/constants";
 
-export type SettingsTabId = "cau-hinh" | "danh-muc" | "lop" | "lich-tuan" | "nguoi-dung" | "bao-tri";
+export type SettingsTabId = "cau-hinh" | "canh-bao" | "danh-muc" | "lop" | "lich-tuan" | "nguoi-dung" | "bao-tri";
 
 export interface SettingsTabDef {
   id: SettingsTabId;
@@ -19,6 +19,13 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     permission: "settings.manage",
     perLevel: true,
     description: "Năm học, điểm nền, học kỳ, ngưỡng cảnh báo, tỷ lệ Top và thời hạn xử lý.",
+  },
+  {
+    id: "canh-bao",
+    label: "Cảnh báo sớm",
+    permission: "settings.manage",
+    perLevel: true,
+    description: "Ngưỡng cảnh báo lớp tăng lỗi, lỗi kéo dài nhiều tuần và sự việc nghiêm trọng (Tổng quan, Hành động, Báo cáo).",
   },
   {
     id: "danh-muc",
@@ -54,6 +61,8 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
 /** English aliases accepted in `?tab=` (links from other screens / docs). */
 const ALIASES: Record<string, SettingsTabId> = {
   config: "cau-hinh",
+  "early-warning": "canh-bao",
+  warnings: "canh-bao",
   catalog: "danh-muc",
   classes: "lop",
   weeks: "lich-tuan",

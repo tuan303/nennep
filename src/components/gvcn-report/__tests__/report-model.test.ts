@@ -5,7 +5,10 @@ import type { Incident, Period, UserProfile } from "@/lib/types";
 import { buildCopyText, gvcnExportFileName, incidentLine, kpiLine, periodSlug, reportTitle } from "../lib/copy-text";
 import {
   buildGvcnReport,
+  feedbackModeOf,
   feedbackPayload,
+  ignoredReportFilters,
+  rightsOfMode,
   filterReportRows,
   isRewardCounted,
   ownClassesOf,
@@ -164,6 +167,29 @@ describe("feedbackPayload", () => {
   it("clears a note with an empty string", () => {
     expect(feedbackPayload(base, "   ", "Mới ghi nhận")).toEqual({ note: "" });
   });
+
+  it("adds the remediation when changed, and never a note in 'remediate' mode", () => {
+    const fixed = { ...base, remediation: "Lao động vệ sinh" };
+    expect(feedbackPayload(fixed, "Đã nhắc nhở", "Mới ghi nhận", " Lao động vệ sinh ")).toBeNull();
+    expect(feedbackPayload(fixed, "Đã nhắc nhở", "Mới ghi nhận", "Viết cam kết")).toEqual({ remediation: "Viết cam kết" });
+    expect(feedbackPayload(fixed, "Ghi chú khác", "Đã đóng", "", rightsOfMode("remediate"))).toEqual({ status: "Đã đóng", remediation: "" });
+    expect(feedbackPayload(fixed, "Ghi chú khác", "Đã đóng", "", rightsOfMode("gvcn"))).toEqual({ note: "Ghi chú khác", status: "Đã đóng", remediation: "" });
+  });
+
+  it("picks the dialog mode from the viewer's rights", () => {
+    expect(feedbackModeOf({ note: true, status: true, remediation: true })).toBe("gvcn");
+    expect(feedbackModeOf({ note: false, status: true, remediation: true })).toBe("remediate");
+    expect(feedbackModeOf({ note: false, status: false, remediation: false })).toBeUndefined();
+  });
+});
+
+describe("ignored filters", () => {
+  const ds = makeFixtureDataset();
+  it("lists Mảng / Lỗi / Nhóm lỗi / Học sinh", () => {
+    const s0 = ds.students[0];
+    expect(ignoredReportFilters({ group: "Nhóm 3", studentId: s0.id }, ds.catalog, ds.students)).toEqual(["Nhóm lỗi: Nhóm 3", `Học sinh: ${s0.name} (${s0.id})`]);
+    expect(ignoredReportFilters({ studentId: "HS9999" }, ds.catalog)).toEqual(["Học sinh: HS9999"]);
+  });
 });
 
 describe("copy text", () => {
@@ -176,7 +202,11 @@ describe("copy text", () => {
     expect(lines[0]).toBe(`${reportTitle("6A03")} – Tuần 12/10 – 18/10/2026`);
     expect(lines[1]).toBe("GVCN: Lê Văn Hùng");
     expect(lines[2]).toBe(kpiLine(report));
-    expect(lines[2]).toMatch(/^Sự việc: 5 \| HS liên quan: \d+ \| Điểm trừ: \d+ \| Điểm thưởng: \d+ \| Điểm thi đua: [−\d.,]+ \| Hạng khối 6: \d\/5/);
+    expect(lines[2]).toMatch(
+      /^Sự việc: 5 \| Lượt vi phạm: \d+ \| Số HS vi phạm: \d+ \| Điểm trừ: \d+ \| Điểm thưởng: \d+ \| Điểm thi đua: [−\d.,]+ \| Hạng khối 6: \d\/5/,
+    );
+    expect(lines[2]).toContain(`Lượt vi phạm: ${report.kpis.violationTurns}`);
+    expect(lines[2]).toContain(`Số HS vi phạm: ${report.kpis.uniqueStudents}`);
   });
 
   it("has one bullet per incident in the Zalo format", () => {
@@ -190,6 +220,14 @@ describe("copy text", () => {
   it("ends with totals and the school line", () => {
     expect(text).toContain(`Tổng cộng: 5 sự việc, ${report.kpis.penaltyPoints} điểm trừ.`);
     expect(lines[lines.length - 1]).toBe("Trường Ngôi Sao Hoàng Mai · Lập ngày 21/10/2026");
+  });
+
+  it("adds the remediation to a bullet", () => {
+    const fixed = { ...report.incidents[0], remediation: "Học sinh viết\nbản cam kết." };
+    expect(incidentLine(fixed)).toBe("• 12/10 (T2) – Phạm Thiện Khôi – Đi học muộn – 2 điểm → Khắc phục: Học sinh viết bản cam kết.");
+    const withFix = buildCopyText({ ...report, incidents: [fixed, ...report.incidents.slice(1)] }, "Tuần 12/10 – 18/10/2026", FIXTURE_TODAY);
+    expect(withFix).toContain("→ Khắc phục: Học sinh viết bản cam kết.");
+    expect(filterReportRows([fixed], { query: "cam ket", status: "ALL" })).toHaveLength(1);
   });
 
   it("says so when the class had no incident", () => {

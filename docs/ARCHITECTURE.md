@@ -38,18 +38,21 @@ Browser ──(Firebase Auth ID token)──► /api/* route handlers ──fire
    └──── onSnapshot(meta/versions) ── version changed → refetch dataset
 ```
 
-- **Canonical docs**: `incidents/`, `rewards/`, `students/`, `levels/{id}/…` (see `firestore-paths.ts`).
+- **Canonical docs**: `incidents/`, `rewards/`, `inspections/` (đợt kiểm tra, REQ_V2), `students/`, `levels/{id}/…` (see `firestore-paths.ts`).
 - **Read model ("digests")**: compact arrays per level so the dashboard costs ~55 document reads per load
   (free-tier friendly): `__ref` (config+classes+catalog+weeks), `__stu` (StudentLite[]),
   `__rew__{yyyy-mm}` (Reward[] whose week's Monday is in that month; the legacy single `__rew` doc is still read and
-  maintained until the next digest rebuild migrates and deletes it), `__inc__{weekStart}` (Incident[] of that week).
+  maintained until the next digest rebuild migrates and deletes it), `__inc__{weekStart}` (Incident[] of that week),
+  `__ins__{yyyy-mm}` (Inspection[] whose week's Monday is in that month – created by the first write or a rebuild).
   Only the digests of the calendar weeks/months are read, so records of other school years never reach the dataset.
   Deleted records are removed from digests but stay canonical.
   Every mutation MUST update the affected digest(s) **in the same transaction** and `FieldValue.increment(1)` the level
   counter in `meta/versions`. An admin endpoint rebuilds digests from canonical docs (`/api/admin/rebuild-digests`).
-- **LevelDataset** (`GET /api/dataset`) = ref + students + incidents (school-year weeks) + rewards, filtered by role:
+- **LevelDataset** (`GET /api/dataset`) = ref + students + incidents (school-year weeks) + rewards + inspections, filtered by role:
   GVCN receives only own-class students, and for OTHER classes incidents keep class/error/points/date but
-  `students=[]`, `detail`, `gvcnNote`, `reporter`, `evidenceUrls`, `photoIds` stripped (`redacted: true`).
+  `students=[]`, `detail`, `gvcnNote`, `remediation*`, `reporter`, `evidenceUrls`, `photoIds` stripped (`redacted: true`);
+  inspection rounds lose their `note` for viewers without `view.allClassesDetail`. `inspections` is always an array
+  (older cached datasets may lack it: treat as `[]`).
 - All analytics are computed by the pure **engine** (`src/lib/engine/*`) – the same code runs on the server
   (`/api/rankings`, exports) and in the browser (instant filtering). Backend is the source of truth for every stored value.
 
@@ -77,14 +80,23 @@ Browser ──(Firebase Auth ID token)──► /api/* route handlers ──fire
 | BR-AUD-01 | every sensitive mutation writes `auditLogs` in the same transaction/batch (append-only) |
 | BR-DATA-02 | delete = soft delete (`deletedAt/deletedBy/deleteReason`), restorable by Admin |
 | BR-IMP-01 | imports: preview (no writes) → commit with `previewHash` (server recomputes and rejects if the hash differs); idempotent by `externalId`/doc id |
-| Incident code | `NN-yyyymmdd-NNNN` per level & day via `counters/NN_{level}_{yyyymmdd}` in the create transaction; if the doc id already exists (legacy import), keep incrementing. Rewards `KT-…`, actions `HD-yyyymmdd-NNN` |
-| Edit rights | ADMIN: any record. EDITOR: own records within 24h (`EDITOR_EDIT_WINDOW_HOURS`). GVCN: only `/feedback` (note + status) on own classes |
+| Incident code | `NN-yyyymmdd-NNNN` per level & day via `counters/NN_{level}_{yyyymmdd}` in the create transaction; if the doc id already exists (legacy import), keep incrementing. Rewards `KT-…`, actions `HD-yyyymmdd-NNN`, inspections `DKT-yyyymmdd-NNN` (date of the round) |
+| Edit rights | ADMIN: any record. EDITOR: own records (incidents, rewards, inspections) within 24h (`EDITOR_EDIT_WINDOW_HOURS`). GVCN: only `/feedback` (note + status + remediation) on own classes, and reward proposals (create only) for own classes |
 | Reward status | EDITOR may set "Mới ghi nhận"/"Đang xác minh"; "Đã xác nhận" requires `reward.verify` (ADMIN) |
+| Reward points (REQ_V2 §5.3) | new rewards: integer 1–5 (`REWARD_POINT_LEVELS`) + reason ≥ `REWARD_REASON_MIN_LENGTH` (5) chars; edits apply these rules only to CHANGED points / reason (legacy values such as 10 stay valid while unchanged); workbook import keeps out-of-scale points with a WARNING |
+| GVCN reward proposal | `reward.propose` without `reward.create` (GVCN): own classes only (403), status forced "Mới ghi nhận", `proposed: true`; no edit/delete; counted only once an admin moves it to a counted status |
+| Remediation (REQ_V2 §5.4) | `POST /api/incidents/:id/feedback`: ADMIN or the class GVCN → note + status + remediation; `incident.remediate` (EDITOR) → remediation + status only (a note → 403); `remediationBy/At` = last change; hidden from other classes' GVCN |
+| Possible duplicates (REQ_V2 §5.5) | detection is the engine's (`findPossibleDuplicates`, never blocking on the server); reviews are stored as `notDuplicateOf` (create: "Không trùng, vẫn lưu"; `POST /api/incidents/:id/not-duplicate` marks every pair of a group) |
+| Inspections (REQ_V2 §5.2) | Đợt kiểm tra `DKT-yyyymmdd-NNN`; not scored; date in the calendar, not in the future; active classes (an unchanged class may have been deactivated); `category` = a catalog Mảng or omitted (kiểm tra chung); edit/delete ADMIN any, EDITOR own ≤ 24 h, `baseRev`; soft delete only (no restore); ignored by reset-level, workbook import/export and the calendar-change check |
+| Early warning thresholds | `config.earlyWarning` (optional; absent → engine `DEFAULT_EARLY_WARNING`), saved by `PUT /api/settings/:level/early-warning`; `PUT config` and the workbook config import keep it |
 
 ## 4. Roles (see `constants.ts` → `hasPermission`, `canAccessLevel`, `canSeeClassDetail`)
 
-ADMIN (everything) · EDITOR (cán bộ nền nếp: view + create incidents/rewards + edit own recent + data inspection) ·
-VIEWER (BGH/người xem: read everything in allowed levels) · GVCN (own classes: full detail; other classes: aggregates only; can give feedback).
+ADMIN (everything) · EDITOR (cán bộ nền nếp: view + create incidents/rewards + edit own recent + data inspection +
+`incident.remediate` + `inspection.manage`) · VIEWER (BGH/người xem: read everything in allowed levels) · GVCN (own classes:
+full detail; other classes: aggregates only; can give feedback incl. remediation; `reward.propose` for own classes).
+REQ_V2 permissions: `reward.propose` (ADMIN, EDITOR, GVCN – opens Điểm thưởng; without `reward.create` = proposal),
+`incident.remediate` (ADMIN, EDITOR), `inspection.manage` (ADMIN, EDITOR). VIEWER unchanged.
 `profile.levels = []` means all levels. Server enforces; client only hides UI.
 `users.manage` and `audit.view` are **school-wide only** (`ALL_LEVEL_PERMISSIONS`): a level-limited ADMIN keeps the other
 ADMIN permissions for its levels but cannot manage accounts or read the audit log. An admin cannot change their own
@@ -157,6 +169,12 @@ export function nameSuggestions(partial: string, students: StudentLite[], limit?
 // index.ts re-exports everything
 ```
 
+REQ_V2 engine additions (signatures in `docs/FRONTEND_API.md` → ENGINE): `GlobalFilters.group` / `studentId` honoured by
+`filterIncidents`; `Kpis.violationTurns` (Lượt vi phạm) + `groupBreakdown`; `analytics-history.ts` (`cumulativePenalty`,
+`rankHistory`); `duplicates.ts` (`possibleDuplicatesOf`, `findPossibleDuplicates`); `integrity.ts` (`integrityIssues`);
+`early-warning.ts` (`earlyWarnings`, `resolveEarlyWarning`, `DEFAULT_EARLY_WARNING`); `inspections.ts`
+(`filterInspections`, `inspectionCoverage`).
+
 ### 5.2 Server (`src/lib/server/`, Node only – never import from client components; do NOT `import "server-only"`, it breaks vitest)
 
 `firebase-admin.ts` (`db()`, `adminAuth()`, init from env: emulator hosts → projectId only; else `FIREBASE_SERVICE_ACCOUNT_BASE64` or
@@ -174,11 +192,12 @@ export function nameSuggestions(partial: string, students: StudentLite[], limit?
 // firebase.ts   getClientAuth(), getClientDb()  (emulators when NEXT_PUBLIC_USE_EMULATORS=true)
 // api.ts        export class ApiClientError extends Error { status: number; code: string; details?: unknown }
 //               export const api = { me, session, loginFailed, logout, dataset(levelId, etag?), rankings(q),
-//                 incidents: { create, get, update, remove(id, reason), restore, feedback, listDeleted(levelId) },
+//                 incidents: { create, get, update, remove(id, reason), restore, feedback, notDuplicate(id, { otherIds }), listDeleted(levelId) },
+//                 inspections: { create, update(id, input), remove(id, reason) },
 //                 rewards: { create, update, remove, restore, listDeleted }, evidence: { upload(levelId, file: File): Promise<string>, objectUrl(id): Promise<string> },
 //                 students: { get, create, update, transfer, withdraw, reinstate, importPreview, importCommit },
 //                 workbook: { preview, commit }, exportsLog, actions: { list, create, update }, auditLogs(q),
-//                 settings: { putConfig, putCatalog, putClasses, putWeeks }, users: { list, create, update, resetPassword, bulkGvcn },
+//                 settings: { putConfig, putCatalog, putClasses, putWeeks, putEarlyWarning }, users: { list, create, update, resetPassword, bulkGvcn },
 //                 admin: { rebuildDigests, resetLevel, restoreReset } }   – all typed with contract.ts types
 // session.tsx   <SessionProvider>; useSession(): { status: "loading"|"signedOut"|"signedIn"|"forbidden"; profile?: UserProfile; accessibleLevels: LevelId[];
 //               login(email, password); loginWithProvider("google"|"microsoft"); logout(); changePassword(current, next);
@@ -186,7 +205,7 @@ export function nameSuggestions(partial: string, students: StudentLite[], limit?
 // data.tsx      <DataProvider>; useLevel(): { levelId, setLevelId, accessibleLevels }; useDataset(levelId?): { dataset?: LevelDataset; status: "idle"|"loading"|"ready"|"error"; error?: string; refresh(): Promise<void> }
 //               (memory cache per level, ETag revalidation, onSnapshot(meta/versions) → debounced refetch; call refresh() after own mutations)
 // filters.tsx   useFilters(): { filters: GlobalFilters; setFilters(patch); resetFilters(); options: { weeks; months; semesters; grades; classes; categories; errors } }
-//               URL-synced (?mode=&key=&grade=&class=&cat=&err=); default period = engine defaultPeriod
+//               URL-synced (?mode=&key=&grade=&class=&cat=&err=&group=&student=); default period = engine defaultPeriod
 // format.ts     fmtNumber, fmtPoints (signed), fmtPercent, fmtDate (=formatDateVN), fmtDateTime (dd/mm/yyyy HH:mm, VN tz), fmtRelative
 // excel/        (lazy-loaded) see §5.4
 ```
@@ -244,20 +263,26 @@ ClassPicker, ErrorPicker (grouped by Mảng, shows "2 điểm/HS"), StudentPicke
 
 | Route | Screen (spec) | Who |
 |---|---|---|
-| `/` | Tổng quan (SCR-02): 6 KPIs w/ delta vs previous period (Sự việc, HS liên quan, Điểm trừ, Điểm thưởng, Lớp phát sinh, Độ tin cậy dữ liệu), weekly trend, Top 5 vấn đề, Top 5 lớp cần ưu tiên (drill → /lop), Top HS vi phạm (drill → history), thống kê khối, phân bổ theo mảng, heatmap lớp×tuần, RAG summary, 5S widget, tái phạm | Viewer+ |
+| `/` | Tổng quan (SCR-02): 6 KPIs w/ delta vs previous period (Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ, Điểm thưởng, Độ tin cậy dữ liệu – labels/tooltips from `KPI_TERMS`), weekly trend, theo nhóm lỗi, điểm trừ cộng dồn, cảnh báo sớm, Top 5 vấn đề, Top 5 lớp cần ưu tiên (drill → /lop), Top HS vi phạm (drill → history), thống kê khối, phân bổ theo mảng, heatmap lớp×tuần, RAG summary, 5S widget, tái phạm | Viewer+ |
 | `/toan-truong` | Toàn trường: compare the 3 levels side by side (KPIs, trends, ranking leaders, alerts) | users with >1 level |
-| `/xep-hang` | Xếp hạng (SCR-03): per-grade ranking tables (rank, lớp, GVCN, điểm nền, thưởng, trừ, thi đua, Top 90%, RAG, xu hướng), highlight filtered class, expand row → breakdown; export | Viewer+ |
-| `/lop` | Khối & lớp (SCR-04): class picker, class KPIs, rank in grade, score trend, timeline by day (date → lỗi → điểm → HS → chi tiết), top issues of class | Viewer+ (GVCN own class detail) |
-| `/bao-gvcn` | Báo GVCN (SCR-05): pick class (GVCN: own), KPIs, detail table (Ngày, Đối tượng = HS names or "Tập thể lớp", Lỗi, Điểm, Chi tiết, Trạng thái, Phản hồi GVCN), search, copy text (Zalo-friendly), print/PDF, GVCN feedback | Viewer+ |
+| `/xep-hang` | Xếp hạng (SCR-03), `?view=` bang / bien-dong / bao-phu: per-grade ranking tables (rank, lớp, GVCN, điểm nền, thưởng, trừ, thi đua, Top 90%, RAG, xu hướng), highlight filtered class, expand row → breakdown; export; Biến động xếp hạng (bump chart per grade); Bao phủ kiểm tra | Viewer+ |
+| `/lop` | Khối & lớp (SCR-04): class picker, class KPIs, rank in grade, score trend, điểm trừ cộng dồn vs trung bình khối, timeline by day (date → lỗi → điểm → HS → chi tiết), top issues of class | Viewer+ (GVCN own class detail) |
+| `/bao-gvcn` | Báo GVCN (SCR-05): pick class (GVCN: own), KPIs, detail table (Ngày, Đối tượng = HS names or "Tập thể lớp", Lỗi, Điểm, Chi tiết, Trạng thái, Phản hồi GVCN, Khắc phục), search, copy text (Zalo-friendly), print/PDF, GVCN feedback + biện pháp khắc phục | Viewer+ |
 | `/hoc-sinh` | Học sinh (SCR-06): students with incidents (Mã, Họ tên, Lớp, Số lượt, Điểm, loại lỗi + số lần, cảnh báo), search, filters, drill → history sheet | Viewer+ |
-| `/nhap-lieu` | Nhập liệu (SCR-07): mobile-first form; live points preview; "Lưu" and "Lưu & nhập tiếp"; recent entries list (edit own ≤24h) | Editor+ |
-| `/diem-thuong` | Điểm thưởng (SCR-08): form + list with status workflow (verify by Admin) | Editor+ |
+| `/nhap-lieu` | Nhập liệu (SCR-07): mobile-first form; live points preview; possible-duplicate warning; "Lưu" and "Lưu & nhập tiếp"; recent entries list (edit own ≤24h); tab Đợt kiểm tra `?tab=kiem-tra` | Editor+ (`incident.create` or `inspection.manage`) |
+| `/diem-thuong` | Điểm thưởng (SCR-08): form (+1…+5, lý do ≥ 5 ký tự) + list with status workflow (verify by Admin) | Editor+; GVCN = đề xuất cho lớp mình (`reward.propose`) |
 | `/quan-ly-hoc-sinh` | Quản lý HS (SCR-09): search, add (tuyển mới / chuyển đến), transfer class, withdraw (chuyển trường đi), reinstate, edit, history timeline, roster import (preview diff: mới / cập nhật / chuyển lớp / không đổi / thiếu trong file) | Admin |
-| `/hanh-dong` | Action Register + Decision Brief + SLA (FR-ACT-*, FR-RAG-005) | Admin manage; Viewer/Editor read |
-| `/du-lieu` | Chi tiết & dữ liệu (SCR-11): all incidents table w/ data check, review queue (REVIEW / THIẾU TÊN HS with quick fix), deleted items (restore), data-quality stats | Editor+ (restore: Admin) |
+| `/hanh-dong` | Action Register + Decision Brief + SLA (FR-ACT-*, FR-RAG-005) + tab Cảnh báo sớm `?tab=canh-bao` (tạo hành động từ cảnh báo) | Admin manage; Viewer/Editor read |
+| `/du-lieu` | Chi tiết & dữ liệu (SCR-11): all incidents table w/ data check, review queue (REVIEW / THIẾU TÊN HS with quick fix), deleted items (restore), data-quality stats + integrity checks, tab Có thể trùng `?tab=trung-lap` | Editor+ (restore: Admin) |
 | `/nhap-xuat` | Import/Export: workbook import wizard (upload → preview with per-row OK/WARNING/ERROR → options → commit), export workbook, HTML snapshot, ranking export | Admin |
 | `/nhat-ky` | Audit Log (SCR-10): filters (action, user, level, date range), table, detail JSON viewer | Admin |
-| `/cai-dat` | Cài đặt: tabs Cấu hình (base, HK dates, RAG thresholds + approval, reward statuses, Top 90 ratio, alerts, SLA), Danh mục lỗi (edit table, 5S flag), Lớp & GVCN, Lịch tuần (counted toggle, regenerate), Người dùng (create, role, levels, GVCN classes, reset password, bulk create GVCN), Bảo trì (rebuild digests, reset level) | Admin |
+| `/bao-cao` | Báo cáo tuần/tháng (REQ_V2 §6.5): A4 report per recipient (BGH / tổ khối / GVCN), print/PDF, Excel chi tiết (export kind `report`) | Viewer+ (GVCN: own classes) |
+| `/cai-dat` | Cài đặt: tabs Cấu hình (base, HK dates, RAG thresholds + approval, reward statuses, Top 90 ratio, alerts, SLA), Danh mục lỗi (edit table, 5S flag), Lớp & GVCN, Lịch tuần (counted toggle, regenerate), Người dùng (create, role, levels, GVCN classes, reset password, bulk create GVCN), Cảnh báo sớm (ngưỡng + xem trước), Bảo trì (rebuild digests, reset level) | Admin |
+
+REQ_V2 additions to existing screens (binding detail in `docs/REQ_V2.md` §6–§7): global filters Nhóm lỗi + Học sinh; Tổng quan
+(KPI vocabulary `KPI_TERMS`, theo nhóm lỗi, điểm trừ cộng dồn, cảnh báo sớm); Xếp hạng views Biến động / Bao phủ kiểm tra;
+Nhập liệu tab Đợt kiểm tra (`inspection.manage`) + duplicate warning; Điểm thưởng 1–5 + GVCN proposals (`reward.propose`);
+Dữ liệu tab Có thể trùng + integrity checks; Báo GVCN / incident detail remediation; Hành động and Cài đặt tab Cảnh báo sớm.
 
 ## 8. Coding standards
 

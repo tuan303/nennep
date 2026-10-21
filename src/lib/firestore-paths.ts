@@ -9,6 +9,7 @@
  * students/{studentId}                     Student            (global: Mã HS unique across the school)
  * incidents/{levelId}_{code}               Incident           (canonical, incl. soft-deleted)
  * rewards/{levelId}_{code}                 Reward             (canonical, incl. soft-deleted)
+ * inspections/{levelId}_{code}             Inspection         (canonical, incl. soft-deleted)
  * actions/{levelId}_{code}                 ActionItem
  * auditLogs/{autoId}                       AuditLog           (append-only)
  * evidence/{autoId}                        { levelId, mime, data: Bytes, size, fileName?, createdBy, createdAt }
@@ -23,6 +24,7 @@
  * digests/{levelId}__rew                   legacy single reward digest (all years); still maintained while it exists,
  *                                          replaced by the monthly docs on the next digest rebuild
  * digests/{levelId}__inc__{weekStart}      { levelId, kind: "inc", week, items: Incident[] (non-deleted), updatedAt }
+ * digests/{levelId}__ins__{yyyy-mm}        { levelId, kind: "ins", month, items: Inspection[] (non-deleted, week in that month), updatedAt }
  * meta/versions                            { TH: number, THCS: number, THPT: number, updatedAt }  ← incremented on every write;
  *                                                                                                  clients listen (onSnapshot) to refetch.
  */
@@ -34,6 +36,7 @@ export const COL = {
   students: "students",
   incidents: "incidents",
   rewards: "rewards",
+  inspections: "inspections",
   actions: "actions",
   auditLogs: "auditLogs",
   evidence: "evidence",
@@ -55,5 +58,7 @@ export const digestRewardsId = (levelId: LevelId) => `${levelId}__rew`;
 /** Monthly reward digest; `month` = "yyyy-mm" of the reward's week (Monday). */
 export const digestRewardsMonthId = (levelId: LevelId, month: string) => `${levelId}__rew__${month}`;
 export const digestIncidentsWeekId = (levelId: LevelId, weekStart: string) => `${levelId}__inc__${weekStart}`;
-export const counterId = (prefix: "NN" | "KT" | "HD", levelId: LevelId, yyyymmdd: string) => `${prefix}_${levelId}_${yyyymmdd}`;
+/** Monthly inspection digest; `month` = "yyyy-mm" of the inspection's week (Monday). */
+export const digestInspectionsMonthId = (levelId: LevelId, month: string) => `${levelId}__ins__${month}`;
+export const counterId = (prefix: "NN" | "KT" | "HD" | "DKT", levelId: LevelId, yyyymmdd: string) => `${prefix}_${levelId}_${yyyymmdd}`;
 export const idempotencyId = (uid: string, clientRequestId: string) => `${uid}_${clientRequestId}`;

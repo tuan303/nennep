@@ -1,7 +1,7 @@
 "use client";
 import { Camera, ChevronRight, EyeOff, MessageSquareText, User, UserPlus, Users } from "lucide-react";
 import { Badge, DataCheckBadge, Pill, StatusBadge } from "@/components/ui";
-import { FormulaText } from "@/components/app/widgets";
+import { FormulaText, ScopeBadge } from "@/components/app/widgets";
 import { fmtNumber } from "@/lib/client/format";
 import type { Incident } from "@/lib/types";
 import { incidentSubjects } from "./lib/class-view";
@@ -81,6 +81,7 @@ export function IncidentItem({ incident: i, hidden, onOpen, onOpenStudent }: Inc
 
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-slate-500">
         <StatusBadge status={i.status} size="sm" />
+        <ScopeBadge scope={i.scope} size="sm" />
         {i.dataCheck !== "OK" ? <DataCheckBadge dataCheck={i.dataCheck} issues={i.dataIssues} size="sm" /> : null}
         {reporter ? <span>Người ghi: {reporter}</span> : null}
         {!hidden && i.gvcnNote ? (

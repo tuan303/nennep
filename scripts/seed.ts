@@ -49,9 +49,10 @@ const DEMO_USERS: DemoUser[] = [
   { email: "gvcn.12l01@nshm.test", displayName: "GVCN 12L01 (demo)", role: "GVCN", levels: ["THPT"], gvcnClasses: [{ levelId: "THPT", classCode: "12L01" }] },
 ];
 
+/** Points follow the 1–5 scale (REWARD_POINT_LEVELS) and every reason has ≥ 5 characters (REQ_V2 §5.3). */
 const DEMO_REWARDS: Array<{ daysAgo: number; points: number; status: RewardStatus; reason: string }> = [
   { daysAgo: 2, points: 5, status: "Đã xác nhận", reason: "[Demo] Lớp sạch đẹp, xếp hàng ngay ngắn giờ chào cờ" },
-  { daysAgo: 5, points: 10, status: "Đã xác nhận", reason: "[Demo] Tích cực tham gia phong trào thi đua tháng 10" },
+  { daysAgo: 5, points: 4, status: "Đã xác nhận", reason: "[Demo] Tích cực tham gia phong trào thi đua tháng 10" },
   { daysAgo: 8, points: 3, status: "Đang xác minh", reason: "[Demo] Học sinh nhặt được của rơi trả lại người mất" },
   { daysAgo: 12, points: 2, status: "Mới ghi nhận", reason: "[Demo] Hỗ trợ tổ chức lễ chào cờ" },
 ];

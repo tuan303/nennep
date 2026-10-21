@@ -1,21 +1,26 @@
 /**
  * Reward (điểm thưởng) form state, client-side checks mirroring the server, and API payloads. Pure – unit-tested.
+ *
+ * REQ_V2 §7.2: a new reward takes a whole 1–5 point level (`REWARD_POINT_LEVELS`, no default) and a "Lý do cộng điểm"
+ * of at least 5 characters; on edit only CHANGED points / reason must follow these rules, so legacy values (e.g. +10)
+ * stay valid while untouched – and are only sent when changed. A GVCN (`reward.propose` without `reward.create`)
+ * proposes rewards for own classes only, always "Mới ghi nhận".
  */
 import { createDraftMemory, draftPrefix, sameList, typedLinks } from "@/components/entry/lib/leave-guard";
 import { checkEvidenceLinks } from "@/components/entry/lib/links";
 import type { RewardCreateInput, RewardUpdateInput } from "@/lib/contract";
-import { REWARD_STATUSES } from "@/lib/constants";
+import { REWARD_POINT_LEVELS, REWARD_REASON_MIN_LENGTH, REWARD_STATUSES, type Permission } from "@/lib/constants";
 import { isIsoDate } from "@/lib/engine/dates";
 import { calendarDateProblem } from "@/lib/engine/period";
 import type { LevelDataset, LevelId, Reward, RewardStatus } from "@/lib/types";
 
-export const REWARD_POINTS_MIN = 1;
-export const REWARD_POINTS_MAX = 100;
-export const REWARD_POINT_PRESETS = [2, 5, 10] as const;
-export const DEFAULT_REWARD_POINTS = 5;
 export const VERIFIED_REWARD_STATUS: RewardStatus = "Đã xác nhận";
+/** Status of every GVCN proposal (forced by the server). */
+export const PROPOSAL_STATUS: RewardStatus = "Mới ghi nhận";
+export const REWARD_REASON_MAX = 500;
+export const PROPOSAL_NOTICE = "Điểm thưởng do GVCN đề xuất chỉ được tính sau khi nhà trường xác nhận.";
 
-/** Quick suggestions for "Nội dung thưởng". */
+/** Quick suggestions for "Lý do cộng điểm". */
 export const REWARD_REASON_SUGGESTIONS = [
   "Đạt giải phong trào",
   "Lớp sạch đẹp tiêu biểu",
@@ -28,17 +33,40 @@ export const REWARD_MSG = {
   noDate: "Chọn ngày ghi nhận.",
   futureDate: "Không thể ghi nhận điểm thưởng ở ngày trong tương lai.",
   noClass: "Chọn lớp được thưởng.",
-  reason: "Nhập nội dung thưởng (tối thiểu 3 ký tự).",
-  reasonTooLong: "Nội dung thưởng tối đa 500 ký tự.",
-  points: `Điểm thưởng phải lớn hơn 0 và không quá ${REWARD_POINTS_MAX}.`,
+  reason: `Nhập lý do cộng điểm (tối thiểu ${REWARD_REASON_MIN_LENGTH} ký tự).`,
+  reasonTooLong: `Lý do cộng điểm tối đa ${REWARD_REASON_MAX} ký tự.`,
+  noPoints: "Chọn mức điểm cộng (1–5).",
+  points: "Mức điểm cộng là số nguyên từ 1 đến 5 (mức cũ được giữ nếu không sửa).",
   verifyOnly: "Chỉ quản trị viên được chuyển điểm thưởng sang trạng thái “Đã xác nhận”.",
+  proposeOwnClass: "GVCN chỉ được đề xuất điểm thưởng cho lớp mình chủ nhiệm.",
 } as const;
+
+/** "manage": reward.create (ADMIN / EDITOR); "propose": reward.propose only (GVCN, own classes, a proposal). */
+export type RewardMode = "manage" | "propose";
+
+export function rewardModeOf(can: (p: Permission) => boolean): RewardMode | undefined {
+  if (can("reward.create")) return "manage";
+  if (can("reward.propose")) return "propose";
+  return undefined;
+}
+
+/** Integer of the 1–5 scale. */
+export function isRewardPointLevel(points: number | null | undefined): points is number {
+  return typeof points === "number" && (REWARD_POINT_LEVELS as readonly number[]).includes(points);
+}
+
+/** A stored value outside the 1–5 scale (legacy rewards / workbook imports), shown as "+10 (mức cũ)". */
+export function legacyPointsOf(points: number | null | undefined): number | undefined {
+  return typeof points === "number" && points > 0 && !isRewardPointLevel(points) ? points : undefined;
+}
 
 export interface RewardForm {
   date: string;
   classCode: string;
+  /** Lý do cộng điểm (Reward.reason). */
   reason: string;
-  points: number;
+  /** Mức điểm cộng; null = not chosen yet (no default on a new reward). */
+  points: number | null;
   reporter: string;
   note: string;
   status: RewardStatus;
@@ -51,7 +79,7 @@ export function newRewardForm(args: { today: string; reporter?: string; classCod
     date: args.today,
     classCode: args.classCode ?? "",
     reason: "",
-    points: DEFAULT_REWARD_POINTS,
+    points: null,
     reporter: args.reporter ?? "",
     note: "",
     status: "Mới ghi nhận",
@@ -96,7 +124,12 @@ export function validateRewardForm(
   form: RewardForm,
   ds: Pick<LevelDataset, "classes" | "weeks">,
   today: string,
-  opts: { canVerify: boolean; original?: Pick<Reward, "classCode" | "status"> & { date?: string } },
+  opts: {
+    canVerify: boolean;
+    original?: Pick<Reward, "classCode" | "status"> & Partial<Pick<Reward, "date" | "points" | "reason">>;
+    /** Proposal mode (GVCN): the classes they may propose for. */
+    ownClasses?: readonly string[];
+  },
 ): string[] {
   const errors: string[] = [];
   if (!form.date) errors.push(REWARD_MSG.noDate);
@@ -113,13 +146,16 @@ export function validateRewardForm(
     const unchanged = opts.original?.classCode === form.classCode;
     if (!cls && !unchanged) errors.push(`Lớp "${form.classCode}" không có trong danh mục.`);
     else if (cls && !cls.active && !unchanged) errors.push(`Lớp ${cls.code} đã ngừng hoạt động.`);
+    else if (opts.ownClasses && !opts.ownClasses.includes(form.classCode)) errors.push(REWARD_MSG.proposeOwnClass);
   }
 
   const reason = form.reason.trim();
-  if (reason.length < 3) errors.push(REWARD_MSG.reason);
-  else if (reason.length > 500) errors.push(REWARD_MSG.reasonTooLong);
+  const reasonChanged = opts.original?.reason === undefined || reason !== opts.original.reason.trim();
+  if (reasonChanged && reason.length < REWARD_REASON_MIN_LENGTH) errors.push(REWARD_MSG.reason);
+  else if (reason.length > REWARD_REASON_MAX) errors.push(REWARD_MSG.reasonTooLong);
 
-  if (!(form.points > 0) || form.points > REWARD_POINTS_MAX) errors.push(REWARD_MSG.points);
+  if (form.points === null) errors.push(REWARD_MSG.noPoints);
+  else if (form.points !== opts.original?.points && !isRewardPointLevel(form.points)) errors.push(REWARD_MSG.points);
 
   const statusChanged = form.status !== (opts.original?.status ?? undefined);
   const touchesVerified = form.status === VERIFIED_REWARD_STATUS || opts.original?.status === VERIFIED_REWARD_STATUS;
@@ -129,17 +165,20 @@ export function validateRewardForm(
   return errors;
 }
 
-/** POST /api/rewards body without the idempotency key (empty reporter → the server uses the creator's name). */
-export function toRewardCreateInput(levelId: LevelId, form: RewardForm): Omit<RewardCreateInput, "clientRequestId"> {
+/**
+ * POST /api/rewards body without the idempotency key (empty reporter → the server uses the creator's name).
+ * Proposal mode always sends "Mới ghi nhận" (the server forces it anyway). Call after validateRewardForm.
+ */
+export function toRewardCreateInput(levelId: LevelId, form: RewardForm, mode: RewardMode = "manage"): Omit<RewardCreateInput, "clientRequestId"> {
   const input: Omit<RewardCreateInput, "clientRequestId"> = {
     levelId,
     date: form.date,
     classCode: form.classCode,
-    points: form.points,
+    points: form.points ?? 0,
     reason: form.reason.trim(),
     evidenceUrls: checkEvidenceLinks(form.links).urls,
     photoIds: [...form.photoIds],
-    status: form.status,
+    status: mode === "propose" ? PROPOSAL_STATUS : form.status,
   };
   const reporter = form.reporter.trim();
   const note = form.note.trim();
@@ -151,14 +190,15 @@ export function toRewardCreateInput(levelId: LevelId, form: RewardForm): Omit<Re
 /**
  * PATCH /api/rewards/:id body (an empty note clears it), with `baseRev` = the revision the form was opened from (409
  * when changed meanwhile). The status is only sent when the user changed it (never reverts a verification made
- * while the form was open).
+ * while the form was open); points / reason only when changed (a legacy value is never re-validated).
  */
-export function toRewardUpdateInput(form: RewardForm, original: Pick<Reward, "status" | "rev">): RewardUpdateInput {
+export function toRewardUpdateInput(form: RewardForm, original: Pick<Reward, "status" | "rev" | "points" | "reason">): RewardUpdateInput {
+  const reason = form.reason.trim();
   return {
     date: form.date,
     classCode: form.classCode,
-    points: form.points,
-    reason: form.reason.trim(),
+    ...(form.points !== null && form.points !== original.points ? { points: form.points } : {}),
+    ...(reason !== original.reason.trim() ? { reason } : {}),
     reporter: form.reporter.trim(),
     note: form.note.trim(),
     evidenceUrls: checkEvidenceLinks(form.links).urls,

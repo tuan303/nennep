@@ -1,9 +1,9 @@
 "use client";
 /** Cells and the phone card of the Báo GVCN detail table. */
 import type { KeyboardEvent, MouseEvent } from "react";
-import { MessageSquareReply, MessageSquareText, Users } from "lucide-react";
+import { MessageSquareReply, MessageSquareText, ShieldCheck, Wrench } from "lucide-react";
 import { Badge, Button, StatusBadge, Tooltip } from "@/components/ui";
-import { FormulaText, formulaInputOf, pointsFormula } from "@/components/app/widgets";
+import { FormulaText, ScopeBadge, formulaInputOf, pointsFormula, remediationMeta } from "@/components/app/widgets";
 import { fmtDateTime, fmtNumber } from "@/lib/client/format";
 import { formatDayMonthVN, weekdayLabelVN } from "@/lib/engine";
 import type { Incident } from "@/lib/types";
@@ -18,17 +18,12 @@ export function DateCell({ date }: { date: string }) {
   );
 }
 
+/** Who the incident is about + its scope (Cá nhân / Tập thể – icon + text). */
 export function SubjectCell({ incident }: { incident: Incident }) {
   const s = subjectOf(incident);
-  if (s.collective) {
-    return (
-      <Badge tone="star" size="sm" icon={Users}>
-        Tập thể lớp
-      </Badge>
-    );
-  }
   return (
-    <span className="flex min-w-0 flex-col gap-0.5">
+    <span className="flex min-w-0 flex-col items-start gap-1">
+      {s.collective ? <span className="font-medium text-slate-900">Tập thể lớp</span> : null}
       {s.names.length > 0 ? <span className="font-medium text-slate-900">{s.names.join(", ")}</span> : null}
       {s.hidden > 0 ? <span className="text-xs text-slate-500">{s.hidden} HS</span> : null}
       {s.unnamed > 0 ? (
@@ -37,6 +32,7 @@ export function SubjectCell({ incident }: { incident: Incident }) {
           {s.unnamed} HS chưa rõ tên
         </span>
       ) : null}
+      <ScopeBadge scope={incident.scope} size="sm" />
     </span>
   );
 }
@@ -120,6 +116,46 @@ export function FeedbackCell({ incident: i, onFeedback }: FeedbackCellProps) {
   );
 }
 
+export interface RemediationCellProps {
+  incident: Incident;
+  /** "Khắc phục" row action (GVCN of the class, ADMIN / EDITOR with incident.remediate). */
+  onRemediate?: (i: Incident) => void;
+}
+
+/** Biện pháp xử lý / khắc phục: text, who / when, and the row action. */
+export function RemediationCell({ incident: i, onRemediate }: RemediationCellProps) {
+  const stop = (e: MouseEvent | KeyboardEvent) => e.stopPropagation();
+  const text = i.remediation?.trim();
+  const meta = remediationMeta(i);
+  return (
+    <span className="flex min-w-44 flex-col items-start gap-1.5">
+      {text ? (
+        <>
+          <span className="line-clamp-3 whitespace-pre-line text-[13px] leading-5 text-slate-800 print:line-clamp-none">{text}</span>
+          {meta ? <span className="num text-xs text-slate-500">{meta}</span> : null}
+        </>
+      ) : (
+        <span className="text-[13px] italic text-slate-400">Chưa có</span>
+      )}
+      {onRemediate ? (
+        <Button
+          size="sm"
+          variant="outline"
+          icon={Wrench}
+          data-print-hide
+          onClick={(e) => {
+            stop(e);
+            onRemediate(i);
+          }}
+          onKeyDown={stop}
+        >
+          {text ? "Sửa khắc phục" : "Khắc phục"}
+        </Button>
+      ) : null}
+    </span>
+  );
+}
+
 /** Phone layout of one incident (the whole card opens the detail sheet, which holds the feedback form). */
 export function IncidentCard({ incident: i, canFeedback }: { incident: Incident; canFeedback: boolean }) {
   return (
@@ -129,7 +165,10 @@ export function IncidentCard({ incident: i, canFeedback }: { incident: Incident;
           <span className="num font-semibold text-brand-900">{formatDayMonthVN(i.date)}</span>
           <span className="text-xs text-slate-500">{weekdayLabelVN(i.date)}</span>
         </span>
-        <StatusBadge status={i.status} size="sm" />
+        <span className="flex flex-wrap items-center justify-end gap-1.5">
+          <ScopeBadge scope={i.scope} size="sm" />
+          <StatusBadge status={i.status} size="sm" />
+        </span>
       </span>
       <span className="font-semibold text-slate-900">{subjectText(i)}</span>
       <span className="text-[13px] leading-5 text-slate-700">
@@ -147,6 +186,12 @@ export function IncidentCard({ incident: i, canFeedback }: { incident: Incident;
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700">
           <MessageSquareReply aria-hidden className="size-3.5" strokeWidth={2.25} />
           Chạm để xem chi tiết và phản hồi
+        </span>
+      ) : null}
+      {i.remediation?.trim() ? (
+        <span className="flex gap-2 rounded-lg border-l-4 border-ok bg-ok-soft/50 px-2.5 py-1.5 text-[13px] text-slate-700">
+          <ShieldCheck aria-hidden className="mt-0.5 size-3.5 shrink-0 text-ok-strong" strokeWidth={2.25} />
+          <span className="line-clamp-2">Khắc phục: {i.remediation.trim()}</span>
         </span>
       ) : null}
     </span>

@@ -132,6 +132,8 @@ export function levelSummary(ds: LevelDataset, mode: SchoolPeriodMode, today: st
 export interface SchoolTotals {
   levels: number;
   incidents: number;
+  /** Σ Lượt vi phạm (KPI_TERMS.violationTurns) of the levels. */
+  violationTurns: number;
   penaltyPoints: number;
   rewardPoints: number;
   classCount: number;
@@ -153,6 +155,7 @@ export function schoolTotals(summaries: readonly LevelSummary[]): SchoolTotals {
   return {
     levels: summaries.length,
     incidents: sum((s) => s.kpis.incidents),
+    violationTurns: sum((s) => s.kpis.violationTurns),
     penaltyPoints: sum((s) => s.kpis.penaltyPoints),
     rewardPoints: sum((s) => s.kpis.rewardPoints),
     classCount: sum((s) => s.classCount),

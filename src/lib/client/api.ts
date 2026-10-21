@@ -17,14 +17,18 @@ import type {
   ClassesPutInput,
   ConfigUpdateInput,
   DeleteInput,
+  EarlyWarningPutInput,
   EvidenceMaintenanceResult,
   EvidenceMaintenanceSchema,
   ExportLogInput,
   GvcnFeedbackInput,
   IncidentCreateInput,
   IncidentUpdateInput,
+  InspectionCreateInput,
+  InspectionUpdateInput,
   ListResponse,
   MeResponse,
+  NotDuplicateInput,
   OkResponse,
   RankingsResponse,
   RebuildSchema,
@@ -57,6 +61,7 @@ import type {
   CatalogItem,
   ClassInfo,
   Incident,
+  Inspection,
   LevelConfig,
   LevelDataset,
   LevelId,
@@ -103,7 +108,7 @@ export interface CalendarChangeOptions {
 
 /** POST /api/admin/rebuild-digests → per rebuilt level, the number of digests/records written. */
 export interface RebuildDigestsResponse extends OkResponse {
-  results: Partial<Record<LevelId, { weeks: number; incidents: number; rewards: number; students: number }>>;
+  results: Partial<Record<LevelId, { weeks: number; incidents: number; rewards: number; students: number; inspections?: number }>>;
 }
 
 /** GET /api/rankings query (names = query parameters). */
@@ -196,8 +201,20 @@ export const api = {
     remove: (id: string, reason: string) =>
       requestJson<OkResponse>(`/api/incidents/${seg(id)}`, { method: "DELETE", body: { reason } satisfies DeleteInput }),
     restore: (id: string) => post<Incident>(`/api/incidents/${seg(id)}/restore`),
+    /** GVCN note / status / remediation (EDITOR with incident.remediate: remediation + status only). */
     feedback: (id: string, input: GvcnFeedbackInput) => post<Incident>(`/api/incidents/${seg(id)}/feedback`, input),
+    /** "Không trùng": marks every pair of {id} ∪ otherIds as reviewed; returns the (live) members. */
+    notDuplicate: (id: string, input: NotDuplicateInput) => post<ListResponse<Incident>>(`/api/incidents/${seg(id)}/not-duplicate`, input),
     listDeleted: (levelId: LevelId) => get<ListResponse<Incident>>("/api/incidents", { level: levelId, deleted: 1 }),
+  },
+
+  /** Đợt kiểm tra (inspection.manage). Rounds are read from the dataset (`ds.inspections`). */
+  inspections: {
+    create: (input: InspectionCreateInput) => post<Inspection>("/api/inspections", input),
+    update: (id: string, input: InspectionUpdateInput) => patch<Inspection>(`/api/inspections/${seg(id)}`, input),
+    /** Soft delete (reason ≥ 3 chars). */
+    remove: (id: string, reason: string) =>
+      requestJson<OkResponse>(`/api/inspections/${seg(id)}`, { method: "DELETE", body: { reason } satisfies DeleteInput }),
   },
 
   rewards: {
@@ -265,6 +282,8 @@ export const api = {
       put<ListResponse<ClassInfo>>(`/api/settings/${levelId}/classes`, input),
     putWeeks: (levelId: LevelId, input: WeeksPutInput, opts?: CalendarChangeOptions) =>
       put<ListResponse<SchoolWeek>>(`/api/settings/${levelId}/weeks`, input, hidingQuery(opts)),
+    /** Early-warning thresholds (Cài đặt → Cảnh báo sớm) → the saved config. */
+    putEarlyWarning: (levelId: LevelId, input: EarlyWarningPutInput) => put<LevelConfig>(`/api/settings/${levelId}/early-warning`, input),
   },
 
   users: {

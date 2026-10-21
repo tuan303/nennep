@@ -4,7 +4,7 @@ import { CircleCheck, ListChecks, SearchX } from "lucide-react";
 import { Button, Card, DataTable, EmptyState, Pill, SearchInput, StatusBadge, type DataTableColumn } from "@/components/ui";
 import { INCIDENT_STATUSES } from "@/lib/constants";
 import type { Incident } from "@/lib/types";
-import { DateCell, DetailCell, FeedbackCell, IncidentCard, IssueCell, PointsCell, SubjectCell } from "./incident-cells";
+import { DateCell, DetailCell, FeedbackCell, IncidentCard, IssueCell, PointsCell, RemediationCell, SubjectCell } from "./incident-cells";
 import { filterReportRows, statusCounts, subjectText, type StatusFilter } from "./lib/report-model";
 
 const STATUS_FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
@@ -21,6 +21,9 @@ export interface IncidentTableProps {
   /** Quick feedback (only rows where `canFeedback` is true). */
   onFeedback: (i: Incident) => void;
   canFeedback: (i: Incident) => boolean;
+  /** "Khắc phục" row action (biện pháp xử lý / khắc phục) – rows where `canRemediate` is true. */
+  onRemediate?: (i: Incident) => void;
+  canRemediate?: (i: Incident) => boolean;
   /** Viewer is a GVCN (copy for the subtitle). */
   isGvcn: boolean;
   /** Initial search text / status filter (default: none). */
@@ -33,7 +36,19 @@ export interface IncidentTableProps {
  * The search and status filter only narrow the screen: the printed / PDF report always lists every incident of the
  * period, matching the KPIs, the copied text and the Excel export.
  */
-export function IncidentTable({ classCode, periodText, incidents, onOpen, onFeedback, canFeedback, isGvcn, defaultQuery = "", defaultStatus = "ALL" }: IncidentTableProps) {
+export function IncidentTable({
+  classCode,
+  periodText,
+  incidents,
+  onOpen,
+  onFeedback,
+  canFeedback,
+  onRemediate,
+  canRemediate,
+  isGvcn,
+  defaultQuery = "",
+  defaultStatus = "ALL",
+}: IncidentTableProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [status, setStatus] = useState<StatusFilter>(defaultStatus);
   const counts = useMemo(() => statusCounts(incidents), [incidents]);
@@ -56,8 +71,14 @@ export function IncidentTable({ classCode, periodText, incidents, onOpen, onFeed
         sortValue: (i) => i.gvcnNoteAt ?? "",
         cell: (i) => <FeedbackCell incident={i} onFeedback={canFeedback(i) ? onFeedback : undefined} />,
       },
+      {
+        key: "remediation",
+        header: "Khắc phục",
+        sortValue: (i) => i.remediationAt ?? "",
+        cell: (i) => <RemediationCell incident={i} onRemediate={onRemediate && canRemediate?.(i) ? onRemediate : undefined} />,
+      },
     ],
-    [canFeedback, onFeedback],
+    [canFeedback, onFeedback, canRemediate, onRemediate],
   );
 
   const reset = () => {
@@ -97,7 +118,7 @@ export function IncidentTable({ classCode, periodText, incidents, onOpen, onFeed
       subtitle={
         <span className="print:hidden">
           {isGvcn
-            ? "Chạm vào một sự việc để xem chi tiết, gửi phản hồi và cập nhật trạng thái xử lý."
+            ? "Chạm vào một sự việc để xem chi tiết, gửi phản hồi, ghi biện pháp khắc phục và cập nhật trạng thái xử lý."
             : "Bấm vào một dòng để xem chi tiết sự việc, học sinh và minh chứng."}
         </span>
       }

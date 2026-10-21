@@ -2,7 +2,16 @@ import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { SCHOOL_NAME } from "../../constants";
 import type { Incident } from "../../types";
-import { buildHtmlSnapshot, exportGvcnReport, exportRankingSheet, exportSimpleSheet, exportStudentList, incidentSubjects, type HtmlSnapshotInput } from "../export-report";
+import {
+  buildHtmlSnapshot,
+  exportGvcnReport,
+  exportRankingSheet,
+  exportSimpleSheet,
+  exportStudentList,
+  incidentStudentIds,
+  incidentSubjects,
+  type HtmlSnapshotInput,
+} from "../export-report";
 import { formatGeneratedAt } from "../html-snapshot";
 
 async function open(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
@@ -114,19 +123,47 @@ describe("report exports", () => {
         ...ctx,
         classCode: "6A01",
         homeroomTeacher: "Cô Giáo Mẫu Một",
-        incidents: [incident({}), incident({ code: "NN-20261015-0002", date: "2026-10-15", students: [], unnamedCount: 0, gvcnNote: "Đã nhắc nhở" })],
+        incidents: [
+          incident({ remediation: "Học sinh viết bản cam kết." }),
+          incident({ code: "NN-20261015-0002", date: "2026-10-15", students: [], unnamedCount: 0, gvcnNote: "Đã nhắc nhở" }),
+        ],
       }),
     );
     const gws = gvcn.getWorksheet("Lớp 6A01");
+    expect(gws?.getRow(4).values).toEqual([
+      undefined,
+      "Ngày",
+      "Mã sự việc",
+      "Đối tượng",
+      "Mã HS",
+      "Lỗi",
+      "Điểm trừ",
+      "Chi tiết",
+      "Trạng thái",
+      "Phản hồi GVCN",
+      "Biện pháp khắc phục",
+    ]);
     expect(gws?.getCell("B5").value).toBe("NN-20261015-0002");
     expect(gws?.getCell("C5").value).toBe("Tập thể lớp");
+    expect(gws?.getCell("D5").value).toBeNull();
     expect(gws?.getCell("C6").value).toBe("Nguyễn An + 2 HS chưa rõ tên");
-    expect(gws?.getCell("H5").value).toBe("Đã nhắc nhở");
+    expect(gws?.getCell("D6").value).toBe("1");
+    expect(gws?.getCell("I5").value).toBe("Đã nhắc nhở");
+    expect(gws?.getCell("J6").value).toBe("Học sinh viết bản cam kết.");
     expect(String(gws?.getCell("A2").value)).toContain("GVCN: Cô Giáo Mẫu Một");
   });
 
-  it("describes incident subjects", () => {
+  it("describes incident subjects and their Mã HS", () => {
     expect(incidentSubjects({ students: [], unnamedCount: 3 })).toBe("3 HS chưa rõ tên");
+    expect(incidentStudentIds({ students: [] })).toBe("");
+    expect(
+      incidentStudentIds({
+        students: [
+          { id: "HS0001", name: "Nguyễn Văn A", classCode: "6A01" },
+          { id: "HS0002", name: "Trần Thị B", classCode: "6A01" },
+        ],
+      }),
+    ).toBe("HS0001, HS0002");
   });
 });
 

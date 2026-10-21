@@ -2,6 +2,7 @@ import type {
   ActionStatus,
   DataCheck,
   IncidentStatus,
+  InspectionShift,
   LevelConfig,
   LevelId,
   LevelMeta,
@@ -64,6 +65,13 @@ export const REWARD_STATUSES: RewardStatus[] = ["Mới ghi nhận", "Đang xác 
 export const ACTION_STATUSES: ActionStatus[] = ["Open", "Doing", "Done"];
 export const PRIORITIES: Priority[] = ["High", "Medium", "Low"];
 export const ROLES: Role[] = ["ADMIN", "EDITOR", "VIEWER", "GVCN"];
+
+export const INSPECTION_SHIFTS: InspectionShift[] = ["Sáng", "Chiều"];
+
+/** Mức điểm cộng hợp lệ cho điểm thưởng mới hoặc khi sửa điểm (điểm cũ ngoài thang vẫn hợp lệ nếu không sửa). */
+export const REWARD_POINT_LEVELS = [1, 2, 3, 4, 5] as const;
+/** Độ dài tối thiểu của "Lý do cộng điểm" (Reward.reason) khi tạo mới hoặc khi sửa lý do. */
+export const REWARD_REASON_MIN_LENGTH = 5;
 
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Quản trị",
@@ -130,6 +138,36 @@ export function defaultLevelConfig(levelId: LevelId): LevelConfig {
   };
 }
 
+/** Shared KPI vocabulary (REQ_V2 §13): label + tooltip used by every screen that shows these numbers. */
+export type KpiTermId = "incidents" | "violationTurns" | "uniqueStudents" | "relatedStudents" | "penaltyPoints" | "rewardPoints";
+
+export const KPI_TERMS: Record<KpiTermId, { label: string; hint: string }> = {
+  incidents: {
+    label: "Sự việc",
+    hint: "Số lần ghi nhận nền nếp: mỗi mã sự việc (NN-…) là 1 sự việc, dù liên quan 1 hay nhiều học sinh.",
+  },
+  violationTurns: {
+    label: "Lượt vi phạm",
+    hint: "Lỗi tính theo học sinh (/HS): mỗi học sinh liên quan là 1 lượt (kể cả HS chưa rõ tên). Lỗi tính theo lần (/lần): mỗi lần vi phạm là 1 lượt.",
+  },
+  uniqueStudents: {
+    label: "Số HS vi phạm",
+    hint: "Số học sinh khác nhau được ghi tên trong các sự việc – mỗi em chỉ đếm 1 lần; không gồm học sinh chưa rõ tên.",
+  },
+  relatedStudents: {
+    label: "HS liên quan",
+    hint: "Tổng lượt học sinh liên quan của các sự việc, gồm cả học sinh chưa rõ tên (một em có 2 sự việc được đếm 2 lần).",
+  },
+  penaltyPoints: {
+    label: "Điểm trừ",
+    hint: "Tổng điểm trừ theo bảng điểm lỗi: /HS = mức trừ × số học sinh; /lần = mức trừ × số lần. Không nhân đôi khi một sự việc có nhiều học sinh.",
+  },
+  rewardPoints: {
+    label: "Điểm thưởng",
+    hint: "Tổng điểm thưởng ở các trạng thái được tính vào thi đua (Cài đặt → Trạng thái điểm thưởng được tính).",
+  },
+};
+
 /** Default 5S-tagged error codes (configurable per level in Cài đặt → Danh mục lỗi). */
 export const DEFAULT_5S_CODES = ["L03", "L04", "L11", "L14"];
 
@@ -160,7 +198,10 @@ export type Permission =
   | "actions.manage"
   | "actions.view"
   | "data.inspect" // Dữ liệu & rà soát
-  | "data.reset";
+  | "data.reset"
+  | "reward.propose" // open Điểm thưởng + create rewards; without reward.create (GVCN): own classes only, status "Mới ghi nhận", proposed = true
+  | "incident.remediate" // biện pháp xử lý/khắc phục + status via POST /api/incidents/:id/feedback, any class of an accessible level
+  | "inspection.manage"; // ghi nhận / sửa / xóa đợt kiểm tra
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
@@ -183,6 +224,9 @@ const MATRIX: Record<Role, Permission[]> = {
     "actions.view",
     "data.inspect",
     "data.reset",
+    "reward.propose",
+    "incident.remediate",
+    "inspection.manage",
   ],
   EDITOR: [
     "view.dashboard",
@@ -192,9 +236,12 @@ const MATRIX: Record<Role, Permission[]> = {
     "record.editOwnRecent",
     "actions.view",
     "data.inspect",
+    "reward.propose",
+    "incident.remediate",
+    "inspection.manage",
   ],
   VIEWER: ["view.dashboard", "view.allClassesDetail", "actions.view"],
-  GVCN: ["view.dashboard", "incident.gvcnFeedback"],
+  GVCN: ["view.dashboard", "incident.gvcnFeedback", "reward.propose"],
 };
 
 /**

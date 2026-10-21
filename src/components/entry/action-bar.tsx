@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode } from "react";
-import { CircleAlert, ImageOff, ListPlus, Save, Undo2, Upload } from "lucide-react";
+import { CircleAlert, Copy, ImageOff, ListPlus, Save, Undo2, Upload } from "lucide-react";
 import { Button, cn } from "@/components/ui";
 import { fmtNumber } from "@/lib/client/format";
 import type { EntryPreview } from "./lib/preview";
@@ -21,13 +21,15 @@ export interface EntryActionBarProps {
   onCancelEdit: () => void;
   /** Id of the preview step (the "why can't I save" link scrolls there). */
   previewId: string;
+  /** Codes of recorded incidents the form may duplicate (saving asks for confirmation). */
+  duplicateCodes?: readonly string[];
 }
 
 /**
  * Sticky bottom action bar: floats above the phone tab bar (and its gold "+" button) with safe-area insets,
  * shows the points or the first blocking reason, and the save buttons.
  */
-export function EntryActionBar({ mode, preview, saving, uploading, photoBlocker, onSave, onSaveNext, onCancelEdit, previewId }: EntryActionBarProps) {
+export function EntryActionBar({ mode, preview, saving, uploading, photoBlocker, onSave, onSaveNext, onCancelEdit, previewId, duplicateCodes = [] }: EntryActionBarProps) {
   const busy = saving !== null || uploading;
   const blocked = !preview.canSave;
   const failedPhotos = !uploading && !!photoBlocker;
@@ -60,6 +62,21 @@ export function EntryActionBar({ mode, preview, saving, uploading, photoBlocker,
         <span className="min-w-0 truncate">
           Chưa thể lưu: {preview.issues[0]}
           {more > 0 ? ` (+${more})` : ""}
+        </span>
+      </button>
+    );
+  } else if (duplicateCodes.length > 0) {
+    const more = duplicateCodes.length - 1;
+    status = (
+      <button
+        type="button"
+        onClick={() => document.getElementById(previewId)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        className="flex w-full min-w-0 max-w-full items-center gap-1.5 rounded text-left text-warn-strong underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500"
+      >
+        <Copy aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+        <span className="num min-w-0 truncate">
+          Có thể trùng {duplicateCodes[0]}
+          {more > 0 ? ` (+${more})` : ""} · {fmtNumber(preview.points)} điểm trừ
         </span>
       </button>
     );

@@ -1,6 +1,6 @@
 /**
  * Human-readable record codes allocated inside a transaction:
- *   incidents NN-yyyymmdd-NNNN · rewards KT-yyyymmdd-NNNN · actions HD-yyyymmdd-NNN
+ *   incidents NN-yyyymmdd-NNNN · rewards KT-yyyymmdd-NNNN · actions HD-yyyymmdd-NNN · inspections DKT-yyyymmdd-NNN
  * Counter doc: counters/{prefix}_{level}_{yyyymmdd} { seq }. If the candidate doc id already exists
  * (e.g. legacy import), keep incrementing. `nextCode` only READS; call `commitCode` with the writes.
  */
@@ -11,8 +11,8 @@ import type { LevelId } from "../types";
 import { Errors } from "./errors";
 import { db, nowIso } from "./firebase-admin";
 
-export type CodePrefix = "NN" | "KT" | "HD";
-export type CodedCollection = typeof COL.incidents | typeof COL.rewards | typeof COL.actions;
+export type CodePrefix = "NN" | "KT" | "HD" | "DKT";
+export type CodedCollection = typeof COL.incidents | typeof COL.rewards | typeof COL.actions | typeof COL.inspections;
 
 export interface AllocatedCode {
   code: string;
@@ -22,7 +22,7 @@ export interface AllocatedCode {
   counterRef: DocumentReference;
 }
 
-const PAD: Record<CodePrefix, number> = { NN: 4, KT: 4, HD: 3 };
+const PAD: Record<CodePrefix, number> = { NN: 4, KT: 4, HD: 3, DKT: 3 };
 const PROBE_CHUNK = 10;
 const MAX_PROBES = 2000;
 

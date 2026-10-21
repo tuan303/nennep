@@ -6,12 +6,13 @@
  */
 import type { DocumentReference, WriteBatch } from "firebase-admin/firestore";
 import { COL } from "../firestore-paths";
-import type { Incident, LevelId, Reward, Student, StudentLite } from "../types";
+import type { Incident, Inspection, LevelId, Reward, Student, StudentLite } from "../types";
 import { assertDigestSize, estimateBytes } from "./digest-size";
 import {
   byClassThenName,
   byDateThenCode,
   incidentDigestRef,
+  inspectionMonthDigestRef,
   rewardBucketOf,
   rewardMonthDigestRef,
   studentDigestRef,
@@ -28,6 +29,8 @@ export interface RebuildResult {
   incidents: number;
   rewards: number;
   students: number;
+  /** Non-deleted inspection rounds written to the monthly `__ins__{yyyy-mm}` digests. */
+  inspections: number;
 }
 
 interface RebuildOpts {
@@ -36,7 +39,7 @@ interface RebuildOpts {
 }
 
 /** Existing digest doc ids of a level and kind (ids only, no payload). */
-async function digestIds(levelId: LevelId, kind: "inc" | "rew"): Promise<Array<{ id: string; ref: DocumentReference }>> {
+async function digestIds(levelId: LevelId, kind: "inc" | "rew" | "ins"): Promise<Array<{ id: string; ref: DocumentReference }>> {
   const snap = await db().collection(COL.digests).where("levelId", "==", levelId).where("kind", "==", kind).select().get();
   return snap.docs.map((d) => ({ id: d.id, ref: d.ref }));
 }
@@ -44,7 +47,7 @@ async function digestIds(levelId: LevelId, kind: "inc" | "rew"): Promise<Array<{
 /** Group non-deleted records by a bucket key, write one digest per bucket and delete the stale ones. */
 async function rebuildBuckets<T extends { id: string; date: string; code: string; deletedAt?: string }>(
   levelId: LevelId,
-  kind: "inc" | "rew",
+  kind: "inc" | "rew" | "ins",
   records: T[],
   bucketOf: (r: T) => string | undefined,
   refOf: (bucket: string) => DocumentReference,
@@ -110,6 +113,25 @@ export async function rebuildRewardDigest(levelId: LevelId, opts: RebuildOpts = 
   return { rewards: r.count };
 }
 
+/**
+ * Rewrite the monthly inspection digests `__ins__{yyyy-mm}` from non-deleted canonical inspections (single-field
+ * `levelId` query) and delete stale ones (existing `digests (levelId, kind)` index).
+ */
+export async function rebuildInspectionDigests(levelId: LevelId, opts: RebuildOpts = {}): Promise<Pick<RebuildResult, "inspections">> {
+  const snap = await db().collection(COL.inspections).where("levelId", "==", levelId).get();
+  const records = snap.docs.map((d) => d.data() as Inspection);
+  const r = await rebuildBuckets(
+    levelId,
+    "ins",
+    records,
+    (x) => (typeof x.week === "string" && x.week ? rewardBucketOf(x.week) : undefined),
+    (month) => inspectionMonthDigestRef(levelId, month),
+    (month, items, updatedAt) => ({ levelId, kind: "ins", month, items, updatedAt }),
+    opts,
+  );
+  return { inspections: r.count };
+}
+
 /** StudentLite list of `__stu` (all statuses: the admin roster screen lists former students too) from canonical docs. */
 export function studentDigestItems(students: Iterable<Student>): StudentLite[] {
   return [...students].map(toStudentLite).sort(byClassThenName);
@@ -130,21 +152,22 @@ export async function rebuildStudentDigest(levelId: LevelId, opts: RebuildOpts =
 }
 
 /**
- * Rebuild `__ref`, `__stu`, the reward and every `__inc__{week}` digest of a level; bumps the version once.
- * The three record digests are rebuilt independently: one failing (e.g. an oversized document) does not stop the
+ * Rebuild `__ref`, `__stu`, the reward, inspection and every `__inc__{week}` digest of a level; bumps the version
+ * once. The record digests are rebuilt independently: one failing (e.g. an oversized document) does not stop the
  * others; the first error is rethrown after all of them ran.
  */
 export async function rebuildAllDigests(levelId: LevelId): Promise<RebuildResult> {
   await rebuildReferenceDigest(levelId, { bump: false });
-  const [inc, rew, stu] = await Promise.allSettled([
+  const [inc, rew, stu, ins] = await Promise.allSettled([
     rebuildIncidentDigests(levelId, { bump: false }),
     rebuildRewardDigest(levelId, { bump: false }),
     rebuildStudentDigest(levelId, { bump: false }),
+    rebuildInspectionDigests(levelId, { bump: false }),
   ]);
   const batch = db().batch();
   bumpVersions(batch, [levelId]);
   await batch.commit();
-  for (const r of [inc, rew, stu]) if (r.status === "rejected") throw r.reason;
+  for (const r of [inc, rew, stu, ins]) if (r.status === "rejected") throw r.reason;
   const value = <T>(r: PromiseSettledResult<T>) => (r as PromiseFulfilledResult<T>).value;
-  return { ...value(inc), ...value(rew), ...value(stu) };
+  return { ...value(inc), ...value(rew), ...value(stu), ...value(ins) };
 }

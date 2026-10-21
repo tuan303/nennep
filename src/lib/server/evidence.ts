@@ -54,7 +54,7 @@ export function decodeImageDataUrl(dataUrl: string): { mime: EvidenceMime; data:
 /** POST /api/evidence — store the image + audit UPLOAD_EVIDENCE in one batch. Returns the evidence id. */
 export async function saveEvidence(ctx: ServiceCtx, input: EvidenceUploadData): Promise<string> {
   const { user } = ctx;
-  requireAnyPermission(user, ["incident.create", "reward.create"]);
+  requireAnyPermission(user, ["incident.create", "reward.create", "reward.propose"]);
   requireLevel(user, input.levelId);
   const { mime, data } = decodeImageDataUrl(input.dataUrl);
   const ref = db().collection(COL.evidence).doc();

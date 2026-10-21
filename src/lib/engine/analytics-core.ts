@@ -1,5 +1,5 @@
-/** KPIs, issue / class / grade / category / weekday aggregates. Re-exported by analytics.ts. */
-import type { GlobalFilters, Incident, LevelDataset, Unit } from "../types";
+/** KPIs, issue / class / grade / category / error-group / weekday aggregates. Re-exported by analytics.ts. */
+import type { CatalogItem, GlobalFilters, Incident, LevelDataset, Unit } from "../types";
 import { addDays, isIsoDate, weekdayIndex, weekdayLabelVN } from "./dates";
 import { countedRewards, filterIncidents, filterRewards } from "./filters";
 import { periodLabel, previousPeriod } from "./period";
@@ -9,8 +9,25 @@ import { round2 } from "./scoring";
 import { compareVN, naturalCompare } from "./text";
 import { compareClassInfo, groupBy, sumBy, uniqueCount } from "./utils";
 
+/**
+ * Lượt vi phạm of one incident (KPI_TERMS.violationTurns): "/HS" → relatedStudentCount (named + unnamed);
+ * "/lần" → occurrenceCount (≥ 1, as computePoints).
+ */
+export function violationTurnsOf(i: Pick<Incident, "unit" | "relatedStudentCount" | "occurrenceCount">): number {
+  if (i.unit === "/HS") return Math.max(0, i.relatedStudentCount || 0);
+  return Math.max(1, Math.floor(i.occurrenceCount || 1));
+}
+
+function sumTurns(incidents: readonly Incident[]): number {
+  let n = 0;
+  for (const i of incidents) n += violationTurnsOf(i);
+  return n;
+}
+
 export interface Kpis {
   incidents: number;
+  /** Σ violationTurnsOf (Lượt vi phạm). */
+  violationTurns: number;
   relatedStudents: number;
   uniqueStudents: number;
   penaltyPoints: number;
@@ -22,7 +39,7 @@ export interface Kpis {
 }
 
 /**
- * KPIs of the filtered scope. relatedStudents = Σ relatedStudentCount (named + unnamed);
+ * KPIs of the filtered scope. violationTurns = Σ violationTurnsOf; relatedStudents = Σ relatedStudentCount (named + unnamed);
  * uniqueStudents = distinct named students; rewardPoints = counted rewards (period + grade + class only).
  */
 export function computeKpis(ds: LevelDataset, f: GlobalFilters): Kpis {
@@ -30,6 +47,7 @@ export function computeKpis(ds: LevelDataset, f: GlobalFilters): Kpis {
   const rewards = countedRewards(filterRewards(ds, f), ds.config);
   return {
     incidents: inc.length,
+    violationTurns: sumTurns(inc),
     relatedStudents: sumBy(inc, (i) => i.relatedStudentCount),
     uniqueStudents: uniqueCount(inc.flatMap((i) => i.students.map((s) => s.id))),
     penaltyPoints: sumBy(inc, (i) => i.points),
@@ -59,6 +77,8 @@ export interface IssueStat {
   category: string;
   unit: Unit;
   incidents: number;
+  /** Σ violationTurnsOf. */
+  violationTurns: number;
   points: number;
   students: number;
   classCount: number;
@@ -77,6 +97,7 @@ export function topIssues(incidents: Incident[], n = 5): IssueStat[] {
       category: first.category,
       unit: first.unit,
       incidents: list.length,
+      violationTurns: sumTurns(list),
       points: sumBy(list, (i) => i.points),
       students: sumBy(list, (i) => i.relatedStudentCount),
       classCount: uniqueCount(list.map((i) => i.classCode)),
@@ -91,6 +112,8 @@ export interface ClassStat {
   grade: number;
   homeroomTeacher?: string;
   incidents: number;
+  /** Σ violationTurnsOf. */
+  violationTurns: number;
   points: number;
   students: number;
   topIssue?: string;
@@ -108,6 +131,7 @@ export function classStats(ds: LevelDataset, f: GlobalFilters): ClassStat[] {
         classCode: c.code,
         grade: c.grade,
         incidents: list.length,
+        violationTurns: sumTurns(list),
         points: sumBy(list, (i) => i.points),
         students: sumBy(list, (i) => i.relatedStudentCount),
       };
@@ -168,6 +192,43 @@ export function categoryBreakdown(incidents: Incident[]): Array<{ category: stri
   return [...groupBy(incidents, (i) => i.category).entries()]
     .map(([category, list]) => ({ category, incidents: list.length, points: sumBy(list, (i) => i.points) }))
     .sort((a, b) => b.points - a.points || b.incidents - a.incidents || compareVN(a.category, b.category));
+}
+
+/** Group label of incidents / catalog items without a `group` (Nhóm lỗi). */
+export const NO_GROUP_LABEL = "Chưa phân nhóm";
+
+export interface GroupStat {
+  group: string;
+  incidents: number;
+  violationTurns: number;
+  points: number;
+  /** Distinct error codes with incidents in the group. */
+  errorCodes: number;
+}
+
+const groupOf = (g: string | undefined): string => g?.trim() || NO_GROUP_LABEL;
+
+/**
+ * Incidents / turns / points per error group (snapshot `group`, NO_GROUP_LABEL when missing). With `catalog`, every
+ * group of the catalog appears (zeros included; an item without a group stands for NO_GROUP_LABEL) so order/colours
+ * stay stable. Sorted by naturalCompare(group), NO_GROUP_LABEL last. `errorCodes` = distinct error codes with incidents.
+ */
+export function groupBreakdown(incidents: readonly Incident[], catalog?: readonly CatalogItem[]): GroupStat[] {
+  const byGroup = groupBy(incidents, (i) => groupOf(i.group));
+  const groups = new Set(byGroup.keys());
+  for (const c of catalog ?? []) groups.add(groupOf(c.group));
+  return [...groups]
+    .map((group): GroupStat => {
+      const list = byGroup.get(group) ?? [];
+      return {
+        group,
+        incidents: list.length,
+        violationTurns: sumTurns(list),
+        points: sumBy(list, (i) => i.points),
+        errorCodes: uniqueCount(list.map((i) => i.errorCode)),
+      };
+    })
+    .sort((a, b) => Number(a.group === NO_GROUP_LABEL) - Number(b.group === NO_GROUP_LABEL) || naturalCompare(a.group, b.group));
 }
 
 const A_MONDAY = "2026-01-05";

@@ -2,7 +2,7 @@
  * Client-side visibility of incident actions (the server enforces the same rules – §3 "Edit rights").
  * Pure – unit-tested.
  */
-import { EDITOR_EDIT_WINDOW_HOURS, canSeeClassDetail, hasPermission, isGvcnOfClass } from "@/lib/constants";
+import { EDITOR_EDIT_WINDOW_HOURS, canAccessLevel, canSeeClassDetail, hasPermission, isGvcnOfClass } from "@/lib/constants";
 import type { Incident, LevelDataset, UserProfile } from "@/lib/types";
 
 const HOUR_MS = 3_600_000;
@@ -37,6 +37,39 @@ export function isTimeLimitedEdit(profile: AccessProfile | null | undefined): bo
 export function canGiveFeedback(profile: AccessProfile | null | undefined, incident: AccessIncident): boolean {
   if (!profile || incident.deletedAt || !hasPermission(profile, "incident.gvcnFeedback")) return false;
   return profile.role === "ADMIN" || isGvcnOfClass(profile, incident.levelId, incident.classCode);
+}
+
+/**
+ * Biện pháp xử lý / khắc phục (REQ_V2 §5.4, POST /api/incidents/:id/feedback with `remediation`): the GVCN of the
+ * class, or a user holding `incident.remediate` (ADMIN, EDITOR) with access to the level. Never on deleted records,
+ * nor on incidents redacted for the viewer (`opts.redacted`).
+ */
+export function canRemediate(profile: AccessProfile | null | undefined, incident: AccessIncident, opts: { redacted?: boolean } = {}): boolean {
+  if (!profile || !profile.active || incident.deletedAt || opts.redacted) return false;
+  if (isGvcnOfClass(profile, incident.levelId, incident.classCode)) return hasPermission(profile, "incident.gvcnFeedback");
+  return hasPermission(profile, "incident.remediate") && canAccessLevel(profile, incident.levelId);
+}
+
+/** Feedback fields the viewer may send for an incident (the server answers 403 for the others). */
+export interface FeedbackRights {
+  /** GVCN note ("Phản hồi của GVCN"). */
+  note: boolean;
+  /** Processing status. */
+  status: boolean;
+  /** Biện pháp xử lý / khắc phục. */
+  remediation: boolean;
+}
+
+/**
+ * ADMIN or the class GVCN: note + status + remediation. `incident.remediate` without being the class GVCN (EDITOR):
+ * remediation + status only (a note would be refused – it is the GVCN's). Nobody else: nothing.
+ */
+export function feedbackRights(profile: AccessProfile | null | undefined, incident: AccessIncident, opts: { redacted?: boolean } = {}): FeedbackRights {
+  if (opts.redacted || !canRemediate(profile, incident, opts)) {
+    const gvcn = !opts.redacted && canGiveFeedback(profile, incident);
+    return { note: gvcn, status: gvcn, remediation: false };
+  }
+  return { note: canGiveFeedback(profile, incident), status: true, remediation: true };
 }
 
 export function canDeleteIncident(profile: AccessProfile | null | undefined, incident: AccessIncident): boolean {

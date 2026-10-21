@@ -2,6 +2,7 @@
  * Read-model digests, updated INSIDE the same transaction as the canonical write:
  *   digests/{level}__inc__{week}    Incident[] (non-deleted) of one week
  *   digests/{level}__rew__{yyyy-mm} Reward[]   (non-deleted) whose week (Monday) is in that month
+ *   digests/{level}__ins__{yyyy-mm} Inspection[] (non-deleted) whose week (Monday) is in that month
  *   digests/{level}__stu            StudentLite[]
  * Every digest document is bounded by the activity of one week / month, so none grows across school years, and the
  * dataset only reads the documents of the calendar weeks (records of other school years stay canonical).
@@ -14,19 +15,19 @@
  * Rebuild functions (from canonical docs) live in ./digests-rebuild.ts and are re-exported here.
  */
 import type { DocumentReference } from "firebase-admin/firestore";
-import { COL, digestIncidentsWeekId, digestRewardsId, digestRewardsMonthId, digestStudentsId } from "../firestore-paths";
-import type { Incident, LevelId, Reward, Student, StudentLite } from "../types";
+import { COL, digestIncidentsWeekId, digestInspectionsMonthId, digestRewardsId, digestRewardsMonthId, digestStudentsId } from "../firestore-paths";
+import type { Incident, Inspection, LevelId, Reward, Student, StudentLite } from "../types";
 import { assertDigestSize } from "./digest-size";
 import { db, nowIso } from "./firebase-admin";
 import { readDocs, readDoc, setDoc, type Reader, type WriteTarget } from "./write";
 
-export type DigestKind = "inc" | "rew" | "stu";
+export type DigestKind = "inc" | "rew" | "stu" | "ins";
 
 export interface ItemsDigestDoc<T> {
   levelId: LevelId;
   kind: DigestKind;
   week?: string; // "inc" only
-  month?: string; // monthly "rew" only
+  month?: string; // monthly "rew" / "ins" only
   items: T[];
   updatedAt: string;
 }
@@ -49,6 +50,10 @@ export function rewardDigestRef(levelId: LevelId): DocumentReference {
 /** Monthly reward digest of `month` ("yyyy-mm"). */
 export function rewardMonthDigestRef(levelId: LevelId, month: string): DocumentReference {
   return db().collection(COL.digests).doc(digestRewardsMonthId(levelId, month));
+}
+/** Monthly inspection digest of `month` ("yyyy-mm" of the inspection's week). */
+export function inspectionMonthDigestRef(levelId: LevelId, month: string): DocumentReference {
+  return db().collection(COL.digests).doc(digestInspectionsMonthId(levelId, month));
 }
 export function studentDigestRef(levelId: LevelId): DocumentReference {
   return db().collection(COL.digests).doc(digestStudentsId(levelId));
@@ -249,6 +254,28 @@ export async function loadRewardDigests(reader: Reader, levelId: LevelId, weeks:
   return new RewardDigestSet(levelId, new BucketDigestSet<Reward>(levelId, drafts, (r) => rewardBucketOf(r.week)), legacy);
 }
 
+/* -------------------------------- inspections ------------------------------- */
+
+/** Monthly inspection digests of one level, keyed by "yyyy-mm" of the inspection's week (same buckets as rewards). */
+export class InspectionDigestSet extends BucketDigestSet<Inspection> {
+  constructor(levelId: LevelId, drafts: Map<string, DigestDraft<Inspection>>) {
+    super(levelId, drafts, (x) => rewardBucketOf(x.week));
+  }
+}
+
+/** READ phase: the monthly inspection digests of the given weeks (load before AND after weeks when re-dating). */
+export async function loadInspectionDigests(reader: Reader, levelId: LevelId, weeks: ReadonlyArray<string | undefined>): Promise<InspectionDigestSet> {
+  const months = [...new Set(weeks.filter((w): w is string => Boolean(w)).map(rewardBucketOf))];
+  const refs = months.map((m) => inspectionMonthDigestRef(levelId, m));
+  const snaps = await readDocs(reader, refs);
+  const drafts = new Map<string, DigestDraft<Inspection>>();
+  months.forEach((month, i) => {
+    const snap = snaps[i];
+    drafts.set(month, new DigestDraft<Inspection>(refs[i], { levelId, kind: "ins", month }, itemsOf<Inspection>(snap.data()), byDateThenCode, snap.exists));
+  });
+  return new InspectionDigestSet(levelId, drafts);
+}
+
 /* ---------------------------------- students -------------------------------- */
 
 /** READ phase: the students digest of a level (StudentLite). */
@@ -261,6 +288,7 @@ export async function loadStudentDigest(reader: Reader, levelId: LevelId): Promi
 export {
   rebuildAllDigests,
   rebuildIncidentDigests,
+  rebuildInspectionDigests,
   rebuildRewardDigest,
   rebuildStudentDigest,
   type RebuildResult,

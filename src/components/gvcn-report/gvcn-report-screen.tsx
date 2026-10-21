@@ -2,13 +2,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { ClipboardList, School } from "lucide-react";
 import { AccessNotice } from "@/components/app/shell";
-import { IncidentDetailSheet, StudentHistorySheet } from "@/components/app/widgets";
+import { IncidentDetailSheet, StudentHistorySheet, feedbackRights, isIncidentRedacted } from "@/components/app/widgets";
 import { PageHeader } from "@/components/ui";
 import { useDataset } from "@/lib/client/data";
 import { useFilters } from "@/lib/client/filters";
 import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
-import { LEVELS, isGvcnOfClass } from "@/lib/constants";
+import { LEVELS } from "@/lib/constants";
 import { rosterNames, withRosterNames } from "@/components/entry/lib/student-names";
 import { periodLabel } from "@/lib/engine";
 import type { Incident, LevelDataset, Period } from "@/lib/types";
@@ -16,14 +16,17 @@ import { ClassChooser, ReportClassBar } from "./class-selector";
 import { ClassRewards } from "./class-rewards";
 import { FeedbackDialog } from "./feedback-dialog";
 import { IncidentTable } from "./incident-table";
-import { buildGvcnReport, ignoredReportFilters, ownClassesOf, resolveReportClass } from "./lib/report-model";
+import { buildGvcnReport, ignoredReportFilters, ownClassesOf, resolveReportClass, type FeedbackMode } from "./lib/report-model";
 import { PrintSignatures, ReportPrintStyles } from "./print-parts";
 import { ReportActions } from "./report-actions";
 import { ReportHeader } from "./report-header";
 import { ReportKpis } from "./report-kpis";
 import { StudentConcerns } from "./student-concerns";
 
-/** Báo GVCN (SCR-05): printable class report with KPIs, incident detail, GVCN feedback, students and rewards. */
+/**
+ * Báo GVCN (SCR-05): printable class report with KPIs, incident detail, GVCN feedback, biện pháp khắc phục (REQ_V2 §7.4),
+ * students and rewards.
+ */
 export function GvcnReportScreen({ ds }: { ds: LevelDataset }) {
   const { filters, setFilters } = useFilters();
   const { profile } = useSession();
@@ -42,25 +45,33 @@ export function GvcnReportScreen({ ds }: { ds: LevelDataset }) {
 
   // Selections keep only ids so the sheets always show the latest dataset version.
   const [incidentId, setIncidentId] = useState<string | null>(null);
-  const [feedbackId, setFeedbackId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ id: string; mode: FeedbackMode } | null>(null);
   const [studentId, setStudentId] = useState<string | null>(null);
   const findIncident = useCallback((id: string | null) => (id ? (ds.incidents.find((i) => i.id === id) ?? null) : null), [ds.incidents]);
   const openIncident = useMemo(() => findIncident(incidentId), [findIncident, incidentId]);
   const roster = useMemo(() => rosterNames(ds.students), [ds.students]);
   const feedbackIncident = useMemo(() => {
-    const found = findIncident(feedbackId);
+    const found = findIncident(feedback?.id ?? null);
     return found ? withRosterNames(found, roster) : null;
-  }, [findIncident, feedbackId, roster]);
+  }, [findIncident, feedback, roster]);
 
-  const canFeedback = useCallback((i: Incident) => !i.deletedAt && isGvcnOfClass(profile, i.levelId, i.classCode), [profile]);
+  // Rights per row (server rules): the class GVCN → phản hồi + khắc phục + trạng thái; ADMIN / EDITOR (incident.remediate)
+  // → "Khắc phục" row action with biện pháp khắc phục + trạng thái (ADMIN writes GVCN notes from the detail sheet).
+  const rightsOf = useCallback((i: Incident) => feedbackRights(profile, i, { redacted: isIncidentRedacted(ds, i, profile) }), [profile, ds]);
+  const canFeedback = useCallback((i: Incident) => isGvcn && rightsOf(i).note, [isGvcn, rightsOf]);
+  const canRemediate = useCallback((i: Incident) => rightsOf(i).remediation, [rightsOf]);
   const openRow = useCallback((i: Incident) => setIncidentId(i.id), []);
-  const openFeedback = useCallback((i: Incident) => setFeedbackId(i.id), []);
+  const openFeedback = useCallback((i: Incident) => setFeedback({ id: i.id, mode: "gvcn" }), []);
+  const openRemediation = useCallback((i: Incident) => setFeedback({ id: i.id, mode: canFeedback(i) ? "gvcn" : "remediate" }), [canFeedback]);
   const pickClass = useCallback((code: string) => setFilters({ classCode: code }), [setFilters]);
   const ignoredFilters = useMemo(
-    () => ignoredReportFilters({ category: filters.category, errorCode: filters.errorCode }, ds.catalog),
-    [filters.category, filters.errorCode, ds.catalog],
+    () => ignoredReportFilters({ category: filters.category, errorCode: filters.errorCode, group: filters.group, studentId: filters.studentId }, ds.catalog, ds.students),
+    [filters.category, filters.errorCode, filters.group, filters.studentId, ds.catalog, ds.students],
   );
-  const clearIgnoredFilters = useCallback(() => setFilters({ category: undefined, errorCode: undefined }), [setFilters]);
+  const clearIgnoredFilters = useCallback(
+    () => setFilters({ category: undefined, errorCode: undefined, group: undefined, studentId: undefined }),
+    [setFilters],
+  );
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
@@ -116,6 +127,8 @@ export function GvcnReportScreen({ ds }: { ds: LevelDataset }) {
                 onOpen={openRow}
                 onFeedback={openFeedback}
                 canFeedback={canFeedback}
+                onRemediate={openRemediation}
+                canRemediate={canRemediate}
                 isGvcn={isGvcn}
               />
               <div className="grid items-start gap-4 sm:gap-5 xl:grid-cols-12">
@@ -132,7 +145,7 @@ export function GvcnReportScreen({ ds }: { ds: LevelDataset }) {
 
       <IncidentDetailSheet ds={ds} incident={openIncident} onClose={() => setIncidentId(null)} onOpenStudent={setStudentId} />
       <StudentHistorySheet ds={ds} studentId={studentId} period={period} onClose={() => setStudentId(null)} onOpenIncident={openRow} />
-      <FeedbackDialog incident={feedbackIncident} onClose={() => setFeedbackId(null)} onSaved={refresh} />
+      <FeedbackDialog incident={feedbackIncident} mode={feedback?.mode} onClose={() => setFeedback(null)} onSaved={refresh} />
     </div>
   );
 }

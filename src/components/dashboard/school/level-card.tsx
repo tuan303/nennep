@@ -2,7 +2,7 @@
 import { ArrowUpRight, CalendarRange, Crown, Target } from "lucide-react";
 import { Badge, Card, ErrorState, RagBadge, Skeleton, cn } from "@/components/ui";
 import { fmtNumber, fmtPercent, fmtPoints } from "@/lib/client/format";
-import { LEVELS } from "@/lib/constants";
+import { KPI_TERMS, LEVELS } from "@/lib/constants";
 import type { LevelId } from "@/lib/types";
 import type { LevelSummary } from "../lib/school-model";
 import { LEVEL_COLOR } from "../lib/school-model";
@@ -54,7 +54,7 @@ export function LevelCard({ summary: s, minConfidence, onOpen }: LevelCardProps)
       </span>
 
       <span className="grid grid-cols-2 gap-x-4 gap-y-3">
-        <MiniStat label="Sự việc" value={fmtNumber(s.kpis.incidents)} />
+        <MiniStat label={KPI_TERMS.incidents.label} value={fmtNumber(s.kpis.incidents)} />
         <MiniStat label="Sự việc / 100 HS" value={s.incidentsPer100 === undefined ? "–" : fmtNumber(s.incidentsPer100, 1)} />
         <MiniStat label="Điểm trừ" value={fmtNumber(s.kpis.penaltyPoints)} tone="bad" />
         <MiniStat label="Điểm trừ / lớp" value={fmtNumber(s.penaltyPerClass, 1)} tone="bad" />

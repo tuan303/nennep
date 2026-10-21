@@ -3,6 +3,7 @@ import { Percent, Repeat, Siren, Users } from "lucide-react";
 import { KpiCard, cn } from "@/components/ui";
 import { studentAlertDescription } from "@/components/app/widgets";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
+import { KPI_TERMS } from "@/lib/constants";
 import type { LevelConfig } from "@/lib/types";
 import type { AlertFilter, StudentsSummary } from "./lib/students-model";
 
@@ -17,16 +18,16 @@ export interface StudentsSummaryCardsProps {
 
 const ACTIVE_RING = "ring-2 ring-offset-0";
 
-/** 4 summary cards: HS có vi phạm · HS tái phạm · HS cảnh báo đỏ · % HS có vi phạm / HS đang học. */
+/** 4 summary cards: Số HS vi phạm (KPI_TERMS) · HS tái phạm · HS cảnh báo đỏ · % HS có vi phạm / HS đang học. */
 export function StudentsSummaryCards({ summary, config, alert, onAlert }: StudentsSummaryCardsProps) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <KpiCard
-        label="HS có vi phạm"
+        label={KPI_TERMS.uniqueStudents.label}
         value={summary.withIncidents}
         icon={Users}
         tone="brand"
-        hint="Học sinh được ghi tên trong ít nhất một sự việc của phạm vi đang lọc."
+        hint={KPI_TERMS.uniqueStudents.hint}
         onClick={() => onAlert("ALL")}
       />
       <KpiCard

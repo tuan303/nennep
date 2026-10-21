@@ -84,6 +84,8 @@ export interface LevelConfig {
     repeatMin: number; // >= this many incidents within the window -> "tái phạm" (default 2)
   };
   actionSlaDays: Record<Priority, number>; // default { High: 3, Medium: 7, Low: 14 }
+  /** Ngưỡng cảnh báo sớm (Cài đặt → Cảnh báo sớm). Absent → engine DEFAULT_EARLY_WARNING. */
+  earlyWarning?: EarlyWarningConfig;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -204,6 +206,14 @@ export interface Incident {
   gvcnNote?: string;
   gvcnNoteBy?: string;
   gvcnNoteAt?: string;
+  /** Biện pháp xử lý / khắc phục. Omitted when empty. Set only through POST /api/incidents/:id/feedback. */
+  remediation?: string;
+  /** ISO timestamp of the last remediation change. */
+  remediationAt?: string;
+  /** Display name of the user who last changed the remediation. */
+  remediationBy?: string;
+  /** Doc ids of incidents reviewed as NOT duplicates of this one (a pair is reviewed when either side lists the other). */
+  notDuplicateOf?: string[];
   source: "app" | "import";
   externalId?: string; // original code from imported workbook
   importBatchId?: string;
@@ -238,6 +248,8 @@ export interface Reward {
   photoIds: string[];
   note?: string;
   status: RewardStatus;
+  /** true when created by a GVCN through `reward.propose` (a proposal; counted only once its status is counted). */
+  proposed?: boolean;
   source: "app" | "import";
   externalId?: string;
   importBatchId?: string;
@@ -316,7 +328,10 @@ export type AuditAction =
   | "CREATE_ACTION"
   | "UPDATE_ACTION"
   | "UPLOAD_EVIDENCE"
-  | "REBUILD_DIGESTS";
+  | "REBUILD_DIGESTS"
+  | "CREATE_INSPECTION"
+  | "UPDATE_INSPECTION"
+  | "DELETE_INSPECTION";
 
 export interface AuditLog {
   id: string;
@@ -370,6 +385,8 @@ export interface LevelDataset {
   students: StudentLite[]; // all statuses (needed to resolve history), GVCN: only own classes
   incidents: Incident[]; // non-deleted only
   rewards: Reward[]; // non-deleted only
+  /** Inspection rounds of the calendar weeks, non-deleted (GVCN: `note` stripped). Absent → treat as []. */
+  inspections?: Inspection[];
   /** true when the viewer is GVCN: student names/detail/notes of OTHER classes were stripped */
   redacted: boolean;
 }
@@ -390,6 +407,8 @@ export interface GlobalFilters {
   classCode?: string;
   category?: string; // Mảng
   errorCode?: string;
+  group?: string; // Nhóm lỗi (catalog group, e.g. "Nhóm 3"): incidents whose snapshot `group` equals it
+  studentId?: string; // Mã HS: incidents naming this student
 }
 
 export interface RankingRow {
@@ -417,4 +436,52 @@ export interface RankingRow {
 export interface GradeRanking {
   grade: number;
   rows: RankingRow[]; // sorted by rank then classCode
+}
+
+/** Early-warning thresholds of a level (REQ_V2 §4.5). */
+export interface EarlyWarningConfig {
+  /** RISING_CLASS: reference-week penalty ≥ baseline average × (1 + risingPct / 100). Default 50. */
+  risingPct: number;
+  /** RISING_CLASS: minimum penalty points in the reference week. Default 6. */
+  risingMinPoints: number;
+  /** RISING_CLASS: counted weeks before the reference week used for the baseline average. Default 4. */
+  risingBaselineWeeks: number;
+  /** PROLONGED_ERROR: consecutive counted weeks with the same error code in a class. Default 3. */
+  prolongedWeeks: number;
+  /** SERIOUS_INCIDENT: catalog groups treated as serious. Default ["Nhóm 3", "Nhóm 4"]. */
+  seriousGroups: string[];
+  /** SERIOUS_INCIDENT: OR catalog penalty (per HS / per lần) ≥ this value; 0 disables this rule. Default 10. */
+  seriousMinPenalty: number;
+}
+
+/** Buổi kiểm tra. */
+export type InspectionShift = "Sáng" | "Chiều";
+
+/** Đợt kiểm tra nền nếp (REQ_V2 §12): which classes were inspected, when, for which Mảng. */
+export interface Inspection {
+  id: string; // `${levelId}_${code}`
+  code: string; // "DKT-20261021-001" (unique inside a level)
+  levelId: LevelId;
+  date: string; // yyyy-mm-dd
+  week: string; // Monday of `date`
+  month: string; // yyyy-mm of `week`
+  semester: string; // "" if outside the semesters
+  shift?: InspectionShift;
+  /** Mảng kiểm tra (a catalog category); omitted = kiểm tra chung (mọi mảng). */
+  category?: string;
+  /** Classes inspected (unique, class display order). */
+  classCodes: string[];
+  /** Người kiểm tra (defaults to the creator's display name). */
+  inspector: string;
+  note?: string;
+  createdBy: string; // uid
+  createdByName: string;
+  createdAt: string;
+  updatedBy?: string; // email
+  updatedAt?: string;
+  deletedAt?: string; // soft delete
+  deletedBy?: string;
+  deleteReason?: string;
+  /** Revision (optimistic concurrency, like incidents). Absent = 0. */
+  rev?: number;
 }

@@ -150,6 +150,37 @@ describe("endpoints", () => {
     expect(lastCall().headers.has("Authorization")).toBe(false);
   });
 
+  it("v2 endpoints: not-duplicate, inspections, early warning, remediation", async () => {
+    fetchMock.mockImplementation(async () => json(200, { ok: true, items: [] }));
+    await api.incidents.notDuplicate("THCS_NN-20261021-0001", { otherIds: ["THCS_NN-20261021-0002"] });
+    expect(lastCall().url).toBe("/api/incidents/THCS_NN-20261021-0001/not-duplicate");
+    expect(lastCall().init.method).toBe("POST");
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ otherIds: ["THCS_NN-20261021-0002"] });
+
+    await api.incidents.feedback("THCS_NN-1", { remediation: "Nhắc nhở trước lớp", status: "Đang xử lý" });
+    expect(lastCall().url).toBe("/api/incidents/THCS_NN-1/feedback");
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ remediation: "Nhắc nhở trước lớp", status: "Đang xử lý" });
+
+    await api.inspections.create({ levelId: "THCS", date: "2026-10-21", shift: "Sáng", classCodes: ["6A01", "6A02"], clientRequestId: "req-12345678" });
+    expect(lastCall().url).toBe("/api/inspections");
+    expect(lastCall().init.method).toBe("POST");
+    expect(JSON.parse(String(lastCall().init.body))).toMatchObject({ levelId: "THCS", classCodes: ["6A01", "6A02"] });
+    await api.inspections.update("THCS_DKT-20261021-001", { inspector: "Nguyễn Văn A", baseRev: 1 });
+    expect(lastCall().url).toBe("/api/inspections/THCS_DKT-20261021-001");
+    expect(lastCall().init.method).toBe("PATCH");
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ inspector: "Nguyễn Văn A", baseRev: 1 });
+    await api.inspections.remove("THCS_DKT-20261021-001", "Ghi nhầm ngày");
+    expect(lastCall().url).toBe("/api/inspections/THCS_DKT-20261021-001");
+    expect(lastCall().init.method).toBe("DELETE");
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ reason: "Ghi nhầm ngày" });
+
+    const ew = { risingPct: 50, risingMinPoints: 6, risingBaselineWeeks: 4, prolongedWeeks: 3, seriousGroups: ["Nhóm 3"], seriousMinPenalty: 10 };
+    await api.settings.putEarlyWarning("TH", ew);
+    expect(lastCall().url).toBe("/api/settings/TH/early-warning");
+    expect(lastCall().init.method).toBe("PUT");
+    expect(JSON.parse(String(lastCall().init.body))).toEqual(ew);
+  });
+
   it("evidence.objectUrl fetches once per id and clearCache revokes", async () => {
     fetchMock.mockImplementation(async () => new Response(new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }), { status: 200 }));
     const revoke = vi.spyOn(URL, "revokeObjectURL");

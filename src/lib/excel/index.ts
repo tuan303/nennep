@@ -11,6 +11,7 @@ export {
   exportStudentList,
   exportGvcnReport,
   incidentSubjects,
+  incidentStudentIds,
   type SimpleColumn,
   type SimpleRow,
   type SimpleSheetOptions,

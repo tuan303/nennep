@@ -2,7 +2,7 @@
  * Zalo-friendly plain text of a class report, file names and print titles (pure – unit-tested).
  */
 import { fmtDate, fmtNumber, fmtTopLabel } from "@/lib/client/format";
-import { SCHOOL_NAME } from "@/lib/constants";
+import { KPI_TERMS, SCHOOL_NAME } from "@/lib/constants";
 import { formatDayMonthVN } from "@/lib/engine";
 import type { Period } from "@/lib/types";
 import { shortWeekday, subjectText, type GvcnReport } from "./report-model";
@@ -12,14 +12,18 @@ export function reportTitle(classCode: string): string {
   return `BÁO CÁO NỀN NẾP LỚP ${classCode}`;
 }
 
-/** "Sự việc: 5 | HS liên quan: 7 | Điểm trừ: 14 | Điểm thưởng: 5 | Điểm thi đua: 491 | Hạng khối 6: 3/5" */
+/**
+ * "Sự việc: 5 | Lượt vi phạm: 7 | Số HS vi phạm: 4 | Điểm trừ: 14 | Điểm thưởng: 5 | Điểm thi đua: 491 | Hạng khối 6: 3/5"
+ * (labels from the shared KPI_TERMS vocabulary).
+ */
 export function kpiLine(report: Pick<GvcnReport, "kpis" | "ranking" | "topRatio">): string {
   const { kpis, ranking } = report;
   const parts = [
-    `Sự việc: ${fmtNumber(kpis.incidents)}`,
-    `HS liên quan: ${fmtNumber(kpis.relatedStudents)}`,
-    `Điểm trừ: ${fmtNumber(kpis.penaltyPoints)}`,
-    `Điểm thưởng: ${fmtNumber(kpis.rewardPoints)}`,
+    `${KPI_TERMS.incidents.label}: ${fmtNumber(kpis.incidents)}`,
+    `${KPI_TERMS.violationTurns.label}: ${fmtNumber(kpis.violationTurns)}`,
+    `${KPI_TERMS.uniqueStudents.label}: ${fmtNumber(kpis.uniqueStudents)}`,
+    `${KPI_TERMS.penaltyPoints.label}: ${fmtNumber(kpis.penaltyPoints)}`,
+    `${KPI_TERMS.rewardPoints.label}: ${fmtNumber(kpis.rewardPoints)}`,
   ];
   if (ranking) {
     parts.push(`Điểm thi đua: ${fmtNumber(ranking.score)}`);
@@ -28,9 +32,10 @@ export function kpiLine(report: Pick<GvcnReport, "kpis" | "ranking" | "topRatio"
   return parts.join(" | ");
 }
 
-/** "• 23/09 (T4) – Nguyễn Văn A – Đi chân đất/không đi giày dép – 2 điểm" */
-export function incidentLine(i: Parameters<typeof subjectText>[0] & { date: string; issue: string; points: number }): string {
-  return `• ${formatDayMonthVN(i.date)} (${shortWeekday(i.date)}) – ${subjectText(i)} – ${i.issue} – ${fmtNumber(i.points)} điểm`;
+/** "• 23/09 (T4) – Nguyễn Văn A – Đi chân đất/không đi giày dép – 2 điểm → Khắc phục: Đã nhắc nhở" */
+export function incidentLine(i: Parameters<typeof subjectText>[0] & { date: string; issue: string; points: number; remediation?: string }): string {
+  const fix = i.remediation?.trim() ? ` → Khắc phục: ${i.remediation.trim().replace(/\s+/g, " ")}` : "";
+  return `• ${formatDayMonthVN(i.date)} (${shortWeekday(i.date)}) – ${subjectText(i)} – ${i.issue} – ${fmtNumber(i.points)} điểm${fix}`;
 }
 
 /** Plain text for Zalo / SMS: title, KPIs, one bullet per incident (oldest first), totals, signature line. */

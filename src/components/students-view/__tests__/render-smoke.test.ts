@@ -27,7 +27,7 @@ describe("Học sinh render", () => {
     const html = renderToStaticMarkup(
       createElement(StudentsSummaryCards, { summary: summarizeStudents(stats, ds.students, ALL), config: ds.config, alert: "ALL", onAlert: noop }),
     );
-    for (const label of ["HS có vi phạm", "HS tái phạm", "HS cảnh báo đỏ", "Tỷ lệ HS có vi phạm", "HS đang học"]) expect(html).toContain(label);
+    for (const label of ["Số HS vi phạm", "HS tái phạm", "HS cảnh báo đỏ", "Tỷ lệ HS có vi phạm", "HS đang học"]) expect(html).toContain(label);
   });
 
   it("renders the table with toolbar, chips and alert badges", () => {

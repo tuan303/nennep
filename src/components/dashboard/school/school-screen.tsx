@@ -10,7 +10,7 @@ import { KpiCard, PageHeader, SegmentedControl } from "@/components/ui";
 import { useAllDatasets, useLevel } from "@/lib/client/data";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { useToday } from "@/lib/client/hooks";
-import { SCHOOL_NAME } from "@/lib/constants";
+import { KPI_TERMS, SCHOOL_NAME } from "@/lib/constants";
 import type { LevelId } from "@/lib/types";
 import { confidenceTone, deltaLabel } from "../lib/overview-model";
 import { SCHOOL_PERIOD_OPTIONS, type SchoolPeriodMode } from "../lib/school-model";
@@ -60,30 +60,31 @@ export function SchoolScreen() {
 
       <section aria-label="Chỉ số toàn trường" className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard
-          label="Sự việc"
+          label={KPI_TERMS.incidents.label}
           value={t.incidents}
           icon={ClipboardList}
           tone="brand"
           delta={delta(t.incidents, t.previous?.incidents, "down")}
-          hint="Tổng sự việc của các cấp học, mỗi cấp tính theo kỳ hiện tại của cấp đó."
+          hint={KPI_TERMS.incidents.hint}
+          footer={`${fmtNumber(t.violationTurns)} ${KPI_TERMS.violationTurns.label.toLowerCase()}`}
         />
         <KpiCard
-          label="Điểm trừ"
+          label={KPI_TERMS.penaltyPoints.label}
           value={t.penaltyPoints}
           unit="điểm"
           icon={TriangleAlert}
           tone="bad"
           delta={delta(t.penaltyPoints, t.previous?.penaltyPoints, "down")}
-          hint="Tổng điểm trừ của các cấp học trong kỳ."
+          hint={KPI_TERMS.penaltyPoints.hint}
         />
         <KpiCard
-          label="Điểm thưởng"
+          label={KPI_TERMS.rewardPoints.label}
           value={t.rewardPoints}
           unit="điểm"
           icon={Award}
           tone="star"
           delta={delta(t.rewardPoints, t.previous?.rewardPoints, "up")}
-          hint="Chỉ tính điểm thưởng có trạng thái được tính thi đua của từng cấp."
+          hint={KPI_TERMS.rewardPoints.hint}
         />
         <KpiCard
           label="Lớp mức Đỏ"

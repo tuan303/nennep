@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import { Award, ArrowRight, ListOrdered, ShieldAlert, type LucideIcon } from "lucide-react";
 import { Badge, RagBadge, StatusBadge, buttonClasses, cn } from "@/components/ui";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
+import { KPI_TERMS } from "@/lib/constants";
 import { uncountedRewardNote } from "@/components/rewards/lib/reward-list";
 import { formatDayMonthVN } from "@/lib/engine";
 import type { LevelDataset, Period, RankingRow } from "@/lib/types";
@@ -29,8 +30,8 @@ export function ClassBreakdown({ ds, row, period, detailHref, className }: Class
         <div className="flex min-w-0 flex-col gap-3">
           <Equation row={row} />
           <dl className="grid grid-cols-2 gap-2">
-            <Stat label="Sự việc" value={fmtNumber(row.incidentCount)} />
-            <Stat label="Học sinh liên quan" value={fmtNumber(row.relatedStudentCount)} />
+            <Stat label={KPI_TERMS.incidents.label} value={fmtNumber(row.incidentCount)} hint={KPI_TERMS.incidents.hint} />
+            <Stat label={KPI_TERMS.relatedStudents.label} value={fmtNumber(row.relatedStudentCount)} hint={KPI_TERMS.relatedStudents.hint} />
             <Stat label="Điểm trừ TB/tuần" value={fmtNumber(row.avgWeeklyPenalty)} />
             <Stat label="Độ tin cậy dữ liệu" value={fmtPercent(row.confidence)} warn={row.confidence < ds.config.rag.minConfidence} />
           </dl>
@@ -111,10 +112,12 @@ function Equation({ row }: { row: RankingRow }) {
   );
 }
 
-function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function Stat({ label, value, warn, hint }: { label: string; value: string; warn?: boolean; hint?: string }) {
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-border bg-surface px-3 py-2">
-      <dt className="truncate text-xs text-slate-500">{label}</dt>
+      <dt className="truncate text-xs text-slate-500" title={hint}>
+        {label}
+      </dt>
       <dd className={cn("num text-lg font-bold leading-7", warn ? "text-warn-strong" : "text-brand-900")}>{value}</dd>
     </div>
   );

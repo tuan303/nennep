@@ -1,12 +1,12 @@
 "use client";
 /**
  * /hanh-dong – Hành động điều hành (FR-ACT-001..003, FR-RAG-005, BR-ACT-01, AC-014):
- * Bản tóm tắt quyết định | Sổ hành động | Quá hạn & leo thang. Managing needs actions.manage (ADMIN);
- * Viewer / Editor read only.
+ * Bản tóm tắt quyết định | Cảnh báo sớm (REQ_V2 §7.6, `?tab=canh-bao`) | Sổ hành động | Quá hạn & leo thang.
+ * Managing needs actions.manage (ADMIN); Viewer / Editor read only.
  */
 import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlarmClock, ClipboardList, Eye, FileText, ListChecks, ListPlus, RefreshCw } from "lucide-react";
+import { AlarmClock, BellRing, ClipboardList, Eye, FileText, ListChecks, ListPlus, RefreshCw } from "lucide-react";
 import { Badge, Button, IconButton, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useNavBadge } from "@/components/app/shell";
 import { useDataset } from "@/lib/client/data";
@@ -14,17 +14,20 @@ import { useFilters } from "@/lib/client/filters";
 import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
 import { LEVELS } from "@/lib/constants";
+import { earlyWarnings, periodLabel, type EarlyWarning } from "@/lib/engine";
 import type { ActionItem, LevelDataset } from "@/lib/types";
 import { ActionCreateDialog } from "./action-create-dialog";
 import { ActionDetailSheet } from "./action-detail-sheet";
 import { ActionRegister } from "./action-register";
 import { BriefTab } from "./brief-tab";
+import { EarlyWarningTab } from "./early-warning-tab";
 import { formFromRecommendation, type ActionFormValues, type BriefRecommendation } from "./lib/action-form";
 import { actionKpis } from "./lib/action-view";
+import { formFromWarning, warningScopeLabels } from "./lib/early-warning-view";
 import { SlaPanel } from "./sla-panel";
 import { useActionList } from "./use-action-list";
 
-const TABS = ["tom-tat", "so-hanh-dong", "qua-han"] as const;
+const TABS = ["tom-tat", "canh-bao", "so-hanh-dong", "qua-han"] as const;
 type Tab = (typeof TABS)[number];
 const DEFAULT_TAB: Tab = "tom-tat";
 
@@ -65,7 +68,7 @@ export function ActionsScreen({ ds }: { ds: LevelDataset }) {
   const { can } = useSession();
   const canManage = can("actions.manage");
   const { refresh } = useDataset(ds.levelId);
-  const { filters } = useFilters();
+  const { filters, setFilters } = useFilters();
   const list = useActionList(ds.levelId);
   const [tab, setTab] = useTab();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -97,6 +100,22 @@ export function ActionsScreen({ ds }: { ds: LevelDataset }) {
   const startCreate = useCallback((initial?: ActionFormValues, sourceText?: string) => {
     setCreate((c) => ({ key: c.key + 1, open: true, initial, sourceText }));
   }, []);
+
+  // Early warnings of the global filters (as the Tổng quan card that links here); the period bar is shared with the brief,
+  // other filters are listed in the tab with a "Bỏ lọc" button (this page has no filter bar).
+  const period = filters.period;
+  const periodText = periodLabel(period, ds.config.semesters);
+  const warnings = useMemo(() => earlyWarnings(ds, filters, today), [ds, filters, today]);
+  const scopeLabels = useMemo(() => warningScopeLabels(filters, ds), [filters, ds]);
+  const clearScope = useCallback(
+    () => setFilters({ grade: undefined, classCode: undefined, category: undefined, errorCode: undefined, group: undefined, studentId: undefined }),
+    [setFilters],
+  );
+  const sla = ds.config.actionSlaDays;
+  const createFromWarning = useCallback(
+    (w: EarlyWarning) => startCreate(formFromWarning(w, { today, sla, periodLabel: periodText }), `Từ cảnh báo sớm – ${periodText}.`),
+    [startCreate, today, sla, periodText],
+  );
 
   const createFromBrief = useCallback(
     (rec: BriefRecommendation, periodLabel: string) => {
@@ -143,6 +162,9 @@ export function ActionsScreen({ ds }: { ds: LevelDataset }) {
             <span className="sm:hidden">Tóm tắt</span>
             <span className="max-sm:hidden">Bản tóm tắt quyết định</span>
           </TabsTrigger>
+          <TabsTrigger value="canh-bao" icon={BellRing} count={warnings.length > 0 ? warnings.length : undefined}>
+            Cảnh báo sớm
+          </TabsTrigger>
           <TabsTrigger value="so-hanh-dong" icon={ClipboardList} count={items ? kpis.open + kpis.doing : undefined}>
             Sổ hành động
           </TabsTrigger>
@@ -154,6 +176,20 @@ export function ActionsScreen({ ds }: { ds: LevelDataset }) {
 
         <TabsContent value="tom-tat">
           <BriefTab ds={ds} today={today} actions={items} canManage={canManage} onCreate={createFromBrief} onOpenAction={openAction} />
+        </TabsContent>
+        <TabsContent value="canh-bao">
+          <EarlyWarningTab
+            ds={ds}
+            warnings={warnings}
+            scopeLabels={scopeLabels}
+            onClearScope={clearScope}
+            period={period}
+            periodText={periodText}
+            actions={items}
+            canManage={canManage}
+            onCreate={createFromWarning}
+            onOpenAction={openAction}
+          />
         </TabsContent>
         <TabsContent value="so-hanh-dong">
           <ActionRegister list={list} today={today} canManage={canManage} onOpen={openAction} onCreate={() => startCreate()} onShowOverdue={() => setTab("qua-han")} />

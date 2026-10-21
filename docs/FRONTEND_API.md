@@ -70,13 +70,15 @@ UI:
 CHARTS:
 - ChartSeries = { name, data: (number|null)[], color?, stack? }.
 - EChart({ option: ChartOption, height? (280), ariaLabel (required), onEvents?: Record<string, (p: ChartEventParams) => void>, loading? (keeps the previous frame faded), notMerge? (default true) }). ECharts loads lazily, client only, and only the needed parts; registered "nshm" theme; resizes with its container.
-- BarChart({ categories, series, horizontal?, height?, valueFormatter?, showValues?, onBarClick?({ category, seriesName, value, index }), ariaLabel?, emptyTitle?, emptyDescription?, loading? }).
+- BarChart({ categories, series, horizontal?, height?, valueFormatter?, showValues?, onBarClick?({ category, seriesName, value, index }), ariaLabel?, emptyTitle?, emptyDescription?, loading? }). REQ_V2: `ChartSeries.colors?: (string|null|undefined)[]` colours single bars (e.g. selected bar full colour, others faded); missing entries keep the series colour.
 - LineChart({ categories, series: (ChartSeries & { dashed?, area? })[], area?, height?, markLines?: { value, label?, color? }[], valueFormatter?, smooth?, zoom? (default on above 26 points), onPointClick?, ariaLabel?, empty*?, loading? }).
 - DonutChart({ data: { name, value, color? }[], centerLabel?, centerValue?, height? (200), valueFormatter?, legend?: "side"|"bottom"|"none", onSliceClick?(name), ariaLabel?, empty*?, loading? }) — HTML legend with value and percentage.
 - HeatmapChart({ xLabels, yLabels, values: [x, y, v][], height?, valueLabel? ("Điểm trừ"), valueFormatter?, onCellClick?({ x, y, xLabel, yLabel, value }), colors?, max?, maxRows? (30, then a vertical slider), showCellValues?, ariaLabel?, empty*?, loading? }).
+- BumpChart({ categories, lines: BumpLine[], total?, showFaded? (true), headerOf?(index), scoreFormatter?, height?, onLineClick?(name), ariaLabel (required), emptyTitle?, emptyDescription?, loading?, className? }) — rank movement (REQ_V2 §6.3): rank 1 on top, `BumpLine = { name, ranks: (number|null)[], scores?, emphasis: "highlight"|"top"|"faded", color? }`; "highlight" = crimson (filtered class), "top" = palette, "faded" lines grey and toggleable from the legend; tooltip "Tuần dd/mm: hạng X/N · điểm Y".
+  - Pure: buildBumpOption(BumpOptionInput { categories, lines, total?, showFaded?, headerOf?, scoreFormatter?, zoom? (default > 26 categories) }), bumpTotal(lines), bumpColors(lines), bumpPointText({ header, rank, total, score?, scoreFormatter? }), BUMP_HIGHLIGHT_COLOR, BUMP_FADED_COLOR.
 - Sparkline({ data: number[], color?, width? (96), height? (32), strokeWidth?, area?, ariaLabel? }) — plain SVG.
 - Palette and theme: CHART_COLORS (fixed order of 8), chartColor(i), CHART_OTHER_COLOR, HEAT_COLORS, BLUE_COLORS, CHART_TOKENS, buildNshmTheme.
-- Pure option builders: buildBarOption, buildLineOption, buildDonutOption, buildHeatmapOption, isSeriesEmpty, donutTotal, heatmapMax, escapeHtml.
+- Pure option builders: buildBarOption, buildLineOption, buildDonutOption, buildHeatmapOption, buildBumpOption, isSeriesEmpty, donutTotal, heatmapMax, escapeHtml.
 
 ROUTE: /kit (src/app/kit/page.tsx, a server component) calls notFound() in production and otherwise renders the client showcase.
 
@@ -121,18 +123,24 @@ Analytics
 - rankings(q: RankingsQuery): RankingsResponse
 
 incidents
-- create(IncidentCreateInput): Incident
+- create(IncidentCreateInput): Incident – REQ_V2: optional `notDuplicateOf?: string[]` ("Không trùng, vẫn lưu" in the duplicate dialog)
 - get(id): Incident
 - update(id, IncidentUpdateInput): Incident – send `baseRev: record.rev ?? 0` (409 CONFLICT when the record changed
   meanwhile: show the message and reload the record) and `status` only when the user changed it
 - remove(id, reason): OkResponse
 - restore(id): Incident
-- feedback(id, GvcnFeedbackInput): Incident
+- feedback(id, GvcnFeedbackInput { note?, status?, remediation? ("" clears) }): Incident – ADMIN / class GVCN: all three; EDITOR (`incident.remediate`): remediation + status only (a note → 403). Send only changed fields (`feedbackChanges`).
+- notDuplicate(id, NotDuplicateInput { otherIds }): ListResponse<Incident> – "Không trùng": marks every pair of {id} ∪ otherIds as reviewed (`data.inspect`, same level)
 - listDeleted(levelId): ListResponse<Incident>
 
+inspections (Đợt kiểm tra, REQ_V2 – `inspection.manage`; rounds are read from `ds.inspections`)
+- create(InspectionCreateInput { levelId, date, shift?, category?, classCodes, inspector?, note?, clientRequestId? }): Inspection (`DKT-yyyymmdd-NNN`)
+- update(id, InspectionUpdateInput): Inspection – changed fields + `baseRev` (409 → reload)
+- remove(id, reason): OkResponse – soft delete (reason ≥ 3); ADMIN any, EDITOR own ≤ 24 h
+
 rewards
-- create(RewardCreateInput): Reward
-- update(id, RewardUpdateInput): Reward – same `baseRev` / changed-only `status` rule as incidents
+- create(RewardCreateInput): Reward – REQ_V2: points integer 1–5, reason ≥ 5 chars; with `reward.propose` only (GVCN) = proposal for own classes (status forced "Mới ghi nhận", `proposed: true`)
+- update(id, RewardUpdateInput): Reward – same `baseRev` / changed-only `status` rule as incidents; send `points` / `reason` only when changed (legacy points such as 10 stay valid while unchanged)
 - remove(id, reason): OkResponse
 - restore(id): Reward
 - listDeleted(levelId): ListResponse<Reward>
@@ -170,6 +178,7 @@ settings
 - putCatalog(levelId, CatalogPutInput): ListResponse<CatalogItem>
 - putClasses(levelId, ClassesPutInput): ListResponse<ClassInfo>
 - putWeeks(levelId, WeeksPutInput, opts?: CalendarChangeOptions): ListResponse<SchoolWeek>
+- putEarlyWarning(levelId, EarlyWarningPutInput): LevelConfig – Cảnh báo sớm thresholds (`config.earlyWarning`); `putConfig` keeps them
 - Removing weeks that hold records → 409 CONFLICT with `details: { weeks, incidents, rewards }`; after the admin confirms,
   repeat the same call with `{ allowHidingRecords: true }` (sent as the query `?allowHidingRecords=1`). Settings uses
   `hiddenRecordsConflict(err)` + `useHidingRecordsConfirm()`.
@@ -182,7 +191,7 @@ users
 - bulkGvcn(BulkGvcnInput { levelId, sync? }): BulkGvcnResult (`sync` → `unassigned` lists removed class assignments; accounts that existed in Auth without a profile come back in `created` with a temp password)
 
 admin
-- rebuildDigests(input?): RebuildDigestsResponse (`{ ok, results: { [level]: { weeks, incidents, rewards, students } } }`)
+- rebuildDigests(input?): RebuildDigestsResponse (`{ ok, results: { [level]: { weeks, incidents, rewards, students, inspections? } } }`)
 - resetLevel(input): ResetLevelResult
 - restoreReset(input): RestoreResetResult
 - evidence({ levelId, dryRun }): EvidenceMaintenanceResult (dryRun = statistics; otherwise deletes photos never attached to a record, > 48 h old)
@@ -226,11 +235,14 @@ downloads
 
 ### filters.tsx (call it inside <Suspense>, inside DataProvider)
 - useFilters(): { filters: GlobalFilters; setFilters(patch: FilterPatch): void; resetFilters(): void; options: FilterOptions; defaultPeriod: Period; isDefaultPeriod: boolean; activeCount: number }
-- FilterPatch = { period?: { mode: PeriodMode; key?: string }; grade?: number; classCode?: string; category?: string; errorCode?: string }
+- FilterPatch = { period?: { mode: PeriodMode; key?: string }; grade?: number; classCode?: string; category?: string; errorCode?: string; group?: string; studentId?: string }
   - Passing undefined or "" clears a field.
   - Omitting period.key picks the default key for that mode.
-- FilterOptions = { weeks: PeriodOption[]; months: PeriodOption[]; semesters: PeriodOption[]; grades: Array<{ value: number; label: string }>; classes: ClassInfo[]; categories: string[]; errors: CatalogItem[] }
-- Also exported: activeFilterCount(f), FILTER_PARAMS. filters-core.ts holds the pure helpers.
+- FilterOptions = { weeks: PeriodOption[]; months: PeriodOption[]; semesters: PeriodOption[]; grades: Array<{ value: number; label: string }>; classes: ClassInfo[]; categories: string[]; errors: CatalogItem[]; groups: string[]; students: StudentFilterOption[] }
+  - `errors` = catalog items of the selected Mảng and Nhóm lỗi (if any); `groups` = catalog Nhóm lỗi in natural order; `students` = dataset students (already role-filtered: GVCN → own classes) of the selected khối/lớp, sorted by class then given name (`StudentFilterOption = { id, name, classCode, grade, status }`).
+- URL params (`FILTER_PARAMS`): `mode`, `key`, `grade`, `class`, `cat`, `err`, `group`, `student`. `grade`, `class`, `err`, `group`, `student` are cleared on level switch (`LEVEL_SCOPED_PARAMS`).
+- REQ_V2 rules: unknown group / Mã HS is ignored; changing the group clears an error of another group; picking an error makes a set group follow it; a student outside the khối/lớp scope is dropped (also when the URL changes only the class).
+- Also exported: activeFilterCount(f) (counts group + student too), FILTER_PARAMS, catalogGroups, studentFilterOptions. filters-core.ts holds the pure helpers.
 
 ### format.ts
 - fmtNumber(n, maxFractionDigits = 2)
@@ -301,7 +313,8 @@ CHROME (already mounted by the (app) layout; exported for reuse)
 NAV / ROUTES (pure)
 - `APP_ROUTES: Record<AppRouteId, AppRoute>` and `APP_ROUTE_LIST`.
   - AppRoute = { id, href, title, shortLabel, description, permission, multiLevel?, filters: boolean, levelSwitcher: boolean }.
-  - AppRouteId: overview | school | ranking | classes | gvcn | students | entry | rewards | actions | studentAdmin | data | excel | audit | settings.
+  - AppRouteId: overview | school | ranking | classes | gvcn | reports | students | entry | rewards | actions | studentAdmin | data | excel | audit | settings.
+  - REQ_V2: `reports` = /bao-cao (`view.dashboard`, after Báo GVCN, FileText icon, no global filter bar); `rewards` opens with `reward.propose` (GVCN see Điểm thưởng for proposals). /nhap-lieu's page guard is `incident.create` OR `inspection.manage`.
 - `routeMetadata(id): Metadata`, `routeForPath(pathname)`, `isRouteActive(href, pathname)`, `canSeeRoute(route, { can, levelCount })`.
 - `NAV_GROUPS`, `NAV_ICONS`, `visibleNavGroups(ctx)`, `bottomNavModel(ctx): { slots: BottomSlot[]; more: NavGroup[] }`, `activeNavItem(items, pathname)`.
 - Filter bar defaults per route:
@@ -310,9 +323,10 @@ NAV / ROUTES (pure)
 
 ROUTES
 - `/dang-nhap` (login).
-- `src/app/(app)/` placeholders for `/`, `/toan-truong`, `/xep-hang`, `/lop`, `/bao-gvcn`, `/hoc-sinh`, `/nhap-lieu`, `/diem-thuong`, `/hanh-dong`, `/quan-ly-hoc-sinh`, `/du-lieu`, `/nhap-xuat`, `/nhat-ky`, `/cai-dat`.
-  - Each `page.tsx` is a tiny "use client" page with PageHeader + "Đang xây dựng" inside the right RequirePermission (/toan-truong also uses LevelGuard minLevels=2). Replace page.tsx freely.
+- `src/app/(app)/` pages for `/`, `/toan-truong`, `/xep-hang`, `/lop`, `/bao-gvcn`, `/bao-cao` (REQ_V2), `/hoc-sinh`, `/nhap-lieu`, `/diem-thuong`, `/hanh-dong`, `/quan-ly-hoc-sinh`, `/du-lieu`, `/nhap-xuat`, `/nhat-ky`, `/cai-dat`.
+  - Each `page.tsx` is a small "use client" page inside the right RequirePermission (/toan-truong also uses LevelGuard minLevels=2).
   - Each route folder also has a `layout.tsx` that only exports the tab title; keep it.
+- REQ_V2 tab/view params: /nhap-lieu `?tab=kiem-tra` (Đợt kiểm tra), /xep-hang `?view=bang|bien-dong|bao-phu`, /du-lieu `?tab=trung-lap` (Có thể trùng), /hanh-dong `?tab=canh-bao`, /cai-dat `?tab=canh-bao`, /bao-cao `?mode=week|month&key=…&to=bgh|khoi-N|lop-X&detail=0|1`.
 - Also: `/manifest.webmanifest`, `/icon.svg`, `/apple-icon.png`, `/icons/*.png`.
 
 ### WIDGETS (public API)
@@ -348,12 +362,12 @@ COMPONENTS
   - Per-error breakdown, then a timeline (date, weekday, lỗi, điểm, status, class at the time, detail, người ghi), using engine studentHistory and studentStats.
   - Footer "Sao chép" copies a plain-text summary.
   - Student missing from ds.students: redacted dataset → "Không có quyền xem"; otherwise → "Không tìm thấy học sinh".
-- IncidentDetailSheet({ ds: LevelDataset; incident: Incident | null (null closes); onClose(): void; onChanged?(): void; onOpenStudent?(studentId: string): void })
+- IncidentDetailSheet({ ds: LevelDataset; incident: Incident | null (null closes); onClose(): void; onChanged?(): void; onOpenStudent?(studentId: string): void; suggestedDeleteReason?: string (prefills the "Xóa" reason, e.g. "Trùng với NN-…" from the duplicate review) })
   - Content:
     - Summary: category, code + issue, −points, FormulaText, StatusBadge, ScopeBadge, PenaltyPill, DataCheckBadge.
     - Info grid: date + weekday, week, class · grade, GVCN, penalty + group, occurrences or student count, người ghi, code.
     - Students list (or "Tập thể lớp"), with unnamedCount shown.
-    - Detail, data-check issues, GVCN feedback, EvidenceGallery.
+    - Detail, data-check issues, GVCN feedback, "Xử lý / khắc phục" (REQ_V2: text, who, when; inline editor for `canRemediate`), "không trùng với …" when reviewed, EvidenceGallery.
     - Metadata: createdByName + createdAt, import source / externalId, updatedAt, and the edit-window hint.
     - Deleted banner when soft-deleted.
   - Actions:
@@ -371,6 +385,7 @@ COMPONENTS
   - Inputs: a camera input (accept="image/*" capture="environment" multiple) shown as "Chụp ảnh" on touch screens only, and a library input "Chọn ảnh".
   - Uploads one photo at a time via api.evidence.upload, with a spinner, local preview thumbnails and ×.
   - Failed uploads show an error toast plus "Thử lại"/×. Extra files beyond max are dropped with a warning toast.
+- RemediationSection({ incident, canEdit (= canRemediate), onSaved(incident) }) — current remediation plus, for allowed users, the editor behind a button (key it by the incident version); RemediationForm({ incident, onSaved, onCancel? }) — remediation + status → api.incidents.feedback (changed fields only); RemediationView({ incident }).
 - RagLegend({ config?: Pick<LevelConfig,"rag">; layout?: "inline"|"list"; className? }) and ragRuleText(rag, config?): string.
 - PeriodBadge({ period: Period; semesters?: Semester[]; size?; className? }) – text from engine periodLabel.
 - FormulaText(props) – "2 điểm × 3 HS = 6" / "5 điểm × 2 lần = 10", plus a note "x HS có tên + y HS chưa rõ tên". Props: { showNote?=true; icon?; className? } & ({ incident: FormulaIncident & { points } } | { input: FormulaInput; total?: number }).
@@ -415,14 +430,19 @@ PURE HELPERS (also deep-importable from ./lib/*)
   - buildStudentHistoryText({ student, periodText, history, alert, config })
 - incident-access:
   - canEditIncident(profile, incident, nowMs), canDeleteIncident, canRestoreIncident, canGiveFeedback
+  - canRemediate(profile, incident, { redacted? }) (class GVCN with incident.gvcnFeedback, or incident.remediate + level access); feedbackRights(profile, incident, { redacted? }): FeedbackRights { note, status, remediation }
   - isIncidentRedacted(ds, incident, profile)
   - editWindowRemainingMs, formatRemaining
+- remediation (REQ_V2):
+  - REMEDIATION_MAX (1000), REMEDIATION_PHRASES (tap-to-append), appendPhrase(text, phrase)
+  - feedbackChanges(incident, draft: FeedbackDraft { note?, status, remediation? }, rights?): GvcnFeedbackInput | null (changed fields only)
+  - remediationMeta(incident) ("người · dd/mm/yyyy HH:mm"), codeOfIncidentId(id, incidents?), notDuplicateCodes(incident, incidents?)
 - urls: safeExternalUrl(raw), displayUrl(raw, max?)
 - clipboard: copyText(text): Promise<boolean>
 - Also: incidentEditHref(id).
 
 ### ENGINE (public API)
-Import everything from "@/lib/engine" (index re-exports dates, scoring, text, period, filters, rag, ranking, analytics and brief). Signatures marked "spec" match ARCHITECTURE §5.1 exactly.
+Import everything from "@/lib/engine" (index re-exports dates, scoring, text, period, filters, rag, ranking, analytics, brief and – REQ_V2 – duplicates, integrity, early-warning, inspections). Signatures marked "spec" match ARCHITECTURE §5.1 exactly.
 
 period.ts
 - spec: PeriodOption, periodOptions, defaultPeriod, weeksInPeriod (sorted ascending), countedWeeks, isWeekInPeriod, previousPeriod (literal previous calendar week / month / semester; undefined for "all" or the first period), periodLabel.
@@ -436,8 +456,8 @@ period.ts
   - elapsedWeeksInPeriod(period, weeks, today): SchoolWeek[] (weekStart on or before Monday(today), holiday weeks included, ascending)
 
 filters.ts (spec)
-- filterIncidents(ds, f): skips soft-deleted records; grade uses incident.grade.
-- filterRewards(ds, f): period + grade + class only, all statuses.
+- filterIncidents(ds, f): skips soft-deleted records; grade uses incident.grade. REQ_V2: `f.group` keeps incidents whose snapshot `group` equals it (incidents without a group never match a group filter); `f.studentId` keeps incidents naming that Mã HS. Every consumer (computeKpis, classStats, studentStats, weeklyTrend, heatmap, brief…) inherits both.
+- filterRewards(ds, f): period + grade + class only, all statuses (category / error / group / student filters do not apply to rewards).
 - countedRewards(rewards, config).
 
 rag.ts
@@ -466,6 +486,15 @@ analytics.ts — spec types and functions: Kpis, computeKpis, kpiComparison, Iss
 - periodMatcher / isRecordInPeriod: a record whose week is not a calendar week is in no semester (a previous school year's "HK1" never counts in this year's HK1); month mode still falls back to the record's month. The server dataset only contains records of calendar weeks anyway.
 - weekdayDistribution: always 7 entries, Thứ Hai to Chủ nhật.
 - studentStats: name, class and status come from the current roster; when a student is missing from it, the incident snapshot is used with status "ACTIVE".
+- REQ_V2 vocabulary (KPI_TERMS in constants): violationTurnsOf(i) = Lượt vi phạm of one incident ("/HS" → relatedStudentCount incl. unnamed; "/lần" → occurrenceCount, ≥ 1). `Kpis.violationTurns`, `IssueStat.violationTurns`, `ClassStat.violationTurns` = Σ violationTurnsOf (required fields).
+- groupBreakdown(incidents, catalog?): GroupStat[] = { group, incidents, violationTurns, points, errorCodes (distinct codes with incidents) } per snapshot group; NO_GROUP_LABEL = "Chưa phân nhóm" for a missing/blank group. With `catalog`, every catalog group appears with zeros (an item without a group stands for NO_GROUP_LABEL) so bar order/colours stay stable. Sorted naturalCompare, NO_GROUP_LABEL last. For the "Theo nhóm lỗi" card pass the scope without group/error filters.
+- analytics-history.ts (re-exported by analytics.ts):
+  - cumulativePenalty(ds, f, today, opts?: { by?: "total" | "grade" | "class"; classCodes?; gradeAverage? }) → { weeks, labels ("dd/mm"), series: Array<{ key, label, values }> }. weeks = every elapsed calendar week of the year (holiday weeks included, value carried over); f.period is ignored, every other filter applies; values[k] = round2(Σ points with week ≤ weeks[k]) – the last value equals Σ points of the scope.
+    - "total" (default): key "total", label "Lớp X" (class filter) | "Khối N" (grade filter) | "Toàn cấp".
+    - "grade": key `grade:N`, label `Khối N`, one per grade in scope (class filter → its grade).
+    - "class": key `class:CODE`, label `Lớp CODE`, for `classCodes` (given order, deduplicated) or every active class of the grade scope (display order); the class filter never restricts these series (pick top N + the filtered class in the UI).
+    - gradeAverage: appends `avg:N` / `TB khối N` (ascending grade) = cumulative penalty of the grade's ACTIVE classes ÷ their number, same filters except class / student. "total" → every grade in scope; "class" → grades of the listed classes (unknown classes add none).
+  - rankHistory(ds, grade, today, opts?: { basis?: "cumulative" | "week"; period?: Period }) → { grade, basis, weeks, labels, classes: Array<{ classCode, homeroomTeacher?, ranks, scores }> }. Population = active classes of the grade (display order); one point per counted elapsed week of the scope (default whole year; a week period is widened to its semester and cut at that week). "cumulative": score_k = baseScorePerWeek × (k + 1) + counted rewards − penalties of the scope up to weeks[k] (holiday-week records included) → the last point equals buildRanking(scope) score/rank. "week": as classScoreSeries (score and rank per week). ranks = competitionRanks (1 = best, ties share). Unknown grade → classes []; no counted week → weeks [] and empty arrays per class.
 - Extras:
   - compareIncidentsNewestFirst(a, b)
   - studentStatsFromIncidents(ds, incidents): StudentStat[]
@@ -492,11 +521,45 @@ period.ts – calendar helpers (same text as the server's 400)
   - formatNumberVN(n, maxDecimals = 2) ("1.234,5")
   - formatPercentVN(ratio) ("92%")
 
+duplicates.ts (REQ_V2 §4.4 – detection only, never blocks; input must not be redacted)
+- isPossibleDuplicatePair(a, b): different ids, both not deleted, same date + classCode + errorCode, not reviewed (neither lists the other in `notDuplicateOf`), and named students intersect OR neither names a student.
+- possibleDuplicatesOf(incidents, { date, classCode, errorCode, studentIds, excludeId? }): existing matches of an entry-form draft, newest first. `excludeId` = the record being edited; pairs already reviewed with it are not reported. Incomplete draft → [].
+- findPossibleDuplicates(incidents): DuplicateGroup[] = connected components (≥ 2) of pairs: { key `${date}|${classCode}|${errorCode}|${firstId}`, date, classCode, errorCode, issue, reason "SAME_STUDENTS" | "NO_NAMED_STUDENTS", incidents (oldest first: createdAt, code), extraPoints = Σ points − max points }. Newest date first, then class (natural), then key.
+
+integrity.ts (REQ_V2 §4.4 – re-check of STORED records; input must not be redacted; deleted skipped)
+- integrityIssues(incidents): Array<{ kind, incident, expected?, actual?, message }>, sorted date desc, code, kind.
+  - POINTS_FORMULA: points ≠ computePoints({ unit, penalty, namedCount: relatedStudentCount − unnamedCount, unnamedCount, occurrenceCount }) → "Điểm trừ lưu 10 khác công thức 5" (expected = formula, actual = stored).
+  - STUDENT_COUNT: relatedStudentCount ≠ students.length + unnamedCount → "HS liên quan lưu 2 khác số thực tế 0 (0 ghi tên + 0 chưa rõ tên)".
+  - STUDENT_CLASS: named students whose snapshot class ≠ the incident class, when the record has no STUDENT_WRONG_CLASS issue (one item per incident) → "Phạm Văn D (6A02) không thuộc lớp 6A01 của sự việc".
+
+early-warning.ts (REQ_V2 §4.5)
+- DEFAULT_EARLY_WARNING = { risingPct 50, risingMinPoints 6, risingBaselineWeeks 4, prolongedWeeks 3, seriousGroups ["Nhóm 3", "Nhóm 4"], seriousMinPenalty 10 }. The engine owns the defaults (LevelConfig.earlyWarning is optional).
+- resolveEarlyWarning(config): defaults + stored values; invalid fields fall back (numbers finite ≥ 0, week counts integers ≥ 1, seriousGroups trimmed / deduplicated, [] allowed). Always a fresh object – use it as the Cài đặt draft.
+- EARLY_WARNING_KIND_LABELS: REPEAT_STUDENT "Tái phạm", RISING_CLASS "Tăng lỗi", PROLONGED_ERROR "Lỗi kéo dài", SERIOUS_INCIDENT "Sự việc nghiêm trọng". Types EarlyWarningKind, WarningSeverity ("high" | "medium" | "low" – the engine emits high/medium only), EarlyWarning.
+- warningReferenceWeek(ds, period, today): week mode → its key; otherwise the last calendar week of the period that has started (holiday weeks included); undefined when none.
+- earlyWarnings(ds, f, today, opts?: { config? }): EarlyWarning[] = { id, kind, severity, classCode, grade, studentId?, studentName?, errorCode?, issue?, week?, message, evidence: { incidentIds (newest first), current?, baseline?, streakWeeks?, points? } }. `opts.config` replaces the stored thresholds (settings preview). All rules honour grade / class / category / error / group / student filters; class rules run on the active classes of the scope with R = warningReferenceWeek(f.period).
+  - REPEAT_STUDENT: studentStats rows with alert ≠ NONE (config.studentAlert). WEEKLY_RED → high, "Phạm Thiện Khôi (6A03): 3 lượt vi phạm trong tuần 12/10" (latest week with the max count); REPEAT → medium, "Đỗ Văn Đạt (7A01) tái phạm: 2 lượt trong 4 tuần" (count inside the window ending with the latest qualifying period week). evidence.incidentIds = period incidents naming the student. Redacted datasets: only students whose names are visible.
+  - RISING_CLASS: current = penalty of R (> 0, ≥ risingMinPoints) ≥ baseline × (1 + risingPct/100); baseline = mean penalty of the up to risingBaselineWeeks COUNTED weeks before R (zeros included; no such week → rule skipped). high when current ≥ config.rag.red. "Lớp 7A02: 12 điểm trừ tuần 19/10, tăng 85% so với TB 4 tuần trước (6,5)" / "…, tăng từ 0 điểm".
+  - PROLONGED_ERROR: per (class, error) the streak of consecutive counted weeks ending with R having ≥ 1 incident (holiday weeks skipped; the in-progress current week skipped while it has none). Flag when ≥ prolongedWeeks; high when ≥ prolongedWeeks + 2. "Lớp 6A03 mắc “Đi học muộn” (L01) 3 tuần liên tiếp".
+  - SERIOUS_INCIDENT: period incidents not "Đã đóng" with group ∈ seriousGroups OR (seriousMinPenalty > 0 AND catalog penalty ≥ it). "Mới ghi nhận" → high, else medium. "NN-20261020-0006 · Lớp 6A05: Bạo lực học đường… (Nhóm 3, −10 điểm)" (the incident's points).
+  - id = `${kind}|${classCode}|${subject}|${week}` with subject = studentId (REPEAT_STUDENT), errorCode (PROLONGED_ERROR), incident id (SERIOUS_INCIDENT), "" (RISING_CLASS) – unique, stable React key.
+  - Sorted severity (high → low), kind (SERIOUS_INCIDENT, REPEAT_STUDENT, RISING_CLASS, PROLONGED_ERROR), class (natural), id. GVCN screens restrict to own classes themselves.
+- earlyWarningCounts(items): Record<EarlyWarningKind, number> (every kind, zeros included).
+
+inspections.ts (REQ_V2 §4.6; `ds.inspections` absent → [])
+- DEFAULT_COVERAGE_MIN_RATIO = 0.6.
+- filterInspections(ds, f, today): non-deleted rounds dated ≤ today in f.period; f.category → rounds of that Mảng + general rounds (no category); grade / class filters → rounds touching a class of the scope grade (class filter → that class's grade; unknown class → rounds naming it). error / group / student filters ignored. Sorted date desc, code desc.
+- inspectionCoverage(ds, f, today, opts?: { minRatio? }) → { rounds, sessions (distinct date + buổi), classesInspected, classesTotal, grades: GradeCoverage[], flagged, minRatio }. GradeCoverage = { grade, avgRounds, minRounds, maxRounds, noInspections, rows } over the ACTIVE classes of the scope grades (class filter → its grade, population unchanged). CoverageRow = { classCode, grade, homeroomTeacher?, rounds, sessions, lastDate?, incidents / points (every filter except class / student), incidentsPerRound (null when 0 rounds), gradeAvgRounds, coverageRatio = round2(rounds / gradeAvgRounds) (null when the average is 0), status "NONE" (0 rounds while the grade average > 0) | "LOW" (ratio < minRatio) | "OK", highlighted (= class filter) }. flagged = status ≠ OK, NONE first, then ratio asc, then class.
+
 __fixtures__/dataset.ts
 - makeFixtureDataset(): LevelDataset (fresh objects on every call)
 - FIXTURE_TODAY = "2026-10-21"
 - FIXTURE_HOLIDAY_WEEK = "2026-08-31"
 - FIXTURE_STUDENT_IDS = { khoi, dat, huy, long, truongPhuc6A01, truongPhuc7A02, phucTruong7A01 }
+
+__fixtures__/dataset-v2.ts (REQ_V2; phase-2 tests may use it – makeFixtureDataset() itself is unchanged)
+- makeV2FixtureDataset(): base fixture + 7 incidents + 8 inspection rounds (see the file header for the story): a new "Nhóm 3" serious incident in 6A05 (also a rising class in week 19/10), a SAME_STUDENTS and a NO_NAMED_STUDENTS duplicate pair, a reviewed pair (`notDuplicateOf`), a 3-week prolonged L14 in 7A01 (current week skipped), one POINTS_FORMULA defect; rounds incl. one deleted, two general, one per Mảng, both shifts (whole year: 6A05 NONE, 7A03 LOW).
+- V2_FIXTURE_IDS (serious, dupNamed, dupNamedOf, dupUnnamed, dupUnnamedOf, reviewed, reviewedOf, prolonged1, prolonged2, prolongedBase, defect), V2_INSPECTION_IDS, V2_CATEGORIES ({ cc, ht, bt, khac } Mảng names).
 
 ### EXCEL (public API)
 All exports are available from "@/lib/excel" (index.ts). Every function is async except where noted, and ExcelJS is loaded on first use.

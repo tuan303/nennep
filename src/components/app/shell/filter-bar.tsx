@@ -9,13 +9,24 @@ import { CalendarDays, ChevronLeft, ChevronRight, RotateCcw, SlidersHorizontal }
 import { Button, Pill, Skeleton, cn } from "@/components/ui";
 import { useDataset } from "@/lib/client/data";
 import { useFilters } from "@/lib/client/filters";
-import { CategoryField, ClassField, ErrorField, GradeField, PeriodField, PeriodModeControl } from "./filter-fields";
+import {
+  CategoryField,
+  ClassField,
+  ErrorField,
+  GradeField,
+  GroupField,
+  PeriodField,
+  PeriodModeControl,
+  StudentField,
+  studentFilterLabel,
+} from "./filter-fields";
 import { optionsOfMode, periodText, stepPeriodKey } from "./period-utils";
 import { useFilterSheet } from "./shell-context";
 
 /**
- * Desktop filter row. Two groups: period (mode + picker) and dimensions (khối, lớp, mảng, lỗi). When the content
- * column is too narrow for one line, the dimension group wraps onto its own full-width row.
+ * Desktop filter row. Two groups: period (mode + picker) and dimensions (khối, lớp, mảng, nhóm lỗi, lỗi, học sinh).
+ * When the content column is too narrow for one line, the dimension group wraps onto its own full-width row, and its
+ * fields wrap in turn (each keeps a readable minimum width) instead of being squeezed.
  */
 export function FilterBar({ className }: { className?: string }) {
   const f = useFilters();
@@ -28,11 +39,13 @@ export function FilterBar({ className }: { className?: string }) {
         <PeriodModeControl f={f} />
         <PeriodField f={f} className="w-[320px]" />
       </div>
-      <div className="flex min-w-[600px] flex-1 items-center gap-2">
-        <GradeField f={f} className="min-w-0 flex-1" />
-        <ClassField f={f} className="min-w-0 flex-1" />
-        <CategoryField f={f} className="min-w-0 flex-[1.3]" />
-        <ErrorField f={f} className="min-w-0 flex-[1.5]" />
+      <div className="flex min-w-[600px] flex-1 flex-wrap items-center gap-2">
+        <GradeField f={f} className="min-w-[120px] flex-1" />
+        <ClassField f={f} className="min-w-[120px] flex-1" />
+        <CategoryField f={f} className="min-w-[160px] flex-[1.3]" />
+        <GroupField f={f} className="min-w-[140px] flex-1" />
+        <ErrorField f={f} className="min-w-[180px] flex-[1.5]" />
+        <StudentField f={f} className="min-w-[180px] flex-[1.4]" />
         {f.activeCount > 0 ? (
           <Button variant="ghost" size="sm" icon={RotateCcw} onClick={f.resetFilters} className="shrink-0">
             Xóa lọc
@@ -57,7 +70,7 @@ export function FilterChips({ className }: { className?: string }) {
   const f = useFilters();
   const { setOpen } = useFilterSheet();
   const loading = useDataset().status === "loading";
-  const { period, grade, classCode, category, errorCode } = f.filters;
+  const { period, grade, classCode, category, errorCode, group, studentId } = f.filters;
   const list = optionsOfMode(f.options, period.mode);
   const prev = stepPeriodKey(list, period.key, -1);
   const next = stepPeriodKey(list, period.key, 1);
@@ -101,9 +114,15 @@ export function FilterChips({ className }: { className?: string }) {
             {category}
           </Pill>
         ) : null}
+        {group ? <Pill onRemove={() => f.setFilters({ group: undefined })} removeLabel="Bỏ lọc nhóm lỗi">{group}</Pill> : null}
         {errorCode ? (
           <Pill onRemove={() => f.setFilters({ errorCode: undefined })} removeLabel="Bỏ lọc lỗi" className="max-w-[240px]">
             {errorItem ? `${errorItem.code} · ${errorItem.issue}` : errorCode}
+          </Pill>
+        ) : null}
+        {studentId ? (
+          <Pill onRemove={() => f.setFilters({ studentId: undefined })} removeLabel="Bỏ lọc học sinh" className="max-w-[240px]">
+            {studentFilterLabel(f)}
           </Pill>
         ) : null}
       </div>

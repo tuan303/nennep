@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
 import { buildRanking, classStats, computeKpis, kpiComparison, weekdayDistribution, weeklyTrend } from "@/lib/engine";
+import { KPI_TERMS } from "@/lib/constants";
 import type { GlobalFilters, UserProfile } from "@/lib/types";
 import {
   buildKpiViews,
@@ -19,7 +20,7 @@ import { hrefWithParams, share, unitLabel, weekdayBars } from "../lib/view-helpe
 
 const WEEK: GlobalFilters = { period: { mode: "week", key: "2026-10-12" } };
 const OCT: GlobalFilters = { period: { mode: "month", key: "2026-10" } };
-const EMPTY_SPARK: Record<KpiId, number[]> = { incidents: [], students: [], penalty: [], reward: [], classes: [], confidence: [] };
+const EMPTY_SPARK: Record<KpiId, number[]> = { incidents: [], turns: [], students: [], penalty: [], reward: [], confidence: [] };
 
 describe("deltaLabel / confidenceTone", () => {
   it("labels the comparison by period mode", () => {
@@ -51,14 +52,20 @@ describe("buildKpiViews", () => {
       countedStatuses: ds.config.rewardCountedStatuses,
       spark: EMPTY_SPARK,
     });
-    expect(views.map((v) => v.id)).toEqual(["incidents", "students", "penalty", "reward", "classes", "confidence"]);
+    expect(views.map((v) => v.id)).toEqual(["incidents", "turns", "students", "penalty", "reward", "confidence"]);
     const byId = Object.fromEntries(views.map((v) => [v.id, v]));
     expect(byId.incidents.value).toBe(cmp.current.incidents);
     expect(byId.incidents.delta).toEqual({ value: cmp.current.incidents - (cmp.previous?.incidents ?? 0), goodWhen: "down", label: "so với tuần trước" });
     expect(byId.reward.delta?.goodWhen).toBe("up");
     expect(byId.confidence.delta?.goodWhen).toBe("up");
-    expect(byId.classes.value).toBe(`${cmp.current.classesWithIncidents}/8`);
-    expect(byId.students.note).toContain("học sinh khác nhau");
+    expect(byId.incidents.note).toBe(`${cmp.current.classesWithIncidents}/8 lớp phát sinh`);
+    expect(byId.turns.value).toBe(cmp.current.violationTurns);
+    expect(byId.turns.delta?.value).toBe(cmp.current.violationTurns - (cmp.previous?.violationTurns ?? 0));
+    expect(byId.students.value).toBe(cmp.current.uniqueStudents);
+    // Shared vocabulary (REQ_V2 §13): identical labels and tooltips on every screen.
+    expect([byId.incidents, byId.turns, byId.students, byId.penalty].map((v) => [v.label, v.hint])).toEqual(
+      (["incidents", "violationTurns", "uniqueStudents", "penaltyPoints"] as const).map((k) => [KPI_TERMS[k].label, KPI_TERMS[k].hint]),
+    );
     // 7A03 has a REVIEW record in week 12/10 → confidence < 100%.
     expect(cmp.current.reviewCount).toBeGreaterThan(0);
     expect(byId.confidence.note).toBe(`${cmp.current.reviewCount} bản ghi cần rà soát`);
@@ -100,6 +107,23 @@ describe("buildKpiViews", () => {
     const reward = views.find((v) => v.id === "reward");
     expect(reward?.note).toBe("21 điểm chờ xác minh");
     expect(reward?.hint).toContain("Đã xác nhận");
+    expect(reward?.hint?.startsWith(KPI_TERMS.rewardPoints.hint)).toBe(true);
+  });
+
+  it("notes the unnamed students under Số HS vi phạm", () => {
+    const base = { incidents: 3, violationTurns: 6, relatedStudents: 6, uniqueStudents: 3, penaltyPoints: 12, rewardPoints: 0, classesWithIncidents: 2, confidence: 1, reviewCount: 0 };
+    const view = (unnamedStudentCount: number) =>
+      buildKpiViews({
+        current: { ...base, unnamedStudentCount },
+        mode: "all",
+        classTotal: 8,
+        minConfidence: 0.8,
+        pendingReward: { points: 0, count: 0 },
+        countedStatuses: ["Đã xác nhận"],
+        spark: EMPTY_SPARK,
+      }).find((v) => v.id === "students");
+    expect(view(3)?.note).toBe("+ 3 HS chưa rõ tên");
+    expect(view(0)?.note).toBeUndefined();
   });
 });
 

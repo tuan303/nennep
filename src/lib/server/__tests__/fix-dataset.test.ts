@@ -47,7 +47,7 @@ describe("dataset & digests fixes", () => {
         method: "POST",
         url: "/api/rewards",
         token: admin,
-        body: { levelId: "THPT", date: addDays(today, -1), classCode: "10A1", points: 50, reason: "Giải nhất", status: "Đã xác nhận" },
+        body: { levelId: "THPT", date: addDays(today, -1), classCode: "10A1", points: 5, reason: "Giải nhất", status: "Đã xác nhận" },
       });
       expect(r.status).toBe(201);
       const docs = await rewardDigests("THPT");
@@ -116,7 +116,7 @@ describe("dataset & digests fixes", () => {
         method: "POST",
         url: "/api/rewards",
         token: admin,
-        body: { levelId: "TH", date: addDays(today, -1), classCode: "1A1", points: 2, reason: "Mới" },
+        body: { levelId: "TH", date: addDays(today, -1), classCode: "1A1", points: 2, reason: "Mới ghi nhận" },
       });
       expect(created.status).toBe(201);
       // Legacy mode: the new reward went into the legacy doc (complete), no partial monthly doc.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUDIT_ACTIONS,
   AUDIT_ACTION_META,
+  EXPORT_KIND_LABELS,
   auditActionKind,
   auditActionLabel,
   auditActionOptions,
@@ -13,7 +14,7 @@ import {
 
 describe("audit labels", () => {
   it("covers every action with a Vietnamese label", () => {
-    expect(AUDIT_ACTIONS).toHaveLength(32);
+    expect(AUDIT_ACTIONS).toHaveLength(35);
     expect(auditActionLabel("LOGIN")).toBe("Đăng nhập");
     expect(auditActionLabel("LOGIN_FAILED")).toBe("Đăng nhập thất bại");
     expect(auditActionLabel("CREATE_INCIDENT")).toBe("Tạo sự việc");
@@ -38,10 +39,23 @@ describe("audit labels", () => {
 
   it("filter options are grouped and searchable by code", () => {
     const opts = auditActionOptions();
-    expect(opts).toHaveLength(32);
+    expect(opts).toHaveLength(35);
     const login = opts.find((o) => o.value === "LOGIN");
     expect(login).toMatchObject({ label: "Đăng nhập", group: "Đăng nhập & tài khoản", description: "LOGIN" });
     expect(login?.keywords).toContain("LOGIN");
+  });
+
+  it("v2: inspections, feedback/remediation and report export labels", () => {
+    expect(auditActionLabel("CREATE_INSPECTION")).toBe("Ghi đợt kiểm tra");
+    expect(auditActionLabel("UPDATE_INSPECTION")).toBe("Sửa đợt kiểm tra");
+    expect(auditActionLabel("DELETE_INSPECTION")).toBe("Xóa đợt kiểm tra");
+    expect(AUDIT_ACTION_META.CREATE_INSPECTION.group).toBe("Đợt kiểm tra");
+    expect(auditActionTone("CREATE_INSPECTION")).toBe("ok");
+    expect(auditActionTone("UPDATE_INSPECTION")).toBe("brand");
+    expect(auditActionTone("DELETE_INSPECTION")).toBe("bad");
+    expect(auditActionLabel("GVCN_FEEDBACK")).toBe("Phản hồi / khắc phục sự việc");
+    expect(entityLabel("inspection")).toBe("Đợt kiểm tra");
+    expect(EXPORT_KIND_LABELS.report).toBe("Báo cáo tuần/tháng");
   });
 
   it("entity and role labels", () => {

@@ -86,9 +86,9 @@ describe.each(CASES)("overview cards (%s)", (_name, ds, filters) => {
 
 describe("kpi row", () => {
   it("renders 6 tiles", () => {
-    const spark: Record<KpiId, number[]> = { incidents: [1, 2], students: [1, 2], penalty: [1, 2], reward: [0, 1], classes: [1, 1], confidence: [100, 90] };
+    const spark: Record<KpiId, number[]> = { incidents: [1, 2], turns: [1, 3], students: [1, 2], penalty: [1, 2], reward: [0, 1], confidence: [100, 90] };
     const views = buildKpiViews({
-      current: { incidents: 3, relatedStudents: 4, uniqueStudents: 3, penaltyPoints: 8, rewardPoints: 5, classesWithIncidents: 2, confidence: 0.9, reviewCount: 1, unnamedStudentCount: 1 },
+      current: { incidents: 3, violationTurns: 4, relatedStudents: 4, uniqueStudents: 3, penaltyPoints: 8, rewardPoints: 5, classesWithIncidents: 2, confidence: 0.9, reviewCount: 1, unnamedStudentCount: 1 },
       mode: "week",
       classTotal: 8,
       minConfidence: 0.8,
@@ -98,7 +98,10 @@ describe("kpi row", () => {
     });
     const html = render(KpiRow, { views });
     expect(html).toContain("Độ tin cậy dữ liệu");
-    expect(html).toContain("2/8");
+    expect(html).toContain("Lượt vi phạm");
+    expect(html).toContain("Số HS vi phạm");
+    expect(html).toContain("2/8 lớp phát sinh");
+    expect(html).toContain("+ 1 HS chưa rõ tên");
   });
 });
 

@@ -8,6 +8,7 @@ export { ErrorPicker, type ErrorPickerProps } from "./error-picker";
 export { StudentPicker, type StudentPickerProps } from "./student-picker";
 export { StudentHistorySheet, type StudentHistorySheetProps } from "./student-history-sheet";
 export { IncidentDetailSheet, incidentEditHref, type IncidentDetailSheetProps } from "./incident-detail-sheet";
+export { RemediationForm, RemediationSection, RemediationView, type RemediationFormProps, type RemediationSectionProps } from "./incident-remediation";
 export { EvidenceGallery, type EvidenceGalleryProps } from "./evidence-gallery";
 export { EvidenceImage, EvidenceImageView, type EvidenceImageProps } from "./evidence-image";
 export { PhotoCapture, type PhotoCaptureProps } from "./photo-capture";
@@ -57,10 +58,23 @@ export {
   canDeleteIncident,
   canRestoreIncident,
   canGiveFeedback,
+  canRemediate,
+  feedbackRights,
   isIncidentRedacted,
   editWindowRemainingMs,
   formatRemaining,
+  type FeedbackRights,
 } from "./lib/incident-access";
+export {
+  REMEDIATION_MAX,
+  REMEDIATION_PHRASES,
+  appendPhrase,
+  codeOfIncidentId,
+  feedbackChanges,
+  notDuplicateCodes,
+  remediationMeta,
+  type FeedbackDraft,
+} from "./lib/remediation";
 export { safeExternalUrl, displayUrl } from "./lib/urls";
 export { copyText } from "./lib/clipboard";
 export { copyWithFallback, ManualCopyHost, type CopyWithFallbackOptions } from "./manual-copy";

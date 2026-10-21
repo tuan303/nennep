@@ -45,6 +45,22 @@ describe("summarizeAudit", () => {
     expect(s("CREATE_ACTION", { code: "HD-20261021-001", title: "Kiểm tra 5S" })).toBe("HD-20261021-001 · Kiểm tra 5S");
   });
 
+  it("v2: inspections, remediation, not-duplicate marks and GVCN proposals", () => {
+    const ins = { code: "DKT-20261021-001", date: "2026-10-21", shift: "Sáng", classCodes: ["6A01", "6A02", "7A01"], inspector: "Nguyễn Văn A" };
+    expect(s("CREATE_INSPECTION", { ...ins, category: "Nề nếp lớp học" })).toBe("DKT-20261021-001 · 21/10/2026 · 3 lớp · Nề nếp lớp học");
+    expect(s("CREATE_INSPECTION", ins)).toBe("DKT-20261021-001 · 21/10/2026 · 3 lớp · Kiểm tra chung");
+    expect(s("UPDATE_INSPECTION", { code: "DKT-20261021-001", changes: { inspector: { before: "A", after: "B" } } })).toBe("DKT-20261021-001 · Người kiểm tra: A → B");
+    expect(s("DELETE_INSPECTION", { ...ins, reason: "Ghi nhầm ngày" })).toBe("DKT-20261021-001 · 21/10/2026 · 3 lớp · Kiểm tra chung · Lý do: Ghi nhầm ngày");
+    expect(s("DELETE_INSPECTION", { code: "DKT-1", reason: "Nhầm" })).toBe("DKT-1 · Lý do: Nhầm");
+    expect(s("GVCN_FEEDBACK", { code: "NN-1", classCode: "6A01", changes: { remediation: { before: null, after: "Nhắc nhở" } } })).toBe(
+      "6A01 · NN-1 · Biện pháp khắc phục: – → Nhắc nhở",
+    );
+    expect(s("UPDATE_INCIDENT", { code: "NN-1", notDuplicate: ["NN-1", "NN-2"] })).toBe("NN-1 · Đánh dấu không trùng với NN-2");
+    expect(s("CREATE_REWARD", { classCode: "6A01", points: 2, proposed: true, reason: "Lớp tích cực" })).toBe("6A01 · +2 điểm · GVCN đề xuất · Lớp tích cực");
+    expect(s("EXPORT_EXCEL", { kind: "report", rows: 12 })).toBe("Báo cáo tuần/tháng · 12 dòng");
+    expect(fieldLabel("earlyWarning")).toBe("Ngưỡng cảnh báo sớm");
+  });
+
   it("is defensive and short", () => {
     expect(s("UPDATE_CONFIG")).toBe("");
     expect(s("REBUILD_DIGESTS", { incidents: 12, weeks: 5 })).toBe("incidents: 12 · weeks: 5");

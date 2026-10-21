@@ -13,7 +13,7 @@ export interface IssueBarsProps {
   className?: string;
 }
 
-/** Errors as horizontal bars (length = penalty points), with "n lượt · −x" on the right. */
+/** Errors as horizontal bars (length = penalty points), with "n sự việc · −x" on the right (KPI_TERMS vocabulary). */
 export function IssueBars({ issues, max = 6, details, className }: IssueBarsProps) {
   const shown = issues.slice(0, max);
   const hidden = issues.length - shown.length;
@@ -28,7 +28,7 @@ export function IssueBars({ issues, max = 6, details, className }: IssueBarsProp
               {i.issue}
             </span>
             <span className="num shrink-0 text-slate-500">
-              {fmtNumber(i.incidents)} lượt · <strong className="font-semibold text-bad-strong">−{fmtNumber(i.points)}</strong>
+              {fmtNumber(i.incidents)} sự việc · <strong className="font-semibold text-bad-strong">−{fmtNumber(i.points)}</strong>
             </span>
           </div>
           <span aria-hidden className={cn("block h-1.5 w-full overflow-hidden rounded-full", toneTrack.bad)}>
@@ -36,7 +36,7 @@ export function IssueBars({ issues, max = 6, details, className }: IssueBarsProp
           </span>
           {details ? (
             <span className="num truncate text-xs text-slate-500">
-              {i.category} · {fmtNumber(i.students)} lượt HS · {i.unit === "/HS" ? "tính theo HS" : "tính theo lần"}
+              {i.category} · {fmtNumber(i.violationTurns)} lượt vi phạm · {i.unit === "/HS" ? "tính theo HS" : "tính theo lần"}
             </span>
           ) : null}
         </li>

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Globe, Layers, ListChecks, School, Settings, SlidersHorizontal, Users, Wrench, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarDays, Globe, Layers, ListChecks, School, Settings, SlidersHorizontal, Users, Wrench, type LucideIcon } from "lucide-react";
 import { Badge, PageHeader, SkeletonCard, Tabs, TabsContent, TabsList, TabsTrigger, toast } from "@/components/ui";
 import { DatasetGate, useShellOptions } from "@/components/app/shell";
 import { SAME_PATH } from "@/components/entry/lib/leave-guard";
@@ -13,6 +13,7 @@ import type { LevelId } from "@/lib/types";
 import { CatalogTab } from "./catalog/catalog-tab";
 import { ClassesTab } from "./classes/classes-tab";
 import { ConfigTab } from "./config/config-tab";
+import { EarlyWarningTab } from "./early-warning/early-warning-tab";
 import { SETTINGS_TABS, resolveTab, visibleTabs, type SettingsTabDef, type SettingsTabId } from "./lib/tabs";
 import { MaintenanceTab } from "./maintenance/maintenance-tab";
 import { SettingsProvider } from "./shared/settings-context";
@@ -21,6 +22,7 @@ import { WeeksTab } from "./weeks/weeks-tab";
 
 const ICONS: Record<SettingsTabId, LucideIcon> = {
   "cau-hinh": SlidersHorizontal,
+  "canh-bao": BellRing,
   "danh-muc": ListChecks,
   lop: School,
   "lich-tuan": CalendarDays,
@@ -34,6 +36,8 @@ function TabBody({ id }: { id: SettingsTabId }) {
   switch (id) {
     case "cau-hinh":
       return <DatasetGate fallback={TAB_SKELETON}>{(ds) => <ConfigTab key={ds.levelId} ds={ds} />}</DatasetGate>;
+    case "canh-bao":
+      return <DatasetGate fallback={TAB_SKELETON}>{(ds) => <EarlyWarningTab key={ds.levelId} ds={ds} />}</DatasetGate>;
     case "danh-muc":
       return <DatasetGate fallback={TAB_SKELETON}>{(ds) => <CatalogTab key={ds.levelId} ds={ds} />}</DatasetGate>;
     case "lop":
@@ -161,7 +165,7 @@ export function SettingsScreen() {
           icon={Settings}
           eyebrow={currentDef?.perLevel === false ? "Toàn trường" : `Cấp ${LEVELS[levelId].name}`}
           title="Cài đặt"
-          description="Cấu hình thi đua, danh mục lỗi, lớp & GVCN, lịch tuần, người dùng và bảo trì hệ thống."
+          description="Cấu hình thi đua, cảnh báo sớm, danh mục lỗi, lớp & GVCN, lịch tuần, người dùng và bảo trì hệ thống."
         />
         {body}
       </div>

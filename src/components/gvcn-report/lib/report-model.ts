@@ -17,6 +17,8 @@ import {
   type StudentStat,
 } from "@/lib/engine";
 import { rosterNames, studentDisplayName, withRosterNames, type RosterNames } from "@/components/entry/lib/student-names";
+import type { FeedbackRights } from "@/components/app/widgets/lib/incident-access";
+import { feedbackChanges } from "@/components/app/widgets/lib/remediation";
 import type { GvcnFeedbackInput } from "@/lib/contract";
 import type {
   CatalogItem,
@@ -31,6 +33,7 @@ import type {
   RankingRow,
   Reward,
   RewardStatus,
+  StudentLite,
   UserProfile,
 } from "@/lib/types";
 
@@ -128,16 +131,25 @@ export function buildGvcnReport(ds: LevelDataset, classCode: string, period: Per
 }
 
 /**
- * Global filters the class report does not apply (Mảng / Lỗi): the report always covers every error of the class in
- * the period, like the official score and rank. Labels for the notice, e.g. ["Mảng: Vệ sinh", "Lỗi L01 – Đi học muộn"];
- * [] when none is set.
+ * Global filters the class report does not apply (Mảng / Lỗi / Nhóm lỗi / Học sinh): the report always covers every
+ * incident of the class in the period, like the official score and rank. Labels for the notice, e.g.
+ * ["Mảng: Vệ sinh", "Lỗi L01 – Đi học muộn", "Nhóm lỗi: Nhóm 3", "Học sinh: Nguyễn Văn A (HS0001)"]; [] when none is set.
  */
-export function ignoredReportFilters(f: Pick<GlobalFilters, "category" | "errorCode">, catalog: readonly Pick<CatalogItem, "code" | "issue">[]): string[] {
+export function ignoredReportFilters(
+  f: Pick<GlobalFilters, "category" | "errorCode" | "group" | "studentId">,
+  catalog: readonly Pick<CatalogItem, "code" | "issue">[],
+  students: readonly Pick<StudentLite, "id" | "name">[] = [],
+): string[] {
   const out: string[] = [];
   if (f.category) out.push(`Mảng: ${f.category}`);
   if (f.errorCode) {
     const issue = catalog.find((c) => c.code === f.errorCode)?.issue;
     out.push(issue ? `Lỗi ${f.errorCode} – ${issue}` : `Lỗi ${f.errorCode}`);
+  }
+  if (f.group) out.push(`Nhóm lỗi: ${f.group}`);
+  if (f.studentId) {
+    const name = students.find((s) => s.id === f.studentId)?.name;
+    out.push(name ? `Học sinh: ${name} (${f.studentId})` : `Học sinh: ${f.studentId}`);
   }
   return out;
 }
@@ -192,7 +204,7 @@ export function subjectText(i: Pick<Incident, "students" | "unnamedCount" | "rel
 export type StatusFilter = "ALL" | IncidentStatus;
 
 function searchText(i: Incident): string {
-  return [i.code, i.errorCode, i.issue, i.category, subjectText(i), i.students.map((s) => s.id).join(" "), i.detail, i.gvcnNote, i.reporter]
+  return [i.code, i.errorCode, i.issue, i.category, subjectText(i), i.students.map((s) => s.id).join(" "), i.detail, i.gvcnNote, i.remediation, i.reporter]
     .filter(Boolean)
     .join(" ");
 }
@@ -210,16 +222,34 @@ export function statusCounts(incidents: readonly Incident[]): Record<StatusFilte
 
 /* --------------------------------- feedback -------------------------------- */
 
-/** Only the changed fields; null when nothing changed (the API rejects an empty body). */
+/**
+ * Only the changed fields the viewer may send (`rights`, default: GVCN note + status + remediation); null when nothing
+ * changed (the API rejects an empty body). `remediation` undefined = the field is not on the form.
+ */
 export function feedbackPayload(
-  incident: Pick<Incident, "gvcnNote" | "status">,
+  incident: Pick<Incident, "gvcnNote" | "status" | "remediation">,
   note: string,
   status: IncidentStatus,
+  remediation?: string,
+  rights?: FeedbackRights,
 ): GvcnFeedbackInput | null {
-  const payload: GvcnFeedbackInput = {};
-  if (note.trim() !== (incident.gvcnNote ?? "").trim()) payload.note = note.trim();
-  if (status !== incident.status) payload.status = status;
-  return Object.keys(payload).length > 0 ? payload : null;
+  return feedbackChanges(incident, { note, status, remediation }, rights);
+}
+
+/**
+ * Dialog of a row: "gvcn" = phản hồi GVCN + biện pháp khắc phục + trạng thái (class GVCN, ADMIN); "remediate" = biện
+ * pháp khắc phục + trạng thái (EDITOR with incident.remediate); undefined = read only.
+ */
+export type FeedbackMode = "gvcn" | "remediate";
+
+export function feedbackModeOf(rights: FeedbackRights): FeedbackMode | undefined {
+  if (rights.note) return "gvcn";
+  return rights.remediation ? "remediate" : undefined;
+}
+
+/** Rights of a dialog mode (what feedbackPayload may send). */
+export function rightsOfMode(mode: FeedbackMode): FeedbackRights {
+  return mode === "gvcn" ? { note: true, status: true, remediation: true } : { note: false, status: true, remediation: true };
 }
 
 /** Reward counted in the score (status in config.rewardCountedStatuses). */

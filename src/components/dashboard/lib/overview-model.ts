@@ -9,6 +9,7 @@ import { weeksInPeriod } from "@/lib/engine/period";
 import { findRankingRow } from "@/lib/engine/ranking";
 import { round2 } from "@/lib/engine/scoring";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
+import { KPI_TERMS } from "@/lib/constants";
 import type {
   CatalogItem,
   GlobalFilters,
@@ -27,14 +28,16 @@ import type {
 /* ----------------------------- cross-filtering ----------------------------- */
 
 /**
- * Filters of the two widgets that set a filter by clicking ("Phân bổ theo mảng", "Top 5 vấn đề"): each ignores its
- * own dimension so the other slices / rows stay visible next to the selected one (highlighted), the usual
- * cross-filter behaviour. The Mảng chart also ignores the error (an error belongs to exactly one Mảng).
+ * Filters of the widgets that set a filter by clicking ("Phân bổ theo mảng", "Top 5 vấn đề", "Theo nhóm lỗi"): each
+ * ignores its own dimension so the other slices / rows / bars stay visible next to the selected one (highlighted), the
+ * usual cross-filter behaviour. The Mảng and group charts also ignore the error (an error belongs to exactly one Mảng
+ * and one group). Every other filter (period, khối, lớp, học sinh…) is carried over by the spread.
  */
-export function crossFilterScopes(filters: GlobalFilters): { category: GlobalFilters; error: GlobalFilters } {
+export function crossFilterScopes(filters: GlobalFilters): { category: GlobalFilters; error: GlobalFilters; group: GlobalFilters } {
   return {
     category: { ...filters, category: undefined, errorCode: undefined },
     error: { ...filters, errorCode: undefined },
+    group: { ...filters, group: undefined, errorCode: undefined },
   };
 }
 
@@ -59,7 +62,8 @@ export function topIssueRows(incidents: Incident[], selected: string | undefined
 
 /* --------------------------------- KPIs ---------------------------------- */
 
-export type KpiId = "incidents" | "students" | "penalty" | "reward" | "classes" | "confidence";
+/** KPI tiles of Tổng quan (REQ_V2 §6.2): the 4 shared vocabulary numbers (KPI_TERMS) + Điểm thưởng + Độ tin cậy. */
+export type KpiId = "incidents" | "turns" | "students" | "penalty" | "reward" | "confidence";
 
 export interface KpiDeltaView {
   value: number;
@@ -81,6 +85,9 @@ export interface KpiView {
   note?: string;
   spark: number[];
 }
+
+/** Ordered tile ids. */
+export const KPI_IDS: readonly KpiId[] = ["incidents", "turns", "students", "penalty", "reward", "confidence"];
 
 /** "so với tuần trước" … – undefined for the whole school year (no previous period). */
 export function deltaLabel(mode: PeriodMode): string | undefined {
@@ -107,7 +114,7 @@ export interface KpiViewInput {
   current: Kpis;
   previous?: Kpis;
   mode: PeriodMode;
-  /** Active classes in scope (grade/class filters). */
+  /** Active classes in scope (grade/class filters) – denominator of "n/N lớp phát sinh". */
   classTotal: number;
   minConfidence: number;
   /** Rewards of the scope whose status is not counted yet. */
@@ -121,7 +128,10 @@ function diff(cur: number, prev: number | undefined): number | undefined {
   return prev === undefined ? undefined : round2(cur - prev);
 }
 
-/** The 6 KPI tiles of SCR-02, in display order. */
+/**
+ * The 6 KPI tiles of Tổng quan, in display order. Labels and tooltips of Sự việc, Lượt vi phạm, Số HS vi phạm and
+ * Điểm trừ are exactly the shared KPI_TERMS (same text on every screen, REQ_V2 §13).
+ */
 export function buildKpiViews(input: KpiViewInput): KpiView[] {
   const { current: c, previous: p, mode, spark } = input;
   const label = deltaLabel(mode);
@@ -137,57 +147,55 @@ export function buildKpiViews(input: KpiViewInput): KpiView[] {
   return [
     {
       id: "incidents",
-      label: "Sự việc",
+      label: KPI_TERMS.incidents.label,
       value: c.incidents,
       tone: "brand",
       delta: delta(diff(c.incidents, p?.incidents), "down"),
-      hint: "Số sự việc nền nếp được ghi nhận trong phạm vi đang lọc.",
+      hint: KPI_TERMS.incidents.hint,
+      note: `${fmtNumber(c.classesWithIncidents)}/${fmtNumber(input.classTotal)} lớp phát sinh`,
       spark: spark.incidents,
     },
     {
+      id: "turns",
+      label: KPI_TERMS.violationTurns.label,
+      value: c.violationTurns,
+      tone: "warn",
+      delta: delta(diff(c.violationTurns, p?.violationTurns), "down"),
+      hint: KPI_TERMS.violationTurns.hint,
+      spark: spark.turns,
+    },
+    {
       id: "students",
-      label: "HS liên quan",
-      value: c.relatedStudents,
+      label: KPI_TERMS.uniqueStudents.label,
+      value: c.uniqueStudents,
       tone: "muted",
-      delta: delta(diff(c.relatedStudents, p?.relatedStudents), "down"),
-      hint:
-        `Tổng lượt học sinh liên quan (gồm cả HS chưa rõ tên). ${fmtNumber(c.uniqueStudents)} học sinh khác nhau được ghi tên` +
-        (c.unnamedStudentCount > 0 ? `; ${fmtNumber(c.unnamedStudentCount)} lượt chưa rõ tên.` : "."),
-      note: `${fmtNumber(c.uniqueStudents)} học sinh khác nhau`,
+      delta: delta(diff(c.uniqueStudents, p?.uniqueStudents), "down"),
+      hint: KPI_TERMS.uniqueStudents.hint,
+      note: c.unnamedStudentCount > 0 ? `+ ${fmtNumber(c.unnamedStudentCount)} HS chưa rõ tên` : undefined,
       spark: spark.students,
     },
     {
       id: "penalty",
-      label: "Điểm trừ",
+      label: KPI_TERMS.penaltyPoints.label,
       value: c.penaltyPoints,
       unit: "điểm",
       tone: "bad",
       delta: delta(diff(c.penaltyPoints, p?.penaltyPoints), "down"),
-      hint: "Tổng điểm trừ của các sự việc trong phạm vi đang lọc (tính theo quy tắc /HS và /lần).",
+      hint: KPI_TERMS.penaltyPoints.hint,
       spark: spark.penalty,
     },
     {
       id: "reward",
-      label: "Điểm thưởng",
+      label: KPI_TERMS.rewardPoints.label,
       value: c.rewardPoints,
       unit: "điểm",
       tone: "star",
       delta: delta(diff(c.rewardPoints, p?.rewardPoints), "up"),
       hint:
-        `Chỉ tính điểm thưởng có trạng thái: ${statuses}.` +
+        `${KPI_TERMS.rewardPoints.hint} Đang tính: ${statuses}.` +
         (pending.count > 0 ? ` Còn ${fmtNumber(pending.points)} điểm (${fmtNumber(pending.count)} bản ghi) đang chờ xác minh.` : ""),
       note: pending.count > 0 ? `${fmtNumber(pending.points)} điểm chờ xác minh` : undefined,
       spark: spark.reward,
-    },
-    {
-      id: "classes",
-      label: "Lớp phát sinh",
-      value: `${fmtNumber(c.classesWithIncidents)}/${fmtNumber(input.classTotal)}`,
-      unit: "lớp",
-      tone: "warn",
-      delta: delta(diff(c.classesWithIncidents, p?.classesWithIncidents), "down"),
-      hint: "Số lớp có ít nhất một sự việc trong kỳ / tổng số lớp đang hoạt động trong phạm vi lọc.",
-      spark: spark.classes,
     },
     {
       id: "confidence",

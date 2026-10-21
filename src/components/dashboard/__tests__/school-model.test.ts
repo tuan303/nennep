@@ -121,7 +121,7 @@ describe("mergeTopIssues", () => {
   });
 
   it("keeps different issues with the same code apart", () => {
-    const a: IssueStat = { errorCode: "L01", issue: "Đi học muộn", category: "A", unit: "/HS", incidents: 3, points: 6, students: 3, classCount: 2 };
+    const a: IssueStat = { errorCode: "L01", issue: "Đi học muộn", category: "A", unit: "/HS", incidents: 3, violationTurns: 3, points: 6, students: 3, classCount: 2 };
     const b: IssueStat = { ...a, issue: "Không đeo khăn quàng", incidents: 5 };
     const merged = mergeTopIssues([
       { levelId: "TH", issues: [b] },

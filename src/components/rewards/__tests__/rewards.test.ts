@@ -1,17 +1,38 @@
+import { createElement as h } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
 import type { GlobalFilters, Reward, UserProfile } from "@/lib/types";
+import { RewardCreateSchema, RewardUpdateSchema } from "@/lib/contract";
+import { hasPermission } from "@/lib/constants";
 import {
+  PROPOSAL_STATUS,
   REWARD_MSG,
   applyReasonSuggestion,
+  isRewardPointLevel,
+  legacyPointsOf,
   newRewardForm,
+  rewardFormDirty,
   rewardFormFromReward,
+  rewardModeOf,
   rewardStatusOptions,
   toRewardCreateInput,
   toRewardUpdateInput,
   validateRewardForm,
 } from "../lib/reward-form";
-import { canDeleteReward, canEditReward, countedStatusesText, quickStatusActions, rewardRows, rewardSummary } from "../lib/reward-list";
+import {
+  canDeleteReward,
+  canEditReward,
+  countedStatusesText,
+  filterProposedRows,
+  ignoredRewardFilters,
+  proposalCounts,
+  quickStatusActions,
+  rewardRows,
+  rewardSummary,
+} from "../lib/reward-list";
+import { ProposedBadge } from "../reward-list-card";
+import { RewardPointsPicker } from "../reward-points-picker";
 
 const HOUR = 3_600_000;
 const ds = makeFixtureDataset();
@@ -25,10 +46,11 @@ const editor = profile("EDITOR");
 const admin = profile("ADMIN", "uid-admin");
 
 describe("reward form", () => {
-  const valid = { ...newRewardForm({ today, reporter: "Cô Lan" }), classCode: "6A01", reason: "Lớp sạch đẹp tiêu biểu" };
+  const valid = { ...newRewardForm({ today, reporter: "Cô Lan" }), classCode: "6A01", reason: "Lớp sạch đẹp tiêu biểu", points: 5 };
 
-  it("starts with sensible defaults", () => {
-    expect(newRewardForm({ today })).toMatchObject({ date: today, classCode: "", points: 5, status: "Mới ghi nhận", photoIds: [], links: [] });
+  it("starts with sensible defaults – no point level chosen", () => {
+    expect(newRewardForm({ today })).toMatchObject({ date: today, classCode: "", points: null, status: "Mới ghi nhận", photoIds: [], links: [] });
+    expect(validateRewardForm({ ...valid, points: null }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.noPoints]);
   });
 
   it("accepts a complete form and mirrors the server checks", () => {
@@ -36,9 +58,11 @@ describe("reward form", () => {
     expect(validateRewardForm({ ...valid, date: "2026-10-22" }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.futureDate]);
     expect(validateRewardForm({ ...valid, classCode: "" }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.noClass]);
     expect(validateRewardForm({ ...valid, classCode: "7A04" }, ds, today, { canVerify: false })).toEqual(["Lớp 7A04 đã ngừng hoạt động."]);
-    expect(validateRewardForm({ ...valid, reason: " ab " }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.reason]);
-    expect(validateRewardForm({ ...valid, points: 0 }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.points]);
-    expect(validateRewardForm({ ...valid, points: 101 }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.points]);
+    expect(validateRewardForm({ ...valid, reason: " abcd " }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.reason]);
+    expect(validateRewardForm({ ...valid, reason: "abcde" }, ds, today, { canVerify: false })).toEqual([]);
+    expect(validateRewardForm({ ...valid, reason: "x".repeat(501) }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.reasonTooLong]);
+    for (const bad of [0, 6, 10, 2.5, -1]) expect(validateRewardForm({ ...valid, points: bad }, ds, today, { canVerify: false })).toEqual([REWARD_MSG.points]);
+    for (const ok of [1, 2, 3, 4, 5]) expect(validateRewardForm({ ...valid, points: ok }, ds, today, { canVerify: false })).toEqual([]);
     expect(validateRewardForm({ ...valid, links: ["ftp://x"] }, ds, today, { canVerify: false })).toHaveLength(1);
   });
 
@@ -60,9 +84,37 @@ describe("reward form", () => {
     expect(rewardStatusOptions(true)).toEqual(["Mới ghi nhận", "Đang xác minh", "Đã xác nhận"]);
   });
 
+  it("keeps legacy points / reasons valid while unchanged (REQ_V2 §7.2)", () => {
+    const original = { classCode: "6A01", status: "Mới ghi nhận" as const, points: 10, reason: "Tốt" };
+    const legacy = { ...valid, points: 10, reason: "Tốt" };
+    expect(validateRewardForm(legacy, ds, today, { canVerify: false, original })).toEqual([]);
+    expect(validateRewardForm({ ...legacy, points: 7 }, ds, today, { canVerify: false, original })).toEqual([REWARD_MSG.points]);
+    expect(validateRewardForm({ ...legacy, points: 4 }, ds, today, { canVerify: false, original })).toEqual([]);
+    expect(validateRewardForm({ ...legacy, reason: "Tốt!" }, ds, today, { canVerify: false, original })).toEqual([REWARD_MSG.reason]);
+    expect(validateRewardForm({ ...legacy, reason: " Tốt " }, ds, today, { canVerify: false, original })).toEqual([]);
+    expect(legacyPointsOf(10)).toBe(10);
+    expect(legacyPointsOf(2.5)).toBe(2.5);
+    expect(legacyPointsOf(3)).toBeUndefined();
+    expect(legacyPointsOf(null)).toBeUndefined();
+    expect(isRewardPointLevel(5)).toBe(true);
+    expect(isRewardPointLevel(5.5)).toBe(false);
+  });
+
+  it("GVCN proposals: own classes only, status always 'Mới ghi nhận'", () => {
+    expect(validateRewardForm(valid, ds, today, { canVerify: false, ownClasses: ["6A01"] })).toEqual([]);
+    expect(validateRewardForm({ ...valid, classCode: "6A02" }, ds, today, { canVerify: false, ownClasses: ["6A01"] })).toEqual([REWARD_MSG.proposeOwnClass]);
+    expect(toRewardCreateInput("THCS", { ...valid, status: "Đang xác minh" }, "propose").status).toBe(PROPOSAL_STATUS);
+    const gvcn = { ...profile("GVCN"), gvcnClasses: [{ levelId: "THCS" as const, classCode: "6A01" }] };
+    expect(rewardModeOf((p) => hasPermission(gvcn, p))).toBe("propose");
+    expect(rewardModeOf((p) => hasPermission(editor, p))).toBe("manage");
+    expect(rewardModeOf((p) => hasPermission(profile("VIEWER"), p))).toBeUndefined();
+  });
+
   it("does not block editing a reward whose (unchanged) class was deactivated since", () => {
     const original = { classCode: "7A04", status: "Mới ghi nhận" as const };
     expect(validateRewardForm({ ...valid, classCode: "7A04" }, ds, today, { canVerify: false, original })).toEqual([]);
+    expect(rewardFormDirty({ ...valid, points: 3 }, valid)).toBe(true);
+    expect(rewardFormDirty(newRewardForm({ today }), newRewardForm({ today }))).toBe(false);
   });
 
   it("applies reason suggestions without duplicating them", () => {
@@ -84,11 +136,20 @@ describe("reward form", () => {
       status: "Mới ghi nhận",
       note: "Tuần 7",
     });
+    expect(RewardCreateSchema.safeParse({ ...toRewardCreateInput("THCS", form), clientRequestId: "abcdefgh12" }).success).toBe(true);
     const reward = ds.rewards[0];
     const patch = toRewardUpdateInput({ ...rewardFormFromReward(reward), note: "" }, { ...reward, rev: 2 });
-    expect(patch).toMatchObject({ classCode: reward.classCode, points: reward.points, note: "", baseRev: 2 });
+    expect(patch).toMatchObject({ classCode: reward.classCode, note: "", baseRev: 2 });
     expect(patch).not.toHaveProperty("levelId");
     expect(patch).not.toHaveProperty("status");
+    // Points / reason only when changed: a legacy value is never re-sent (and re-validated).
+    expect(patch).not.toHaveProperty("points");
+    expect(patch).not.toHaveProperty("reason");
+    const legacy = { ...reward, points: 10, reason: "Tốt" };
+    expect(toRewardUpdateInput(rewardFormFromReward(legacy), legacy)).not.toHaveProperty("points");
+    const changed = toRewardUpdateInput({ ...rewardFormFromReward(legacy), points: 4, reason: " Lớp sạch đẹp " }, legacy);
+    expect(changed).toMatchObject({ points: 4, reason: "Lớp sạch đẹp" });
+    expect(RewardUpdateSchema.safeParse(changed).success).toBe(true);
     const other = reward.status === "Đang xác minh" ? "Mới ghi nhận" : "Đang xác minh";
     expect(toRewardUpdateInput({ ...rewardFormFromReward(reward), status: other }, reward)).toMatchObject({ status: other, baseRev: reward.rev ?? 0 });
   });
@@ -136,6 +197,43 @@ describe("reward list", () => {
     expect(quickStatusActions(admin, base).map((a) => a.to)).toEqual(["Đang xác minh", "Đã xác nhận"]);
     expect(quickStatusActions(admin, { ...base, status: "Đang xác minh" }).map((a) => a.label)).toEqual(["Xác nhận"]);
     expect(quickStatusActions(admin, { ...base, status: "Đã xác nhận" })).toEqual([]);
+  });
+});
+
+describe("GVCN proposals in the list", () => {
+  const all: GlobalFilters = { period: { mode: "all" } };
+  const withProposal = { ...ds, rewards: ds.rewards.map((r, k) => (k < 2 ? { ...r, proposed: true, status: k === 0 ? ("Mới ghi nhận" as const) : ("Đã xác nhận" as const) } : r)) };
+
+  it("limits a GVCN to own classes", () => {
+    const rows = rewardRows(ds, all, ["6A01"]);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.reward.classCode === "6A01")).toBe(true);
+    expect(rewardRows(ds, all, [])).toEqual([]);
+  });
+
+  it("counts and filters proposals", () => {
+    const rows = rewardRows(withProposal, all);
+    expect(proposalCounts(rows)).toEqual({ total: 2, pending: 1 });
+    expect(filterProposedRows(rows, true)).toHaveLength(2);
+    expect(filterProposedRows(rows, false)).toHaveLength(rows.length);
+  });
+
+  it("names the global filters that do not apply to rewards", () => {
+    expect(ignoredRewardFilters({})).toEqual([]);
+    expect(ignoredRewardFilters({ category: "x", group: "Nhóm 3", studentId: "HS0001" })).toEqual(["Mảng", "Nhóm lỗi", "Học sinh"]);
+  });
+
+  it("renders the 'GVCN đề xuất' badge and the 1–5 picker", () => {
+    expect(renderToStaticMarkup(h(ProposedBadge))).toContain("GVCN đề xuất");
+    const none = renderToStaticMarkup(h(RewardPointsPicker, { value: null, onChange: () => undefined }));
+    expect(none).toContain('role="radiogroup"');
+    expect((none.match(/role="radio"/g) ?? []).length).toBe(5);
+    expect(none).not.toContain('aria-checked="true"');
+    for (const n of [1, 2, 3, 4, 5]) expect(none).toContain(`+${n}`);
+    const legacy = renderToStaticMarkup(h(RewardPointsPicker, { value: 10, onChange: () => undefined, legacy: 10 }));
+    expect((legacy.match(/role="radio"/g) ?? []).length).toBe(6);
+    expect(legacy).toContain("(mức cũ)");
+    expect(legacy).toMatch(/aria-checked="true"[^>]*aria-label="\+10 điểm \(mức cũ/);
   });
 });
 

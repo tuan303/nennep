@@ -65,9 +65,9 @@ describe("rewards API", () => {
     const params = { id: mine.id };
     const upgrade = await callRoute<ApiErrorBody>(rwPATCH, { method: "PATCH", url: "/x", params, token: t.editor, body: { status: "Đã xác nhận" } });
     expect(upgrade.status).toBe(403);
-    const toVerify = await callRoute<Reward>(rwPATCH, { method: "PATCH", url: "/x", params, token: t.editor, body: { status: "Đang xác minh", points: 7 } });
+    const toVerify = await callRoute<Reward>(rwPATCH, { method: "PATCH", url: "/x", params, token: t.editor, body: { status: "Đang xác minh", points: 4 } });
     expect(toVerify.status).toBe(200);
-    expect(toVerify.body).toMatchObject({ status: "Đang xác minh", points: 7 });
+    expect(toVerify.body).toMatchObject({ status: "Đang xác minh", points: 4 });
     const verified = await callRoute<Reward>(rwPATCH, { method: "PATCH", url: "/x", params, token: t.admin, body: { status: "Đã xác nhận" } });
     expect(verified.body.status).toBe("Đã xác nhận");
     const locked = await callRoute<ApiErrorBody>(rwPATCH, { method: "PATCH", url: "/x", params, token: t.editor, body: { points: 9 } });

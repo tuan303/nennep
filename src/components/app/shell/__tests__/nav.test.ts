@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hasPermission, type Permission } from "@/lib/constants";
 import type { Role } from "@/lib/types";
-import { activeNavItem, bottomNavModel, NAV_GROUPS, visibleNavGroups } from "../nav-config";
+import { activeNavItem, bottomNavModel, NAV_GROUPS, NAV_ICONS, visibleNavGroups } from "../nav-config";
 import { APP_ROUTE_LIST, APP_ROUTES, canSeeRoute, isRouteActive, routeForPath, routeMetadata } from "../routes";
 
 const ctxFor = (role: Role, levelCount: number) => ({
@@ -14,7 +14,7 @@ describe("routes", () => {
   it("covers every screen of ARCHITECTURE §7 exactly once", () => {
     const hrefs = APP_ROUTE_LIST.map((r) => r.href).sort();
     expect(hrefs).toEqual(
-      ["/", "/bao-gvcn", "/cai-dat", "/diem-thuong", "/du-lieu", "/hanh-dong", "/hoc-sinh", "/lop", "/nhap-lieu", "/nhap-xuat", "/nhat-ky", "/quan-ly-hoc-sinh", "/toan-truong", "/xep-hang"].sort(),
+      ["/", "/bao-cao", "/bao-gvcn", "/cai-dat", "/diem-thuong", "/du-lieu", "/hanh-dong", "/hoc-sinh", "/lop", "/nhap-lieu", "/nhap-xuat", "/nhat-ky", "/quan-ly-hoc-sinh", "/toan-truong", "/xep-hang"].sort(),
     );
     expect(NAV_GROUPS.flatMap((g) => g.items).length).toBe(APP_ROUTE_LIST.length);
   });
@@ -31,6 +31,27 @@ describe("routes", () => {
 
   it("builds route metadata titles", () => {
     expect(routeMetadata("ranking")).toEqual({ title: "Xếp hạng" });
+    expect(routeMetadata("reports")).toEqual({ title: "Báo cáo tuần/tháng" });
+  });
+
+  it("declares the weekly/monthly report route (REQ_V2 §6.5)", () => {
+    expect(APP_ROUTES.reports).toMatchObject({
+      href: "/bao-cao",
+      shortLabel: "Báo cáo",
+      permission: "view.dashboard",
+      filters: false,
+      levelSwitcher: true,
+    });
+    expect(routeForPath("/bao-cao")?.id).toBe("reports");
+    expect(NAV_ICONS.reports).toBeDefined();
+    const overview = NAV_GROUPS.find((g) => g.id === "overview")!.items.map((i) => i.id);
+    expect(overview.indexOf("reports")).toBe(overview.indexOf("gvcn") + 1);
+  });
+
+  it("opens Điểm thưởng with reward.propose (GVCN proposals, REQ_V2 §5.3)", () => {
+    expect(APP_ROUTES.rewards.permission).toBe("reward.propose");
+    for (const role of ["ADMIN", "EDITOR", "GVCN"] as const) expect(canSeeRoute(APP_ROUTES.rewards, ctxFor(role, 1))).toBe(true);
+    expect(canSeeRoute(APP_ROUTES.rewards, ctxFor("VIEWER", 3))).toBe(false);
   });
 
   it("shows Toàn trường only with 2+ accessible levels", () => {
@@ -41,18 +62,18 @@ describe("routes", () => {
 
 describe("visibleNavGroups", () => {
   it("ADMIN with all levels sees everything", () => {
-    expect(ids("ADMIN", 3)).toHaveLength(14);
+    expect(ids("ADMIN", 3)).toHaveLength(15);
     expect(visibleNavGroups(ctxFor("ADMIN", 3)).map((g) => g.label)).toEqual(["Tổng quan", "Ghi nhận", "Điều hành", "Quản trị"]);
   });
 
   it("EDITOR: dashboards + recording + actions (read) + data review", () => {
-    expect(ids("EDITOR", 1)).toEqual(["overview", "ranking", "classes", "gvcn", "students", "entry", "rewards", "actions", "data"]);
+    expect(ids("EDITOR", 1)).toEqual(["overview", "ranking", "classes", "gvcn", "reports", "students", "entry", "rewards", "actions", "data"]);
   });
 
-  it("VIEWER: dashboards + actions; GVCN: dashboards only; empty groups dropped", () => {
-    expect(ids("VIEWER", 3)).toEqual(["overview", "school", "ranking", "classes", "gvcn", "students", "actions"]);
-    expect(ids("GVCN", 1)).toEqual(["overview", "ranking", "classes", "gvcn", "students"]);
-    expect(visibleNavGroups(ctxFor("GVCN", 1)).map((g) => g.id)).toEqual(["overview"]);
+  it("VIEWER: dashboards + actions; GVCN: dashboards + reward proposals; empty groups dropped", () => {
+    expect(ids("VIEWER", 3)).toEqual(["overview", "school", "ranking", "classes", "gvcn", "reports", "students", "actions"]);
+    expect(ids("GVCN", 1)).toEqual(["overview", "ranking", "classes", "gvcn", "reports", "students", "rewards"]);
+    expect(visibleNavGroups(ctxFor("GVCN", 1)).map((g) => g.id)).toEqual(["overview", "record"]);
   });
 
   it("an inactive profile sees nothing", () => {
@@ -69,7 +90,7 @@ describe("bottomNavModel", () => {
       ["entry", true],
       ["students", false],
     ]);
-    expect(m.more.flatMap((g) => g.items.map((i) => i.id))).toEqual(["classes", "gvcn", "rewards", "actions", "data"]);
+    expect(m.more.flatMap((g) => g.items.map((i) => i.id))).toEqual(["classes", "gvcn", "reports", "rewards", "actions", "data"]);
   });
 
   it("falls back to Báo GVCN in the centre otherwise", () => {
@@ -80,7 +101,7 @@ describe("bottomNavModel", () => {
       ["gvcn", false],
       ["students", false],
     ]);
-    expect(m.more.flatMap((g) => g.items.map((i) => i.id))).toEqual(["classes"]);
+    expect(m.more.flatMap((g) => g.items.map((i) => i.id))).toEqual(["classes", "reports", "rewards"]);
   });
 });
 

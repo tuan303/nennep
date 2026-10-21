@@ -1,13 +1,13 @@
 "use client";
 import { useId, useState, type FormEvent } from "react";
-import { MessageSquareReply, Send } from "lucide-react";
+import { MessageSquareReply, Send, Wrench } from "lucide-react";
 import { Button, Dialog, DialogClose, Field, Pill, Select, Textarea, toast } from "@/components/ui";
-import { useRetained } from "@/components/app/widgets";
+import { REMEDIATION_MAX, REMEDIATION_PHRASES, appendPhrase, useRetained } from "@/components/app/widgets";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { fmtDate, fmtNumber } from "@/lib/client/format";
 import { INCIDENT_STATUSES } from "@/lib/constants";
 import type { Incident, IncidentStatus } from "@/lib/types";
-import { feedbackPayload, subjectText } from "./lib/report-model";
+import { feedbackPayload, rightsOfMode, subjectText, type FeedbackMode } from "./lib/report-model";
 
 const NOTE_MAX = 1000;
 const STATUS_OPTIONS = INCIDENT_STATUSES.map((s) => ({ value: s, label: s }));
@@ -17,47 +17,71 @@ const PHRASES = ["Đã nhắc nhở học sinh.", "Đã trao đổi với phụ 
 export interface FeedbackDialogProps {
   /** Incident to answer; null closes the dialog. */
   incident: Incident | null;
+  /**
+   * "gvcn" (class GVCN / ADMIN): phản hồi + biện pháp khắc phục + trạng thái; "remediate" (EDITOR): biện pháp khắc phục
+   * + trạng thái only. Default "gvcn".
+   */
+  mode?: FeedbackMode;
   onClose: () => void;
   /** Called after a successful save (refresh the dataset here). */
   onSaved: () => Promise<void>;
 }
 
-/** Quick GVCN feedback: note + processing status → POST /api/incidents/:id/feedback. */
-export function FeedbackDialog({ incident, onClose, onSaved }: FeedbackDialogProps) {
+/** Quick feedback / remediation → POST /api/incidents/:id/feedback (only the changed, allowed fields). */
+export function FeedbackDialog({ incident, mode = "gvcn", onClose, onSaved }: FeedbackDialogProps) {
   const shown = useRetained(incident);
   if (!shown) return null;
-  return <FeedbackDialogInner key={shown.id} incident={shown} open={incident !== null} onClose={onClose} onSaved={onSaved} />;
+  return <FeedbackDialogInner key={`${shown.id}|${mode}`} incident={shown} mode={mode} open={incident !== null} onClose={onClose} onSaved={onSaved} />;
 }
 
-function FeedbackDialogInner({ incident, open, onClose, onSaved }: { incident: Incident; open: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+function FeedbackDialogInner({
+  incident,
+  mode,
+  open,
+  onClose,
+  onSaved,
+}: {
+  incident: Incident;
+  mode: FeedbackMode;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
   const formId = useId();
+  const gvcn = mode === "gvcn";
   const [note, setNote] = useState(incident.gvcnNote ?? "");
+  const [remediation, setRemediation] = useState(incident.remediation ?? "");
   const [status, setStatus] = useState<IncidentStatus>(incident.status);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-  const payload = feedbackPayload(incident, note, status);
-  const tooLong = note.length > NOTE_MAX;
+  const [errors, setErrors] = useState<{ note?: string; remediation?: string }>({});
+  const payload = feedbackPayload(incident, note, status, remediation, rightsOfMode(mode));
+  const noteTooLong = gvcn && note.length > NOTE_MAX;
+  const fixTooLong = remediation.length > REMEDIATION_MAX;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!payload || saving || tooLong) return;
+    if (!payload || saving || noteTooLong || fixTooLong) return;
     setSaving(true);
-    setError(undefined);
+    setErrors({});
     try {
       await api.incidents.feedback(incident.id, payload);
-      toast.success("Đã lưu phản hồi của GVCN.");
+      toast.success(
+        payload.note !== undefined
+          ? "Đã lưu phản hồi của GVCN."
+          : payload.remediation !== undefined
+            ? "Đã lưu biện pháp khắc phục."
+            : "Đã cập nhật trạng thái xử lý.",
+      );
       await onSaved();
       onClose();
     } catch (err) {
       const fe = fieldErrors(err);
-      setError(fe.note ?? fe.status);
-      toast.error(errorMessage(err, "Chưa lưu được phản hồi. Vui lòng thử lại."));
+      setErrors({ note: fe.note, remediation: fe.remediation ?? fe.status });
+      toast.error(errorMessage(err, "Chưa lưu được. Vui lòng thử lại."));
     } finally {
       setSaving(false);
     }
   }
-
-  const append = (phrase: string) => setNote((n) => (n.trim() ? `${n.trim()} ${phrase}` : phrase));
 
   return (
     <Dialog
@@ -66,8 +90,8 @@ function FeedbackDialogInner({ incident, open, onClose, onSaved }: { incident: I
         if (!o && !saving) onClose();
       }}
       dismissible={!saving}
-      icon={MessageSquareReply}
-      title="Phản hồi của GVCN"
+      icon={gvcn ? MessageSquareReply : Wrench}
+      title={gvcn ? "Phản hồi & khắc phục" : "Biện pháp xử lý / khắc phục"}
       description={`${fmtDate(incident.date)} · ${incident.errorCode} – ${incident.issue}`}
       footer={
         <>
@@ -76,8 +100,8 @@ function FeedbackDialogInner({ incident, open, onClose, onSaved }: { incident: I
               Hủy
             </Button>
           </DialogClose>
-          <Button type="submit" form={formId} icon={Send} loading={saving} disabled={!payload || tooLong}>
-            Gửi phản hồi
+          <Button type="submit" form={formId} icon={gvcn ? Send : Wrench} loading={saving} disabled={!payload || noteTooLong || fixTooLong}>
+            {gvcn ? "Gửi phản hồi" : "Lưu khắc phục"}
           </Button>
         </>
       }
@@ -89,27 +113,57 @@ function FeedbackDialogInner({ incident, open, onClose, onSaved }: { incident: I
             Lớp {incident.classCode} · {fmtNumber(incident.points)} điểm trừ · {incident.code}
           </span>
         </div>
+        {gvcn ? (
+          <>
+            <Field
+              label="Phản hồi của GVCN"
+              error={noteTooLong ? `Tối đa ${NOTE_MAX} ký tự.` : errors.note}
+              labelAside={
+                <span className="num">
+                  {note.length}/{NOTE_MAX}
+                </span>
+              }
+            >
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Ví dụ: Đã trao đổi với học sinh và phụ huynh, học sinh hứa sửa đổi."
+                rows={3}
+                maxLength={NOTE_MAX + 200}
+                autoFocus
+              />
+            </Field>
+            <div className="flex flex-wrap gap-2" aria-label="Câu phản hồi nhanh" role="group">
+              {PHRASES.map((p) => (
+                <Pill key={p} onClick={() => setNote((n) => appendPhrase(n, p))} tone="brand">
+                  {p}
+                </Pill>
+              ))}
+            </div>
+          </>
+        ) : null}
         <Field
-          label="Nội dung phản hồi"
-          error={tooLong ? `Tối đa ${NOTE_MAX} ký tự.` : error}
+          label="Biện pháp xử lý / khắc phục"
+          hint={gvcn ? "Không bắt buộc – biện pháp đã áp dụng với học sinh / lớp." : undefined}
+          error={fixTooLong ? `Tối đa ${REMEDIATION_MAX} ký tự.` : errors.remediation}
           labelAside={
             <span className="num">
-              {note.length}/{NOTE_MAX}
+              {remediation.length}/{REMEDIATION_MAX}
             </span>
           }
         >
           <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Ví dụ: Đã trao đổi với học sinh và phụ huynh, học sinh hứa sửa đổi."
-            rows={4}
-            maxLength={NOTE_MAX + 200}
-            autoFocus
+            value={remediation}
+            onChange={(e) => setRemediation(e.target.value)}
+            placeholder="Ví dụ: Học sinh viết bản cam kết; lớp lao động vệ sinh hành lang."
+            rows={gvcn ? 2 : 4}
+            maxLength={REMEDIATION_MAX + 200}
+            autoFocus={!gvcn}
           />
         </Field>
-        <div className="flex flex-wrap gap-2" aria-label="Câu phản hồi nhanh" role="group">
-          {PHRASES.map((p) => (
-            <Pill key={p} onClick={() => append(p)} tone="brand">
+        <div className="flex flex-wrap gap-2" aria-label="Biện pháp thường dùng" role="group">
+          {REMEDIATION_PHRASES.map((p) => (
+            <Pill key={p} onClick={() => setRemediation((t) => appendPhrase(t, p))}>
               {p}
             </Pill>
           ))}

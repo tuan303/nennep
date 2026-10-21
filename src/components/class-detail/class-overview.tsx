@@ -5,7 +5,8 @@ import { Card, EmptyState, RagBadge, Section, cn } from "@/components/ui";
 import { RagLegend } from "@/components/app/widgets";
 import { fmtNumber } from "@/lib/client/format";
 import { buildRanking } from "@/lib/engine";
-import type { LevelDataset, Period, RagStatus, RankingRow } from "@/lib/types";
+import type { GlobalFilters, LevelDataset, Period, RagStatus, RankingRow } from "@/lib/types";
+import { CumulativeCard } from "../dashboard/overview/cumulative-card";
 import { RankMedal } from "../ranking/rank-medal";
 
 const RAG_ACCENT: Record<RagStatus, string> = {
@@ -23,11 +24,14 @@ export interface ClassOverviewProps {
   /** Homeroom classes of the viewer (GVCN) in this level. */
   ownCodes: ReadonlySet<string>;
   onPick: (classCode: string) => void;
+  /** Global filters (cumulative penalty by grade honours Mảng / lỗi / nhóm lỗi / học sinh); omitted → period + grade only. */
+  filters?: GlobalFilters;
 }
 
 /** No class selected: every class of the level as a tile, per grade, in ranking order (click → class detail). */
-export function ClassOverview({ ds, period, grade, today, ownCodes, onPick }: ClassOverviewProps) {
+export function ClassOverview({ ds, period, grade, today, ownCodes, onPick, filters }: ClassOverviewProps) {
   const ranking = useMemo(() => buildRanking(ds, period, today, { grade }), [ds, period, today, grade]);
+  const scope = useMemo<GlobalFilters>(() => ({ ...(filters ?? {}), period, grade, classCode: undefined }), [filters, period, grade]);
 
   if (ranking.grades.length === 0) {
     return (
@@ -50,6 +54,8 @@ export function ClassOverview({ ds, period, grade, today, ownCodes, onPick }: Cl
         </p>
         <RagLegend config={ds.config} className="sm:items-end" />
       </div>
+
+      <CumulativeCard ds={ds} filters={scope} today={today} defaultMode="grade" />
 
       {ranking.grades.map((g) => (
         <Section key={g.grade} icon={Layers} title={`Khối ${g.grade}`} description={`${fmtNumber(g.rows.length)} lớp · sắp xếp theo hạng thi đua`}>

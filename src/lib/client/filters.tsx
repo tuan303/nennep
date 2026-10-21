@@ -1,13 +1,14 @@
 "use client";
 /**
- * Global filters, synced with the URL (?mode=&key=&grade=&class=&cat=&err=) – hook only, no provider needed.
+ * Global filters, synced with the URL (?mode=&key=&grade=&class=&cat=&err=&group=&student=) – hook only, no provider needed.
  *
  * IMPORTANT: `useFilters()` uses `useSearchParams()`, so every component calling it must be rendered inside a
  * <Suspense> boundary (Next.js App Router requirement), and inside <DataProvider>.
  *
  * - Default period (no `mode` in the URL) = engine `defaultPeriod(weeks, todayVN())` and keeps following "today".
- * - Values are validated against the selected level's dataset (unknown class/error codes are ignored).
- * - Changing level removes grade/class/err from the URL. `resetFilters()` keeps the period mode.
+ * - Values are validated against the selected level's dataset (unknown class/error codes, groups and Mã HS are ignored;
+ *   GVCN datasets only hold own-class students, so a GVCN can only filter on those).
+ * - Changing level removes grade/class/err/group/student from the URL. `resetFilters()` keeps the period mode.
  * - Combine changes into ONE `setFilters({...})` call (each call issues a router.replace). Spreading the current
  *   filters is fine: consistency rules only react to fields whose value changes.
  */
@@ -33,7 +34,7 @@ import {
 import { useToday } from "./hooks";
 import { useSession } from "./session";
 
-export type { FilterOptions, FilterPatch, GradeOption, PeriodOptionSets } from "./filters-core";
+export type { FilterOptions, FilterPatch, GradeOption, PeriodOptionSets, StudentFilterOption } from "./filters-core";
 export type { PeriodOption } from "@/lib/engine/period";
 export { activeFilterCount, FILTER_PARAMS } from "./filters-core";
 
@@ -41,7 +42,7 @@ export interface UseFiltersResult {
   filters: GlobalFilters;
   /** Merge a patch (pass `undefined` to clear a field) and write it to the URL (router.replace, no scroll). */
   setFilters: (patch: FilterPatch) => void;
-  /** Clear grade/class/category/error; keep the period mode (key → current option of that mode). */
+  /** Clear grade/class/category/error/group/student; keep the period mode (key → current option of that mode). */
   resetFilters: () => void;
   options: FilterOptions;
   /** Engine default period for today. */
@@ -78,8 +79,9 @@ export function useFilters(): UseFiltersResult {
   );
   const filters = useMemo(() => resolveFilters(raw, ctx), [raw, ctx]);
   const options = useMemo(
-    () => buildFilterOptions({ levelId, dataset, periods, grade: filters.grade, category: filters.category }),
-    [levelId, dataset, periods, filters.grade, filters.category],
+    () =>
+      buildFilterOptions({ levelId, dataset, periods, grade: filters.grade, classCode: filters.classCode, category: filters.category, group: filters.group }),
+    [levelId, dataset, periods, filters.grade, filters.classCode, filters.category, filters.group],
   );
 
   const replace = useCallback(
@@ -107,7 +109,7 @@ export function useFilters(): UseFiltersResult {
     setFilters(patch);
   }, [filters, raw.mode, setFilters]);
 
-  // Level switch by the user → drop level-scoped params (grade / class / error).
+  // Level switch by the user → drop level-scoped params (grade / class / error / group / student).
   // Not on the initial level resolution after sign-in (shared links keep their filters).
   const prevLevel = useRef<LevelId | undefined>(undefined);
   useEffect(() => {

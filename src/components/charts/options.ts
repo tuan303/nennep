@@ -15,6 +15,11 @@ export interface ChartSeries {
   color?: string;
   /** Series with the same stack id are stacked. */
   stack?: string;
+  /**
+   * Bar charts only: colour per data point (e.g. the selected bar in full colour, the others faded). Missing entries
+   * keep the series colour.
+   */
+  colors?: ReadonlyArray<string | null | undefined>;
 }
 
 export function escapeHtml(s: string): string {
@@ -67,10 +72,16 @@ export function buildBarOption({ categories, series, horizontal, valueFormatter 
 
   const barSeries: BarSeriesOption[] = series.map((s, i) => {
     const roundEnd = lastOfStack.get(s.stack ?? `__${i}`) === i;
+    const data = s.colors
+      ? s.data.map((v, j) => {
+          const c = s.colors?.[j];
+          return c ? { value: v, itemStyle: { color: c } } : v;
+        })
+      : s.data;
     return {
       type: "bar",
       name: s.name,
-      data: s.data,
+      data,
       stack: s.stack,
       barMaxWidth: 24,
       barGap: "20%",

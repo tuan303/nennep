@@ -6,8 +6,11 @@ import { gvcnFeedback } from "@/lib/server/incidents";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** GVCN feedback (note and/or status) on an incident of their own class; Admin may also answer. */
-export const POST = apiHandler<{ id: string }>({ permission: "incident.gvcnFeedback" }, async ({ req, user, ip, params }): Promise<Incident> => {
+/**
+ * GVCN feedback on an incident of their own class (note, status, remediation); ADMIN may answer any class of its
+ * levels; `incident.remediate` (EDITOR) may set the remediation and the status, never the GVCN note.
+ */
+export const POST = apiHandler<{ id: string }>({ anyPermission: ["incident.gvcnFeedback", "incident.remediate"] }, async ({ req, user, ip, params }): Promise<Incident> => {
   const input = await parseBody(req, GvcnFeedbackSchema);
   return gvcnFeedback({ user, ip }, params.id, input);
 });

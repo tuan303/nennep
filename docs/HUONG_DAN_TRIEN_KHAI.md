@@ -123,6 +123,28 @@ Sau đó đăng nhập phần mềm và tạo các tài khoản khác tại **C�
 2. Triển khai lại quy tắc bảo mật: `npx firebase deploy --only firestore:rules,firestore:indexes …` (mục 1).
 3. Trên Vercel: để trống `BOOTSTRAP_ADMIN_EMAILS` (mục 2); kiểm tra Firebase Auth đã tắt tự đăng ký (mục 1).
 
+### Bản v2 (13 yêu cầu hiển thị – REQ_V2)
+
+**Không cần chuyển đổi dữ liệu, không có bước thủ công bắt buộc.** Mọi trường mới đều là tùy chọn; dữ liệu cũ vẫn hợp lệ
+nguyên trạng; phiên bản trình duyệt cũ bỏ qua các trường mới. Quy tắc bảo mật Firestore và chỉ mục **không đổi**.
+
+- **Đợt kiểm tra** (Nhập liệu → Đợt kiểm tra): mã `DKT-yyyymmdd-NNN`, Quản trị và Cán bộ nền nếp ghi/sửa/xóa (Cán bộ nền
+  nếp: đợt của mình trong 24 giờ). Bản tổng hợp theo tháng được tạo ở lần ghi đầu tiên; *Tính lại dữ liệu tổng hợp* cũng
+  dựng lại chúng. Đợt kiểm tra **không** tính điểm, không nằm trong file Excel nhập/xuất và không bị *Xóa dữ liệu thử nghiệm*.
+- **Điểm thưởng**: mức điểm mới là số nguyên **1–5** kèm **lý do ≥ 5 ký tự**. Điểm thưởng cũ ngoài thang (ví dụ 10 điểm)
+  vẫn được giữ và vẫn sửa được các nội dung khác; chỉ khi đổi mức điểm mới phải chọn 1–5. File Excel có điểm ngoài thang vẫn
+  nhập được (cảnh báo “Mức điểm cộng ngoài thang 1–5”).
+- **GVCN đề xuất điểm thưởng** cho lớp mình: luôn ở trạng thái “Mới ghi nhận”, được đánh dấu “GVCN đề xuất”; chỉ được tính
+  vào thi đua sau khi Quản trị chuyển sang trạng thái được tính (Cài đặt → Trạng thái điểm thưởng được tính).
+- **Biện pháp xử lý / khắc phục** của sự việc: GVCN (lớp mình), Cán bộ nền nếp và Quản trị ghi được; GVCN lớp khác không thấy.
+  Sự việc đã có biện pháp khắc phục được coi là “đã cập nhật trong phần mềm” khi nhập lại workbook (giữ bản trong phần mềm,
+  trừ khi chọn *Ghi đè thay đổi trong phần mềm* – khi đó biện pháp khắc phục vẫn được giữ).
+- **Cảnh báo sớm**: Cài đặt → Cảnh báo sớm (từng cấp). Chưa lưu thì phần mềm dùng ngưỡng mặc định (tăng lỗi ≥ 50 % và
+  ≥ 6 điểm so với 4 tuần trước; lỗi lặp lại 3 tuần liên tiếp; sự việc nghiêm trọng = Nhóm 3, Nhóm 4 **hoặc** mức trừ ≥ 10
+  điểm – nên một số lỗi Nhóm 2 mức 10 điểm cũng được báo; đặt mức trừ tối thiểu = 0 để chỉ xét theo nhóm).
+- **“Không trùng”** (Dữ liệu & rà soát → Có thể trùng) cũng được coi là “đã cập nhật trong phần mềm” khi nhập lại workbook.
+- Khuyến nghị (không bắt buộc): sau khi triển khai, Cài đặt → Bảo trì → **Tính lại dữ liệu tổng hợp** cho từng cấp để kiểm tra.
+
 ## 7. Chạy thử trên máy (không cần Firebase thật)
 
 ```bash

@@ -29,7 +29,7 @@ const incident = (date: string, over: Record<string, unknown> = {}) =>
     body: { levelId: "THCS", date, classCode: "7A01", errorCode: "L02", scope: "Tập thể", ...over },
   });
 const reward = (date: string, levelId = "THCS", classCode = "7A01") =>
-  callRoute<Reward & ApiErrorBody>(rewardPOST, { method: "POST", url: "/api/rewards", token: admin, body: { levelId, date, classCode, points: 7, reason: "Lớp sạch đẹp" } });
+  callRoute<Reward & ApiErrorBody>(rewardPOST, { method: "POST", url: "/api/rewards", token: admin, body: { levelId, date, classCode, points: 4, reason: "Lớp sạch đẹp" } });
 const dataset = async (level = "THCS") => (await callRoute<LevelDataset>(datasetGET, { url: `/api/dataset?level=${level}`, token: admin })).body;
 
 describe("calendar rules", () => {

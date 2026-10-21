@@ -7,7 +7,8 @@ import { fmtDate, fmtDateTime, fmtNumber } from "@/lib/client/format";
 import { useSession } from "@/lib/client/session";
 import { formatWeekLabel, weekdayLabelVN } from "@/lib/engine/dates";
 import type { LevelDataset, Reward, RewardStatus } from "@/lib/types";
-import { canDeleteReward, canEditReward, quickStatusActions } from "./lib/reward-list";
+import { canDeleteReward, canEditReward, isProposedReward, quickStatusActions } from "./lib/reward-list";
+import { ProposedBadge } from "./reward-list-card";
 
 export interface RewardDetailSheetProps {
   ds: LevelDataset;
@@ -83,7 +84,10 @@ export function RewardDetailSheet({ ds, reward, busy, onClose, onEdit, onDelete,
               <span className="text-[32px] font-bold leading-none tracking-tight text-ok-strong">+{fmtNumber(shown.points)}</span>
               <span className="text-[13px] font-medium text-slate-500">điểm thưởng</span>
             </p>
-            <StatusBadge status={shown.status} />
+            <span className="flex flex-wrap items-center gap-1.5">
+              {isProposedReward(shown) ? <ProposedBadge size="md" /> : null}
+              <StatusBadge status={shown.status} />
+            </span>
           </div>
           <p className={counted ? "flex items-center gap-1.5 text-[13px] font-medium text-ok-strong" : "flex items-center gap-1.5 text-[13px] text-slate-600"}>
             {counted ? <CircleCheck aria-hidden className="size-4" strokeWidth={2.5} /> : <Minus aria-hidden className="size-4" strokeWidth={2.5} />}

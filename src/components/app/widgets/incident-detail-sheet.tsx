@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, Pencil, RotateCcw, Trash, TriangleAlert } from "lucide-react";
+import { ClipboardList, CopyCheck, Pencil, RotateCcw, Trash, TriangleAlert } from "lucide-react";
 import { Button, ConfirmDialog, DialogClose, Field, Sheet, Textarea, buttonClasses, toast } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import { useDataset } from "@/lib/client/data";
@@ -12,17 +12,20 @@ import type { Incident, LevelDataset } from "@/lib/types";
 import { EvidenceGallery } from "./evidence-gallery";
 import { DetailSection, IncidentInfo, IncidentMeta, IncidentStudents, IncidentSummary, RedactedNotice } from "./incident-detail-body";
 import { FeedbackSection } from "./incident-feedback";
+import { RemediationSection } from "./incident-remediation";
 import { useNow, useRetained } from "./hooks";
 import {
   canDeleteIncident,
   canEditIncident,
   canGiveFeedback,
+  canRemediate,
   canRestoreIncident,
   editWindowRemainingMs,
   formatRemaining,
   isIncidentRedacted,
   isTimeLimitedEdit,
 } from "./lib/incident-access";
+import { notDuplicateCodes } from "./lib/remediation";
 
 export interface IncidentDetailSheetProps {
   ds: LevelDataset;
@@ -33,11 +36,13 @@ export interface IncidentDetailSheetProps {
   onChanged?: () => void;
   /** Makes named students clickable (e.g. open the StudentHistorySheet). */
   onOpenStudent?: (studentId: string) => void;
+  /** Prefills the reason of "Xóa" (e.g. "Trùng với NN-…" from the duplicate review). */
+  suggestedDeleteReason?: string;
 }
 
 /** Latest-known version of a record: max of its change timestamps. */
 function stamp(i: Incident): string {
-  return [i.createdAt, i.updatedAt ?? "", i.gvcnNoteAt ?? "", i.deletedAt ?? ""].reduce((a, b) => (b > a ? b : a), "");
+  return [i.createdAt, i.updatedAt ?? "", i.gvcnNoteAt ?? "", i.remediationAt ?? "", i.deletedAt ?? ""].reduce((a, b) => (b > a ? b : a), "");
 }
 
 /** Edit link target of the Nhập liệu screen. */
@@ -47,9 +52,10 @@ export function incidentEditHref(id: string): string {
 
 /**
  * Full detail of one incident with permission-aware actions: edit (ADMIN, or own ≤ 24h), delete with reason (ADMIN),
- * restore (ADMIN, soft-deleted records) and GVCN feedback (GVCN of the class or ADMIN).
+ * restore (ADMIN, soft-deleted records), GVCN feedback (GVCN of the class or ADMIN) and the biện pháp khắc phục
+ * (GVCN of the class, ADMIN / EDITOR with incident.remediate – see canRemediate).
  */
-export function IncidentDetailSheet({ ds, incident, onClose, onChanged, onOpenStudent }: IncidentDetailSheetProps) {
+export function IncidentDetailSheet({ ds, incident, onClose, onChanged, onOpenStudent, suggestedDeleteReason }: IncidentDetailSheetProps) {
   const base = useRetained(incident);
   const [fresh, setFresh] = useState<Incident | null>(null);
   const shown = base && fresh && fresh.id === base.id && stamp(fresh) >= stamp(base) ? fresh : base;
@@ -75,6 +81,8 @@ export function IncidentDetailSheet({ ds, incident, onClose, onChanged, onOpenSt
   const canDelete = canDeleteIncident(profile, shown);
   const canRestore = canRestoreIncident(profile, shown);
   const canFeedback = !redacted && canGiveFeedback(profile, shown);
+  const canFix = canRemediate(profile, shown, { redacted });
+  const reviewedCodes = notDuplicateCodes(shown, ds.incidents);
   const remaining = editWindowRemainingMs(shown, now);
   const editHint = canEdit && isTimeLimitedEdit(profile) ? `Thầy/cô ${formatRemaining(remaining)} để sửa sự việc này.` : undefined;
 
@@ -118,7 +126,15 @@ export function IncidentDetailSheet({ ds, incident, onClose, onChanged, onOpenSt
         footer={
           <div className="flex w-full items-center gap-2">
             {canDelete ? (
-              <Button variant="ghost" icon={Trash} className="shrink-0 px-3 text-bad-strong hover:bg-bad-soft hover:text-bad-strong" onClick={() => setDeleteOpen(true)}>
+              <Button
+                variant="ghost"
+                icon={Trash}
+                className="shrink-0 px-3 text-bad-strong hover:bg-bad-soft hover:text-bad-strong"
+                onClick={() => {
+                  setReason(suggestedDeleteReason ?? "");
+                  setDeleteOpen(true);
+                }}
+              >
                 <span className="max-sm:sr-only">Xóa</span>
               </Button>
             ) : null}
@@ -181,8 +197,21 @@ export function IncidentDetailSheet({ ds, incident, onClose, onChanged, onOpenSt
                 </DetailSection>
               ) : null}
 
+              {reviewedCodes.length > 0 ? (
+                <p className="flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] leading-5 text-slate-700 ring-1 ring-inset ring-border">
+                  <CopyCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-ok-strong" strokeWidth={2.25} />
+                  <span>
+                    Đã rà soát: <strong className="font-semibold">không trùng</strong> với <span className="num">{reviewedCodes.join(", ")}</span>.
+                  </span>
+                </p>
+              ) : null}
+
               <DetailSection title="Phản hồi của GVCN">
                 <FeedbackSection key={`${shown.id}|${stamp(shown)}`} incident={shown} canEdit={canFeedback} onSaved={(u) => afterMutation(u)} />
+              </DetailSection>
+
+              <DetailSection title="Xử lý / khắc phục">
+                <RemediationSection key={`fix|${shown.id}|${stamp(shown)}`} incident={shown} canEdit={canFix} onSaved={(u) => afterMutation(u)} />
               </DetailSection>
 
               <DetailSection

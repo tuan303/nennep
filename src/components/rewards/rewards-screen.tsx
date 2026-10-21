@@ -9,7 +9,7 @@ import { useLevel } from "@/lib/client/data";
 import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
 import { LEVELS } from "@/lib/constants";
-import { rewardDrafts } from "./lib/reward-form";
+import { rewardDrafts, rewardModeOf } from "./lib/reward-form";
 import { RewardsWorkspace } from "./rewards-workspace";
 
 /** "/diem-thuong" (SCR-08): record rewards and run the verification workflow (FR-RWD-001/002). */
@@ -38,7 +38,11 @@ export function RewardsScreen() {
         icon={Award}
         eyebrow={LEVELS[levelId].short}
         title="Điểm thưởng"
-        description="Ghi nhận và xác minh điểm thưởng cho tập thể lớp."
+        description={
+          rewardModeOf(can) === "propose"
+            ? "Đề xuất điểm thưởng cho lớp chủ nhiệm – nhà trường xác nhận trước khi cộng vào điểm thi đua."
+            : "Ghi nhận và xác minh điểm thưởng cho tập thể lớp."
+        }
         actions={
           can("incident.create") ? (
             <Link href="/nhap-lieu" className={buttonClasses({ variant: "secondary", size: "sm" })}>

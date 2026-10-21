@@ -1,6 +1,6 @@
 /**
- * LevelDataset = `__ref` + `__stu` + `__inc__{week}` for every calendar week + the reward digests of the calendar
- * months (one getAll), then filtered per viewer (GVCN redaction, ARCHITECTURE §2).
+ * LevelDataset = `__ref` + `__stu` + `__inc__{week}` for every calendar week + the reward and inspection digests of
+ * the calendar months (one getAll), then filtered per viewer (GVCN redaction, ARCHITECTURE §2).
  * Only records of the calendar weeks are included – incidents AND rewards – so records of another school year never
  * count in this year's rankings (the canonical docs keep them).
  * The unredacted dataset is memoised per (project, level, version) for DATASET_CACHE_TTL_MS: every write bumps
@@ -8,13 +8,14 @@
  * cost Firestore reads once per server instance instead of once per tab. Concurrent builds share one promise.
  * Callers must treat the returned dataset as read-only.
  */
-import { canSeeClassDetail } from "../constants";
+import { canSeeClassDetail, hasPermission } from "../constants";
 import { COL } from "../firestore-paths";
-import type { DataIssue, Incident, LevelDataset, LevelId, Reward, Student, StudentLite, UserProfile } from "../types";
+import type { DataIssue, Incident, Inspection, LevelDataset, LevelId, Reward, Student, StudentLite, UserProfile } from "../types";
 import { calendarWeekSet } from "./calendar";
 import {
   byDateThenCode,
   incidentDigestRef,
+  inspectionMonthDigestRef,
   rewardBucketOf,
   rewardDigestRef,
   rewardMonthDigestRef,
@@ -46,9 +47,17 @@ async function loadLevelDataset(levelId: LevelId, version: number): Promise<Leve
   const months = [...new Set(ref.weeks.map((w) => rewardBucketOf(w.weekStart)))];
   const weekRefs = ref.weeks.map((w) => incidentDigestRef(levelId, w.weekStart));
   const monthRefs = months.map((m) => rewardMonthDigestRef(levelId, m));
-  const [stuSnap, legacyRewSnap, ...rest] = await db().getAll(studentDigestRef(levelId), rewardDigestRef(levelId), ...weekRefs, ...monthRefs);
+  const insRefs = months.map((m) => inspectionMonthDigestRef(levelId, m));
+  const [stuSnap, legacyRewSnap, ...rest] = await db().getAll(
+    studentDigestRef(levelId),
+    rewardDigestRef(levelId),
+    ...weekRefs,
+    ...monthRefs,
+    ...insRefs,
+  );
   const weekSnaps = rest.slice(0, weekRefs.length);
-  const monthSnaps = rest.slice(weekRefs.length);
+  const monthSnaps = rest.slice(weekRefs.length, weekRefs.length + monthRefs.length);
+  const insSnaps = rest.slice(weekRefs.length + monthRefs.length);
 
   let students = itemsOf<StudentLite>(stuSnap.data());
   if (!students) {
@@ -72,6 +81,12 @@ async function loadLevelDataset(levelId: LevelId, version: number): Promise<Leve
   for (const s of weekSnaps) incidents.push(...(itemsOf<Incident>(s.data()) ?? []));
   incidents.sort(byDateThenCode);
 
+  // Inspection rounds: monthly digests only (created by the first write / a rebuild; no canonical fallback).
+  const inspections = insSnaps
+    .flatMap((s) => itemsOf<Inspection>(s.data()) ?? [])
+    .filter((x) => weekSet.has(x.week))
+    .sort(byDateThenCode);
+
   return {
     levelId,
     version,
@@ -83,6 +98,7 @@ async function loadLevelDataset(levelId: LevelId, version: number): Promise<Leve
     students,
     incidents,
     rewards,
+    inspections,
     redacted: false,
   };
 }
@@ -112,6 +128,9 @@ export function redactIncident(i: Incident): Incident {
     gvcnNoteBy: _noteBy,
     gvcnNoteAt: _noteAt,
     reporter: _reporter,
+    remediation: _remediation,
+    remediationAt: _remediationAt,
+    remediationBy: _remediationBy,
     ...rest
   } = i;
   return {
@@ -129,6 +148,12 @@ export function redactReward(r: Reward): Reward {
   return { ...rest, evidenceUrls: [], photoIds: [] };
 }
 
+/** Inspection round for viewers without `view.allClassesDetail`: everything except the free-text note. */
+export function redactInspection(x: Inspection): Inspection {
+  const { note: _note, ...rest } = x;
+  return rest;
+}
+
 /** Ids of students named in incidents of classes the viewer may see in detail. */
 export function referencedStudentIds(incidents: readonly Incident[], visible: (classCode: string) => boolean): Set<string> {
   const ids = new Set<string>();
@@ -140,18 +165,21 @@ export function referencedStudentIds(incidents: readonly Incident[], visible: (c
  * Filter a dataset for the viewer: users without `view.allClassesDetail` (GVCN) receive only the students of their
  * own classes – those currently studying there, plus those named in this school year's incidents of those classes
  * (a class code is reused every year: last year's graduates of "5A1" are not the new GVCN's students) – and other
- * classes' incidents/rewards are redacted (`redacted: true`).
+ * classes' incidents/rewards are redacted (`redacted: true`). Inspection rounds lose their `note` for viewers without
+ * `view.allClassesDetail`.
  */
 export function redactForGvcn(ds: LevelDataset, profile: UserProfile): LevelDataset {
   const fullAccess = ds.classes.every((c) => canSeeClassDetail(profile, ds.levelId, c.code)) && profile.role !== "GVCN";
   if (fullAccess) return { ...ds, redacted: false };
   const visible = (classCode: string) => canSeeClassDetail(profile, ds.levelId, classCode);
   const referenced = referencedStudentIds(ds.incidents, visible);
+  const inspections = ds.inspections ?? [];
   return {
     ...ds,
     students: ds.students.filter((s) => visible(s.classCode) && (s.status === "ACTIVE" || referenced.has(s.id))),
     incidents: ds.incidents.map((i) => (visible(i.classCode) ? i : redactIncident(i))),
     rewards: ds.rewards.map((r) => (visible(r.classCode) ? r : redactReward(r))),
+    inspections: hasPermission(profile, "view.allClassesDetail") ? inspections : inspections.map(redactInspection),
     redacted: true,
   };
 }

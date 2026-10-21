@@ -115,15 +115,23 @@ export function incidentSubjects(inc: Pick<Incident, "students" | "unnamedCount"
   return names || unnamed || "Tập thể lớp";
 }
 
-const GVCN_COLUMNS: ReadonlyArray<TableColumn<Incident>> = [
+/** Mã HS of the named students ("26060101, 26060102"); empty for a collective / unnamed record. */
+export function incidentStudentIds(inc: Pick<Incident, "students">): string {
+  return inc.students.map((s) => s.id).join(", ");
+}
+
+/** Báo GVCN columns (REQ_V2 §7.4: "Mã HS" after Đối tượng, "Biện pháp khắc phục" after Phản hồi GVCN). */
+export const GVCN_COLUMNS: ReadonlyArray<TableColumn<Incident>> = [
   { header: "Ngày", width: 12, kind: "date", value: (i) => i.date },
   { header: "Mã sự việc", width: 19, value: (i) => i.code },
   { header: "Đối tượng", width: 30, kind: "wrap", value: incidentSubjects },
+  { header: "Mã HS", width: 14, kind: "wrap", value: incidentStudentIds },
   { header: "Lỗi", width: 44, kind: "wrap", value: (i) => catalogChoiceText({ ...i, code: i.errorCode }) },
   { header: "Điểm trừ", width: 9, kind: "number", value: (i) => i.points, look: () => ({ font: { bold: true } }) },
   { header: "Chi tiết", width: 36, kind: "wrap", value: (i) => i.detail },
   { header: "Trạng thái", width: 14, value: (i) => i.status },
   { header: "Phản hồi GVCN", width: 36, kind: "wrap", value: (i) => i.gvcnNote },
+  { header: "Biện pháp khắc phục", width: 36, kind: "wrap", value: (i) => i.remediation },
 ];
 
 /** Báo GVCN: incidents of one class in the period, oldest first. */

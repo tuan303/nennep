@@ -46,9 +46,11 @@ describe("Báo GVCN render", () => {
     expect(html).toContain("21/10/2026");
   });
 
-  it("renders the 6 KPIs with rank and badges", () => {
+  it("renders the KPIs (shared vocabulary) with rank and badges", () => {
     const html = renderToStaticMarkup(createElement(ReportKpis, { report, periodMode: "week" }));
-    for (const label of ["Sự việc", "HS liên quan", "Điểm trừ", "Điểm thưởng", "Điểm thi đua", "Hạng khối 6"]) expect(html).toContain(label);
+    for (const label of ["Sự việc", "Lượt vi phạm", "Số HS vi phạm", "HS liên quan", "Điểm trừ", "Điểm thưởng", "Điểm thi đua", "Hạng khối 6"]) expect(html).toContain(label);
+    // Tooltips come from KPI_TERMS (identical on every screen).
+    expect(html).toContain("mỗi em chỉ đếm 1 lần");
     expect(html).toContain(`${report.ranking?.rank}/5`);
     expect(html).toContain("so với tuần trước");
     expect(html).toContain("Chỉ tính điểm thưởng ở trạng thái “Đã xác nhận”.");
@@ -75,6 +77,22 @@ describe("Báo GVCN render", () => {
     expect(html).toContain("Đã mời phụ huynh");
     expect(html).toContain("Sửa phản hồi");
     expect(html).toContain("Phản hồi GVCN");
+    expect(html).toContain("Khắc phục");
+    expect(html).toMatch(/Cá nhân|Tập thể/);
+  });
+
+  it("shows the remediation column and the 'Khắc phục' row action for allowed users", () => {
+    const fixed = report.incidents.map((i, k) => (k === 0 ? { ...i, remediation: "Học sinh viết bản cam kết.", remediationBy: "Lê Thị C", remediationAt: "2026-10-21T03:05:00.000Z" } : i));
+    const props = { classCode: "6A03", periodText: "Tuần 12/10 – 18/10/2026", incidents: fixed, onOpen: noop, onFeedback: noop, canFeedback: () => false, isGvcn: false };
+    const editor = renderToStaticMarkup(createElement(IncidentTable, { ...props, onRemediate: noop, canRemediate: () => true }));
+    expect(editor).toContain("Học sinh viết bản cam kết.");
+    expect(editor).toContain("Lê Thị C · 21/10/2026 10:05");
+    expect(editor).toContain("Sửa khắc phục");
+    expect(editor).toMatch(/>Khắc phục<\/button>|Khắc phục<\/span><\/button>/);
+    const viewer = renderToStaticMarkup(createElement(IncidentTable, props));
+    expect(viewer).not.toContain("Sửa khắc phục");
+    expect(viewer).toContain("Chưa có");
+    expect(renderToStaticMarkup(createElement(IncidentCard, { incident: fixed[0], canFeedback: false }))).toContain("Khắc phục: Học sinh viết bản cam kết.");
   });
 
   it("renders the empty table state", () => {
@@ -138,9 +156,9 @@ describe("Báo GVCN on paper (UX-4) and ignored filters (UX-9)", () => {
     const html = renderToStaticMarkup(
       createElement(ReportClassBar, { ds, period: WEEK, classCode: "6A03", isGvcn: true, ownClasses: ["6A03"], ignoredFilters: labels, onClearIgnoredFilters: noop, onChange: noop }),
     );
-    expect(html).toContain("Bộ lọc Mảng / Lỗi không áp dụng cho Báo GVCN");
+    expect(html).toContain("Bộ lọc Mảng / Lỗi / Nhóm lỗi / Học sinh không áp dụng cho Báo GVCN");
     expect(html).toContain("Lỗi L01 – Đi học muộn");
-    expect(html).toContain("Bỏ lọc Mảng / Lỗi");
+    expect(html).toContain("Bỏ các bộ lọc này");
     const none = renderToStaticMarkup(createElement(ReportClassBar, { ds, period: WEEK, classCode: "6A03", isGvcn: true, ownClasses: ["6A03"], onChange: noop }));
     expect(none).not.toContain("không áp dụng cho Báo GVCN");
   });

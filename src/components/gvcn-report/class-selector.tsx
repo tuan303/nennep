@@ -15,9 +15,9 @@ export interface ReportClassBarProps {
   ownClasses: readonly string[];
   /** Class filter not allowed for this GVCN (shown as a note). */
   ignoredFilterClass?: string;
-  /** Active Mảng / Lỗi filters, which a class report does not apply (labels, see `ignoredReportFilters`). */
+  /** Active Mảng / Lỗi / Nhóm lỗi / Học sinh filters, which a class report does not apply (labels, see `ignoredReportFilters`). */
   ignoredFilters?: readonly string[];
-  /** Clears the Mảng / Lỗi filters. */
+  /** Clears those filters. */
   onClearIgnoredFilters?: () => void;
   onChange: (classCode: string) => void;
 }
@@ -79,12 +79,13 @@ export function ReportClassBar({
           <p className="flex items-start gap-1.5">
             <Info aria-hidden className="mt-0.5 size-3.5 shrink-0 text-brand-500" strokeWidth={2.25} />
             <span>
-              Bộ lọc Mảng / Lỗi không áp dụng cho Báo GVCN – báo cáo luôn gồm mọi lỗi của lớp trong kỳ (đang chọn: {ignoredFilters.join("; ")}).
+              Bộ lọc Mảng / Lỗi / Nhóm lỗi / Học sinh không áp dụng cho Báo GVCN – báo cáo luôn gồm mọi sự việc của lớp trong kỳ (đang chọn:{" "}
+              {ignoredFilters.join("; ")}).
             </span>
           </p>
           {onClearIgnoredFilters ? (
             <Button variant="ghost" size="sm" icon={FilterX} onClick={onClearIgnoredFilters} className="shrink-0 self-start sm:self-auto">
-              Bỏ lọc Mảng / Lỗi
+              Bỏ các bộ lọc này
             </Button>
           ) : null}
         </div>

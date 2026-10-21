@@ -21,12 +21,13 @@ import {
 import type { ClassInfo, GlobalFilters, Incident, LevelDataset } from "@/lib/types";
 import { previousPeriodNoun } from "../ranking/lib/ranking-view";
 import { ClassCharts } from "./class-charts";
+import { ClassCumulativeCard } from "./class-cumulative";
 import { ClassHeaderCard } from "./class-header-card";
 import { ClassKpis } from "./class-kpis";
 import { ClassStudents } from "./class-students";
 import { ClassTimeline } from "./class-timeline";
 import { ClassTopIssues } from "./class-top-issues";
-import { classSize, filterTimelineDays, scoreChartData } from "./lib/class-view";
+import { classScope, classSize, filterTimelineDays, issueFilterText, scoreChartData } from "./lib/class-view";
 
 export interface ClassDetailProps {
   ds: LevelDataset;
@@ -43,10 +44,14 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
   const canSee = canSeeClass(ds.levelId, cls.code);
   const hidden = ds.redacted && !canSee;
   const own = isGvcnOfClass(profile, ds.levelId, cls.code);
-  const { period, category, errorCode } = filters;
+  const { period, category, errorCode, group, studentId } = filters;
   const code = cls.code;
 
-  const scope = useMemo<GlobalFilters>(() => ({ period, classCode: code, category, errorCode }), [period, code, category, errorCode]);
+  // Every incident filter of the page (Mảng, lỗi, nhóm lỗi, học sinh) narrows the class figures (REQ_V2 §6.1).
+  const scope = useMemo<GlobalFilters>(
+    () => classScope({ period, category, errorCode, group, studentId }, code),
+    [period, code, category, errorCode, group, studentId],
+  );
   const prev = useMemo(() => previousPeriod(period, ds.weeks, ds.config.semesters), [period, ds.weeks, ds.config.semesters]);
   const previousNoun = prev ? previousPeriodNoun(period.mode) : "";
 
@@ -67,13 +72,18 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
   const incidents = useMemo(() => filterIncidents(ds, scope), [ds, scope]);
   const issues = useMemo(() => topIssues(incidents, Number.POSITIVE_INFINITY), [incidents]);
   const categories = useMemo(() => categoryBreakdown(incidents), [incidents]);
-  const days = useMemo(() => filterTimelineDays(classTimeline(ds, code, period), { category, errorCode }), [ds, code, period, category, errorCode]);
+  const days = useMemo(
+    () => filterTimelineDays(classTimeline(ds, code, period), { category, errorCode, group, studentId }),
+    [ds, code, period, category, errorCode, group, studentId],
+  );
   const students = useMemo(() => (hidden ? [] : studentStats(ds, scope, today)), [ds, scope, today, hidden]);
   const size = useMemo(() => classSize(ds, cls, canSee), [ds, cls, canSee]);
 
   const [overlay, setOverlay] = useState<Overlay>(null);
   const periodText = periodLabel(period, ds.config.semesters);
-  const issueFilter = !!category || !!errorCode;
+  const studentName = studentId ? ds.students.find((s) => s.id === studentId)?.name : undefined;
+  const filterText = issueFilterText({ category, errorCode, group, studentId }, studentName);
+  const issueFilter = !!filterText;
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
@@ -93,8 +103,8 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
         <p className="flex items-start gap-2 rounded-xl bg-brand-50 px-3.5 py-2.5 text-[13px] text-brand-800 ring-1 ring-inset ring-brand-200">
           <Filter aria-hidden className="mt-0.5 size-4 shrink-0" />
           <span>
-            Đang lọc theo {[category ? `mảng “${category}”` : "", errorCode ? `lỗi ${errorCode}` : ""].filter(Boolean).join(" và ")}: các chỉ số sự
-            việc, biểu đồ mảng và dòng thời gian chỉ tính phần được lọc; điểm thi đua và thứ hạng vẫn tính mọi lỗi.
+            Đang lọc theo {filterText}: các chỉ số sự việc, biểu đồ mảng và dòng thời gian chỉ tính phần được lọc; điểm thi đua và thứ hạng
+            vẫn tính mọi lỗi.
           </span>
         </p>
       ) : null}
@@ -111,6 +121,8 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
       />
 
       <ClassCharts classCode={code} chart={chart} baseScorePerWeek={ds.config.baseScorePerWeek} categories={categories} periodText={periodText} />
+
+      <ClassCumulativeCard ds={ds} cls={cls} filters={filters} today={today} />
 
       <div className="grid gap-4 sm:gap-5 xl:grid-cols-12">
         <ClassTimeline

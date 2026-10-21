@@ -39,7 +39,7 @@ export function assertCanEditRecord(user: SessionUser, record: { createdBy: stri
 
 /* -------------------------------- idempotency ------------------------------- */
 
-export type IdempotencyKind = "incident" | "reward" | "action";
+export type IdempotencyKind = "incident" | "reward" | "action" | "inspection";
 
 export interface IdempotencyDoc {
   kind: IdempotencyKind;

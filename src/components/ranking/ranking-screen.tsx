@@ -1,8 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { FileSpreadsheet, Printer, School, Trophy } from "lucide-react";
-import { Button, Card, EmptyState, PageHeader, Sheet, Switch, useIsMobile } from "@/components/ui";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChartSpline, ClipboardCheck, FileSpreadsheet, Printer, School, Trophy, type LucideIcon } from "lucide-react";
+import { Button, Card, EmptyState, PageHeader, SegmentedControl, Sheet, Switch, useIsMobile } from "@/components/ui";
 import { useFilters } from "@/lib/client/filters";
 import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
@@ -10,18 +10,34 @@ import { LEVELS } from "@/lib/constants";
 import { buildRanking, classScoreSeries, findRankingRow, periodLabel, previousPeriod } from "@/lib/engine";
 import type { LevelDataset } from "@/lib/types";
 import { ClassBreakdown } from "./class-breakdown";
+import { CoverageView } from "./coverage-view";
 import { GradeSection } from "./grade-section";
+import { RANKING_VIEWS, parseRankingView, rankingViewHref, type RankingView } from "./lib/movement-view";
 import { classDetailHref, periodIncludesCurrentWeek, previousPeriodNoun, rankDeltas, trendWindow } from "./lib/ranking-view";
+import { RankMovementView } from "./rank-movement-view";
 import { RankingExplainer } from "./ranking-explainer";
 import { useRankingExport } from "./use-ranking-export";
 
-/** SCR-03 Xếp hạng: per-grade competition ranking of the selected level and period. */
+const VIEW_ICON: Record<RankingView, LucideIcon> = { bang: Trophy, "bien-dong": ChartSpline, "bao-phu": ClipboardCheck };
+
+const VIEW_DESCRIPTION: Record<RankingView, string> = {
+  bang: "Bảng xếp hạng theo khối: điểm nền, điểm thưởng, điểm trừ, nhóm Top và mức cảnh báo của từng lớp.",
+  "bien-dong": "Thứ hạng của từng lớp trong khối qua các tuần tính thi đua: lớp nào đang lên, lớp nào đang xuống.",
+  "bao-phu": "Số đợt, số buổi kiểm tra nền nếp của từng lớp so với trung bình khối – để so sánh điểm trừ được công bằng.",
+};
+
+/** SCR-03 Xếp hạng: per-grade competition ranking of the selected level and period (+ REQ_V2 views). */
 export function RankingScreen({ ds }: { ds: LevelDataset }) {
   const { filters } = useFilters();
   const today = useToday();
   const { can } = useSession();
   const cards = useIsMobile();
-  const search = useSearchParams().toString();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
+  const pathname = usePathname() ?? "/xep-hang";
+  const router = useRouter();
+  const view = parseRankingView(searchParams.get("view"));
+  const setView = useCallback((v: RankingView) => router.replace(rankingViewHref(pathname, search, v), { scroll: false }), [router, pathname, search]);
   const { period, grade, classCode } = filters;
 
   const ranking = useMemo(() => buildRanking(ds, period, today, { highlightClass: classCode, grade }), [ds, period, today, classCode, grade]);
@@ -76,13 +92,13 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
         icon={Trophy}
         eyebrow={`${LEVELS[ds.levelId].short} · ${label}`}
         title="Xếp hạng thi đua"
-        description="Bảng xếp hạng theo khối: điểm nền, điểm thưởng, điểm trừ, nhóm Top và mức cảnh báo của từng lớp."
+        description={VIEW_DESCRIPTION[view]}
         actions={
           <>
             <Button variant="secondary" icon={Printer} onClick={() => window.print()}>
               In
             </Button>
-            {can("excel.export") ? (
+            {view === "bang" && can("excel.export") ? (
               <Button variant="secondary" icon={FileSpreadsheet} loading={exporting} disabled={totalClasses === 0} onClick={() => void exportExcel()}>
                 Xuất Excel
               </Button>
@@ -91,50 +107,82 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
         }
       />
 
-      <RankingExplainer
-        config={ds.config}
-        period={period}
-        countedWeeks={ranking.countedWeeks}
-        inProgress={periodIncludesCurrentWeek(period, ds.weeks, today)}
-        highlightClass={classCode}
-        issueFilterActive={!!filters.category || !!filters.errorCode}
-        quiet={totalClasses > 0 && quiet}
-      />
+      <div data-print-hide>
+        <SegmentedControl<RankingView>
+          ariaLabel="Chế độ xem xếp hạng"
+          options={RANKING_VIEWS.map((v) => ({
+            value: v.value,
+            icon: VIEW_ICON[v.value],
+            label: (
+              <>
+                <span className="sm:hidden">{v.short}</span>
+                <span className="max-sm:hidden">{v.label}</span>
+              </>
+            ),
+          }))}
+          value={view}
+          onChange={setView}
+          fullWidth={cards}
+          className="max-w-full"
+        />
+      </div>
 
-      {totalClasses === 0 ? (
-        <Card padding="none">
-          <EmptyState
-            icon={School}
-            title="Chưa có lớp để xếp hạng"
-            description="Cấp học này chưa có lớp đang hoạt động. Quản trị viên có thể thêm lớp trong Cài đặt → Lớp & GVCN."
+      {view === "bao-phu" ? (
+        <CoverageView ds={ds} filters={filters} today={today} canManage={can("inspection.manage")} detailHref={detailHref} />
+      ) : view === "bien-dong" ? (
+        totalClasses === 0 ? (
+          <NoClasses />
+        ) : (
+          <RankMovementView
+            ds={ds}
+            filters={filters}
+            today={today}
+            grades={ranking.grades.map((g) => g.grade)}
+            onOpenClass={(code) => router.push(detailHref(code))}
           />
-        </Card>
+        )
       ) : (
         <>
-          <Toolbar
-            grades={ranking.grades.map((g) => g.grade)}
-            compare={compare}
-            onCompare={setCompare}
-            canCompare={!!prev}
-            previousText={prev ? `So sánh ${previousNoun}` : "So sánh kỳ trước"}
+          <RankingExplainer
+            config={ds.config}
+            period={period}
+            countedWeeks={ranking.countedWeeks}
+            inProgress={periodIncludesCurrentWeek(period, ds.weeks, today)}
+            highlightClass={classCode}
+            issueFilterActive={!!filters.category || !!filters.errorCode || !!filters.group || !!filters.studentId}
+            quiet={totalClasses > 0 && quiet}
           />
-          {ranking.grades.map((g) => (
-            <GradeSection
-              key={g.grade}
-              ds={ds}
-              ranking={g}
-              period={period}
-              trends={trends}
-              deltas={deltas}
-              previousNoun={previousNoun}
-              cards={cards}
-              expanded={expanded}
-              onToggle={toggle}
-              onOpenSheet={(row) => setSheetCode(row.classCode)}
-              detailHref={detailHref}
-              highlightRef={setHighlightEl}
-            />
-          ))}
+
+          {totalClasses === 0 ? (
+            <NoClasses />
+          ) : (
+            <>
+              <Toolbar
+                grades={ranking.grades.map((g) => g.grade)}
+                compare={compare}
+                onCompare={setCompare}
+                canCompare={!!prev}
+                previousText={prev ? `So sánh ${previousNoun}` : "So sánh kỳ trước"}
+              />
+              {ranking.grades.map((g) => (
+                <GradeSection
+                  key={g.grade}
+                  ds={ds}
+                  ranking={g}
+                  period={period}
+                  trends={trends}
+                  deltas={deltas}
+                  previousNoun={previousNoun}
+                  cards={cards}
+                  expanded={expanded}
+                  onToggle={toggle}
+                  onOpenSheet={(row) => setSheetCode(row.classCode)}
+                  detailHref={detailHref}
+                  highlightRef={setHighlightEl}
+                />
+              ))}
+            </>
+          )}
         </>
       )}
 
@@ -148,6 +196,18 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
         {sheetRow ? <ClassBreakdown ds={ds} row={sheetRow} period={period} detailHref={detailHref(sheetRow.classCode)} /> : null}
       </Sheet>
     </div>
+  );
+}
+
+function NoClasses() {
+  return (
+    <Card padding="none">
+      <EmptyState
+        icon={School}
+        title="Chưa có lớp để xếp hạng"
+        description="Cấp học này chưa có lớp đang hoạt động. Quản trị viên có thể thêm lớp trong Cài đặt → Lớp & GVCN."
+      />
+    </Card>
   );
 }
 

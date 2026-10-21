@@ -5,6 +5,7 @@ import { Button, Card, DataTable, EmptyState, Pill, SearchInput, StatusBadge, ty
 import { REWARD_STATUSES } from "@/lib/constants";
 import { fmtDate, fmtNumber } from "@/lib/client/format";
 import type { LevelDataset, RewardStatus } from "@/lib/types";
+import { ProposedBadge } from "@/components/rewards/reward-list-card";
 import { SourceBadge } from "./incident-columns";
 import { CountedBadge, RewardDetailSheet } from "./reward-detail-sheet";
 import { filterRewardRows, rewardStatusCounts, rewardSummary, type RewardRow } from "./lib/records";
@@ -13,7 +14,16 @@ const COLUMNS: ReadonlyArray<DataTableColumn<RewardRow>> = [
   { key: "code", header: "Mã", cell: ({ reward: r }) => <span className="num whitespace-nowrap text-[13px] font-semibold text-brand-900">{r.code}</span>, sortValue: (x) => x.reward.code },
   { key: "date", header: "Ngày", cell: ({ reward: r }) => <span className="num whitespace-nowrap">{fmtDate(r.date)}</span>, sortValue: (x) => x.reward.date },
   { key: "class", header: "Lớp", cell: ({ reward: r }) => <span className="font-bold text-brand-900">{r.classCode}</span>, sortValue: (x) => x.reward.classCode },
-  { key: "reason", header: "Nội dung thưởng", cell: ({ reward: r }) => <span className="line-clamp-2 min-w-[220px] max-w-[380px]">{r.reason}</span> },
+  {
+    key: "reason",
+    header: "Lý do cộng điểm",
+    cell: ({ reward: r }) => (
+      <span className="flex min-w-[220px] max-w-[380px] flex-col items-start gap-0.5">
+        {r.proposed ? <ProposedBadge /> : null}
+        <span className="line-clamp-2">{r.reason}</span>
+      </span>
+    ),
+  },
   {
     key: "points",
     header: "Điểm",
@@ -44,6 +54,7 @@ function RewardCard({ row: { reward: r, counted } }: { row: RewardRow }) {
       <div className="flex flex-wrap items-center gap-1.5">
         <StatusBadge status={r.status} size="sm" />
         <CountedBadge counted={counted} />
+        {r.proposed ? <ProposedBadge /> : null}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ export type AppRouteId =
   | "ranking"
   | "classes"
   | "gvcn"
+  | "reports"
   | "students"
   | "entry"
   | "rewards"
@@ -92,6 +93,16 @@ export const APP_ROUTES: Record<AppRouteId, AppRoute> = {
     filters: true,
     levelSwitcher: true,
   },
+  reports: {
+    id: "reports",
+    href: "/bao-cao",
+    title: "Báo cáo tuần/tháng",
+    shortLabel: "Báo cáo",
+    description: "Báo cáo nền nếp theo tuần hoặc tháng gửi BGH, tổ khối hoặc GVCN: in, lưu PDF và xuất Excel chi tiết.",
+    permission: "view.dashboard",
+    filters: false,
+    levelSwitcher: true,
+  },
   students: {
     id: "students",
     href: "/hoc-sinh",
@@ -117,8 +128,9 @@ export const APP_ROUTES: Record<AppRouteId, AppRoute> = {
     href: "/diem-thuong",
     title: "Điểm thưởng",
     shortLabel: "Thưởng",
-    description: "Ghi nhận và xác minh điểm thưởng cho tập thể lớp.",
-    permission: "reward.create",
+    description: "Ghi nhận và xác minh điểm thưởng cho tập thể lớp; GVCN đề xuất điểm thưởng cho lớp chủ nhiệm.",
+    // REQ_V2 §5.3: GVCN hold reward.propose (proposals for own classes); ADMIN / EDITOR hold it too.
+    permission: "reward.propose",
     filters: false,
     levelSwitcher: true,
   },

@@ -4,7 +4,7 @@ import { Button, Field, Sheet } from "@/components/ui";
 import { useLevel } from "@/lib/client/data";
 import { useFilters } from "@/lib/client/filters";
 import { LEVELS, PERIOD_MODE_LABELS } from "@/lib/constants";
-import { CategoryField, ClassField, ErrorField, GradeField, PeriodField, PeriodModeControl } from "./filter-fields";
+import { CategoryField, ClassField, ErrorField, GradeField, GroupField, PeriodField, PeriodModeControl, StudentField } from "./filter-fields";
 import { useFilterSheet } from "./shell-context";
 
 /**
@@ -57,8 +57,14 @@ export function FilterSheet() {
           <Field label="Mảng">
             <CategoryField f={f} />
           </Field>
+          <Field label="Nhóm lỗi">
+            <GroupField f={f} />
+          </Field>
           <Field label="Lỗi">
             <ErrorField f={f} />
+          </Field>
+          <Field label="Học sinh" hint="Mã HS hoặc họ tên; danh sách theo khối/lớp đang lọc.">
+            <StudentField f={f} />
           </Field>
         </div>
       </div>

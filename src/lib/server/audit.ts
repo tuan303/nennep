@@ -4,6 +4,7 @@
  */
 import type { AuditAction, AuditLog, LevelId } from "../types";
 import { COL } from "../firestore-paths";
+import { canonicalJson } from "./admin/hash";
 import { db, nowIso } from "./firebase-admin";
 import type { SessionUser } from "./auth";
 import { setDoc, type WriteTarget } from "./write";
@@ -71,7 +72,7 @@ export async function writeAuditDirect(entry: AuditEntry): Promise<string> {
 
 /**
  * Field-level diff for UPDATE_* audit details: `{ field: { before, after } }` for every changed field
- * (deep comparison via JSON). Returns {} when nothing changed.
+ * (deep comparison via canonical JSON: object key order is ignored). Returns {} when nothing changed.
  */
 export function auditDiff<T extends object>(
   before: T,
@@ -82,7 +83,8 @@ export function auditDiff<T extends object>(
   for (const f of fields) {
     const b = before[f];
     const a = after[f];
-    if (JSON.stringify(b ?? null) !== JSON.stringify(a ?? null)) out[f] = { before: b ?? null, after: a ?? null };
+    // Key order never counts: Firestore returns stored maps with sorted keys, inputs keep the schema's order.
+    if (canonicalJson(b ?? null) !== canonicalJson(a ?? null)) out[f] = { before: b ?? null, after: a ?? null };
   }
   return out;
 }

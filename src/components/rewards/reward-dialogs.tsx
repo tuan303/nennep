@@ -8,7 +8,7 @@ import { useDataset } from "@/lib/client/data";
 import { fmtNumber } from "@/lib/client/format";
 import { useSession } from "@/lib/client/session";
 import type { LevelDataset, Reward } from "@/lib/types";
-import { rewardFormFromReward, toRewardUpdateInput, validateRewardForm, type RewardForm } from "./lib/reward-form";
+import { legacyPointsOf, rewardFormFromReward, toRewardUpdateInput, validateRewardForm, type RewardForm } from "./lib/reward-form";
 import { RewardFields } from "./reward-fields";
 
 export interface RewardEditDialogProps {
@@ -84,7 +84,15 @@ function EditBody({ ds, today, reward, onDone }: { ds: LevelDataset; today: stri
     >
       <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">Thông tin điểm thưởng</legend>
-        <RewardFields ds={ds} form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} today={today} canVerify={canVerify} onUploadsChange={setPhotoUploads} />
+        <RewardFields
+          ds={ds}
+          form={form}
+          onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+          today={today}
+          canVerify={canVerify}
+          legacyPoints={legacyPointsOf(reward.points)}
+          onUploadsChange={setPhotoUploads}
+        />
       </fieldset>
       {issues.length > 0 ? (
         <p className="flex items-start gap-1.5 text-[13px] text-warn-strong" aria-live="polite">

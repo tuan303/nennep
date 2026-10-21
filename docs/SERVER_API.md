@@ -13,9 +13,11 @@ Reference for everyone writing route handlers on top of the server core. Read `d
 - Throw `Errors.*` (Vietnamese messages). Never return error JSON by hand. `apiHandler` maps errors to status codes.
 - Optional fields are omitted, never `null` (`ignoreUndefinedProperties` is on). Use `omitEmpty`/`omitKeys` to drop `""`.
 - Timestamps are `nowIso()`. Calendar dates are `yyyy-mm-dd` from `engine/dates.ts` (`todayVN()`, `weekInfo()`…).
-- Records live in the school-week calendar: incidents/rewards are only recorded on dates whose Monday is a calendar
-  week (`calendar.ts`); the dataset only reads the digests of the calendar weeks/months.
-- Every incident/reward mutation increments `rev` (optimistic concurrency, see `assertBaseRev`).
+- Records live in the school-week calendar: incidents/rewards/inspections are only recorded on dates whose Monday is a
+  calendar week (`calendar.ts`); the dataset only reads the digests of the calendar weeks/months.
+- Every incident/reward/inspection mutation increments `rev` (optimistic concurrency, see `assertBaseRev`).
+- **Production holds real data (REQ_V2):** every model change is additive and optional, old documents stay valid without
+  migration, and every digest is rebuildable from canonical documents (`/api/admin/rebuild-digests`).
 
 ---
 
@@ -175,9 +177,9 @@ Anything else → 500 `INTERNAL` with a generic Vietnamese message, logged with 
 ### `ids.ts`
 | export | purpose |
 |---|---|
-| `nextCode(tx, prefix: "NN"\|"KT"\|"HD", levelId, date, collection): Promise<AllocatedCode>` | **Read phase.** Reads `counters/{prefix}_{level}_{yyyymmdd}` and probes `{level}_{code}` until a free id is found (skips legacy-imported ids). Returns `{ code, id, seq, counterRef }`. |
+| `nextCode(tx, prefix: "NN"\|"KT"\|"HD"\|"DKT", levelId, date, collection): Promise<AllocatedCode>` | **Read phase.** Reads `counters/{prefix}_{level}_{yyyymmdd}` and probes `{level}_{code}` until a free id is found (skips legacy-imported ids). Returns `{ code, id, seq, counterRef }`. |
 | `commitCode(tx, alloc)` | **Write phase.** Persists `{ seq }`. Required, or the next caller reuses the number. |
-| `formatCode(prefix, date, seq)` | `NN-20261021-0001`, `KT-…-0001`, `HD-…-001`. |
+| `formatCode(prefix, date, seq)` | `NN-20261021-0001`, `KT-…-0001`, `HD-…-001`, `DKT-…-001` (inspections, `collection = COL.inspections`). |
 
 Imports that write records in batches outside a transaction may set ids directly. `nextCode` later skips any existing id.
 Set the counter (`counters/…{ seq }`) after a bulk import if you want new codes to continue after the imported ones.
@@ -206,25 +208,27 @@ Anything that must hold across instances uses Firestore (e.g. the LOGIN_FAILED d
 | `loadIncidentDigests(reader, levelId, weeks: (string\|undefined)[]): IncidentDigestSet` | **Read phase.** Loads `__inc__{week}` docs; undefined values and duplicates are ignored. |
 | `IncidentDigestSet.upsert(incident)` / `.remove(id)` / `.items()` / `.write(tx)` | `upsert` puts the incident in its `incident.week` and removes it from the other loaded weeks (moving between weeks needs both weeks loaded). `write` only writes changed docs. (`BucketDigestSet<T>` is the generic version.) |
 | `loadRewardDigests(reader, levelId, weeks): RewardDigestSet` | **Read phase.** Monthly reward digests `__rew__{yyyy-mm}` (month of the reward's week) of the given weeks, plus the legacy `__rew` doc (1 read). `upsert/remove/items/write` like incidents; while the legacy single `__rew` doc exists the set reads/writes **only** it (nothing lost before the migration). Load before **and** after weeks when a reward moves. |
+| `loadInspectionDigests(reader, levelId, weeks): InspectionDigestSet` | **Read phase.** Monthly inspection digests `__ins__{yyyy-mm}` (month of the round's week, same buckets as rewards; no legacy doc). `upsert/remove/items/write` as `BucketDigestSet`; load before **and** after weeks when a round is re-dated. `inspectionMonthDigestRef(levelId, month)`. |
 | `loadStudentDigest(reader, levelId): DigestDraft<StudentLite>` | `__stu` (all statuses – the admin roster lists former students). To move a student between levels, load both levels. |
 | `class DigestDraft<T>`: `items`, `has(id)`, `get(id)`, `upsert(item)`, `remove(id)`, `replaceAll(items)`, `write(target, force?)`, `dirty`, `existed` | Sorted in memory (incidents/rewards by date then code; students by class, name, id). `write` throws a clear 500 **before writing** if the doc would exceed ~900 KB. |
 | `toStudentLite(student)`, `rewardBucketOf(week)` | `Student` → `StudentLite`; week → "yyyy-mm". |
 | `incidentDigestRef/rewardMonthDigestRef/rewardDigestRef (legacy)/studentDigestRef`, `byDateThenCode`, `byClassThenName`, `ItemsDigestDoc<T>`, `DigestKind` | Utilities. |
 | `rebuildIncidentDigests(levelId, { bump? })` | Groups non-deleted incidents by `week`, rewrites every week doc (size-split batches) and deletes stale week digests. |
 | `rebuildRewardDigest(levelId, { bump? })` | Monthly reward digests from canonical rewards; deletes stale monthly docs **and the legacy `__rew`** (= migration). `rebuildStudentDigest(levelId, { bump? })` for `__stu`. |
-| `rebuildAllDigests(levelId): Promise<RebuildResult>` | `__ref`, then `__inc__*`, rewards and `__stu` independently (`allSettled`: one oversized digest does not stop the others; the first error is rethrown), then one version bump. |
+| `rebuildInspectionDigests(levelId, { bump? })` | Monthly inspection digests from non-deleted canonical `inspections` (single-field `levelId` query); deletes stale `__ins__*` docs (existing `digests (levelId, kind)` index). |
+| `rebuildAllDigests(levelId): Promise<RebuildResult>` | `__ref`, then `__inc__*`, rewards, `__stu` and `__ins__*` independently (`allSettled`: one oversized digest does not stop the others; the first error is rethrown), then one version bump. `RebuildResult = { weeks, incidents, rewards, students, inspections }`. |
 
-Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ levelId, kind: "rew", month, items, updatedAt }`, `{ levelId, kind: "stu", items, updatedAt }`,
+Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ levelId, kind: "rew", month, items, updatedAt }`, `{ levelId, kind: "ins", month, items, updatedAt }`, `{ levelId, kind: "stu", items, updatedAt }`,
 `{ levelId, kind: "ref", config, classes, catalog, weeks, updatedAt }`. Rebuilds are not transactional: run them while the level is quiet.
 **After deploying the monthly reward digests, run Bảo trì → Tính lại dữ liệu tổng hợp once per level** (or any import/reset) to migrate `__rew`.
 
 ### `dataset.ts`
 | export | purpose |
 |---|---|
-| `buildLevelDataset(levelId, version?)` | `__ref` + one `getAll` of `__stu`, legacy `__rew`, `__inc__{week}` for every calendar week and `__rew__{month}` for every calendar month. Incidents **and rewards** outside the calendar weeks are not included (records of another school year never count). Missing digests fall back to a canonical query. **Memoised per (project, level, version) for 60 s with single-flight**: the result is shared and read-only. |
+| `buildLevelDataset(levelId, version?)` | `__ref` + one `getAll` of `__stu`, legacy `__rew`, `__inc__{week}` for every calendar week, `__rew__{month}` and `__ins__{month}` for every calendar month. `inspections` = rounds of the calendar weeks sorted by date then code, always an array (no canonical fallback: the digests are created by the first write / a rebuild). Incidents **and rewards** outside the calendar weeks are not included (records of another school year never count). Missing digests fall back to a canonical query. **Memoised per (project, level, version) for 60 s with single-flight**: the result is shared and read-only. |
 | `invalidateDatasetCache(levelId?)` | Tests / maintenance that write without a version bump. |
 | `redactForGvcn(ds, profile)` | Users without detail access to a class (GVCN) get only the students of their own classes that are ACTIVE or named in this school year's incidents of those classes (a class code is reused every year). Other classes' incidents keep class/error/points/date/counts and lose `students`, `detail`, `gvcnNote*`, `reporter`, `evidenceUrls`, `photoIds`, plus name-bearing issue messages. Other classes' rewards lose `note`, `reporter` and evidence. Sets `redacted: true` for GVCN. |
-| `redactIncident(i)`, `redactReward(r)`, `referencedStudentIds(incidents, visible)` | Single-record versions / helper. |
+| `redactIncident(i)`, `redactReward(r)`, `redactInspection(x)`, `referencedStudentIds(incidents, visible)` | Single-record versions / helper. `redactIncident` also strips `remediation`, `remediationAt`, `remediationBy` (REQ_V2); `redactInspection` strips `note` (applied to every round for viewers without `view.allClassesDetail`). |
 | `datasetEtag(version)` → `W/"<version>"`, `etagMatches(ifNoneMatch, version)` | ETag helpers (accept `W/"5"`, `"5"`, `5`, lists, `*`). |
 
 ### `calendar.ts`
@@ -232,7 +236,7 @@ Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ l
 |---|---|
 | `calendarProblem(date, weeks)` | Vietnamese message when a valid date's Monday is not a calendar week ("Ngày dd/mm/yyyy không thuộc lịch tuần của năm học…"), else undefined. Used by incident/reward create & re-date, imports. |
 | `assertRestorableWeek(week, weeks)` | 409 when restoring a record whose week left the calendar. |
-| `checkRemovedWeeks(reader, levelId, before, after, allow)` | Records (incident week digests + reward digests) of the weeks `after` drops; 409 with `details: { weeks, incidents, rewards }` unless `allow`. Returns them for the audit. |
+| `checkRemovedWeeks(reader, levelId, before, after, allow)` | Records (incident week digests + reward digests) of the weeks `after` drops; 409 with `details: { weeks, incidents, rewards }` unless `allow`. Returns them for the audit. Inspection rounds are not checked (not scored; they simply leave the dataset with their week). |
 | `calendarWeekSet(weeks)`, `CALENDAR_MSG` | Utilities. |
 
 ### `records.ts` (shared building blocks)
@@ -240,7 +244,7 @@ Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ l
 |---|---|
 | `interface ServiceCtx { user: SessionUser; ip?: string; today?: string }` | Passed from routes to services. `today` defaults to `todayVN()`. |
 | `canEditRecord(user, { createdBy, createdAt }, now?)`, `assertCanEditRecord(...)` | ADMIN (`record.editAny`) can edit anything. EDITOR can edit own records within `EDITOR_EDIT_WINDOW_HOURS`, otherwise 403 "Chỉ được sửa bản ghi của mình trong 24 giờ". |
-| `readIdempotency(tx, uid, clientRequestId?, kind)` / `writeIdempotency(tx, uid, clientRequestId?, kind, id)` / `idempotencyRef` | `idempotency/{uid}_{clientRequestId}` = `{ kind, id, createdAt }` (`kind`: incident, reward, action). |
+| `readIdempotency(tx, uid, clientRequestId?, kind)` / `writeIdempotency(tx, uid, clientRequestId?, kind, id)` / `idempotencyRef` | `idempotency/{uid}_{clientRequestId}` = `{ kind, id, createdAt }` (`kind`: incident, reward, action, inspection). |
 | `readStudentLites(reader, ids, levelId?)` | `Map<id, StudentLite & { levelId }>`. With `levelId`, students of other levels count as missing. |
 | `assertEvidenceIds(reader, levelId, photoIds)` | Every id must be an `evidence` doc of that level, else 400 (reads `levelId` only). |
 | `assertHttpUrls(urls)` | Evidence URLs must be `http(s)` (zod `.url()` also accepts `javascript:`), else 400. |
@@ -252,14 +256,46 @@ Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ l
 ### Domain services
 - `incidents.ts` / `rewards.ts` rules: dates must be in a calendar week (create; edits only when the date changes); every
   mutation sets `rev` (create 1, then +1); PATCH `baseRev` ≠ `rev` → 409 `INCIDENT_MSG.stale` / `REWARD_MSG.stale`; restore → 409
-  when the record's week left the calendar; `gvcnFeedback` with the same note and status writes nothing (no version bump); photos are linked.
+  when the record's week left the calendar; `gvcnFeedback` with the same note, status and remediation writes nothing (no version bump); photos are linked.
 - `incidents.ts`: `createIncident(ctx, input) → { incident, created }`, `updateIncident(ctx, id, patch)`, `softDeleteIncident(ctx, id, reason)`,
-  `restoreIncident(ctx, id)`, `gvcnFeedback(ctx, id, input)`, `getIncidentForViewer(user, id)`, `listDeletedIncidents(levelId, limit = 500)`,
-  `readIncident(reader, id)`, `incidentRef(id)`, `catalogFromSnapshot(incident)`, `INCIDENT_AUDIT_FIELDS`, `INCIDENT_MSG`,
-  types `IncidentCreateData`, `IncidentUpdateData`, `GvcnFeedbackData` (zod outputs).
+  `restoreIncident(ctx, id)`, `gvcnFeedback(ctx, id, input)`, `markNotDuplicate(ctx, id, { otherIds }) → Incident[]`, `getIncidentForViewer(user, id)`,
+  `listDeletedIncidents(levelId, limit = 500)`, `readIncident(reader, id)`, `incidentRef(id)`, `catalogFromSnapshot(incident)`, `INCIDENT_AUDIT_FIELDS`,
+  `INCIDENT_MSG`, types `IncidentCreateData`, `IncidentUpdateData`, `GvcnFeedbackData`, `NotDuplicateData` (zod outputs).
+  - **Create with `notDuplicateOf`** ("Không trùng, vẫn lưu"): every id is read in the transaction and must be an incident of the same level
+    (soft-deleted allowed), else 400 `Không tìm thấy sự việc để đánh dấu “không trùng”.`; stored sorted, unique, without the own id; omitted
+    when empty. PATCH never changes it (not in `IncidentUpdateSchema`) and keeps it.
+  - **`gvcnFeedback`**: ADMIN (level access) or the class GVCN (`incident.gvcnFeedback`) → note, status, remediation; otherwise
+    `incident.remediate` (EDITOR, level access) → remediation + status, a `note` in the input → 403 `INCIDENT_MSG.noteGvcnOnly`
+    ("Chỉ GVCN của lớp được ghi phản hồi GVCN."); anyone else → 403 `feedbackForbidden`. `remediation` "" removes it; any remediation change
+    sets `remediationBy = actorName`, `remediationAt` (also when cleared). `gvcnNoteBy/At` only when the input has note/status and the caller
+    is ADMIN or the class GVCN. Unchanged note + status + remediation → nothing written (no bump). Audit `GVCN_FEEDBACK` `{ code, classCode, changes }`.
+  - **`markNotDuplicate`** (data.inspect): members = {id} ∪ otherIds (2–21, same level else 400; unknown URL id → 404; soft-deleted members
+    ignored). Every live member's `notDuplicateOf` gains every other live member; unchanged members are not written; changed ones get `rev + 1`,
+    `updatedBy/updatedAt` and a digest upsert; one `UPDATE_INCIDENT` audit (entityId = id, `detail: { code, notDuplicate: [codes] }`) and one
+    version bump when anything changed. Returns the live members (current state, by code).
 - `rewards.ts`: `createReward`, `updateReward`, `softDeleteReward`, `restoreReward`, `listDeletedRewards`, `readReward`, `rewardRef`,
-  `validateRewardRules(draft, ref, today, { checkCalendar? }) → string[]`, `VERIFIED_STATUS`, `REWARD_MSG`, `REWARD_AUDIT_FIELDS`.
-- `evidence.ts`: `saveEvidence(ctx, input) → id`, `readEvidence(user, id)`, `decodeImageDataUrl(dataUrl)` (JPEG/PNG/WebP, magic bytes checked, ≤ `EVIDENCE_MAX_BYTES` = 700 KB), `EvidenceDoc`.
+  `validateRewardRules(draft, ref, today, { checkCalendar? }) → string[]`, `isRewardPointLevel(points)`, `isRewardReasonValid(reason)`,
+  `VERIFIED_STATUS`, `PROPOSAL_STATUS`, `REWARD_MSG`, `REWARD_AUDIT_FIELDS`.
+  - REQ_V2 §5.3: create needs an integer 1–5 (`REWARD_POINT_LEVELS`) and a reason ≥ 5 chars (schema + service). Update applies the scale only to a
+    CHANGED `points` (`REWARD_MSG.pointLevels` "Mức điểm cộng là số nguyên từ 1 đến 5 (mức cũ được giữ nếu không sửa).") and the length only to a
+    CHANGED `reason` (`REWARD_MSG.reasonShort`); unchanged legacy values (e.g. 10 points, a 3-char reason) stay valid.
+  - Callers with `reward.propose` but without `reward.create` (GVCN): `isGvcnOfClass` else 403 `REWARD_MSG.proposeOwnClass`
+    ("GVCN chỉ được đề xuất điểm thưởng cho lớp mình chủ nhiệm."), status forced "Mới ghi nhận", `proposed: true` (audit `detail.proposed`).
+    GVCN cannot PATCH/DELETE (route permissions).
+- `inspections.ts` (REQ_V2 §5.2): `createInspection(ctx, input) → { inspection, created }`, `updateInspection(ctx, id, patch)`,
+  `softDeleteInspection(ctx, id, reason)`, `readInspection(reader, id)`, `inspectionRef(id)`, `validateInspectionRules(draft, ref, today, opts)`,
+  `INSPECTION_MSG`, `INSPECTION_AUDIT_FIELDS`, types `InspectionCreateData`, `InspectionUpdateData`.
+  - One transaction per mutation: `inspections/{level}_{code}` + `__ins__{yyyy-mm}` + version bump + audit (`CREATE_INSPECTION` with
+    `{ code, date, shift, category, classCodes, inspector }`, `UPDATE_INSPECTION` `{ code, changes }`, `DELETE_INSPECTION`
+    `{ code, reason, date, category, classCodes }`; entity `"inspection"`). Code `DKT-yyyymmdd-NNN` (date of the round). Idempotency kind `"inspection"`.
+  - Validation (400): valid date, not in the future (`Không thể ghi nhận đợt kiểm tra ở ngày trong tương lai.`), inside the calendar (edits: only when
+    the date changes); classes deduplicated, existing (`Lớp "X" không có trong danh mục.`) and active (`Lớp X đã ngừng hoạt động.` – a class already on
+    the round is allowed on edit), stored in class display order; `category` "" → omitted (kiểm tra chung), else a catalog Mảng
+    (`Mảng "X" không có trong danh mục lỗi.`; the stored one stays valid); `shift` "" → omitted; `inspector` empty → the creator's display name.
+  - Edit/delete: `inspection.manage` + level; `assertCanEditRecord` (ADMIN any, EDITOR own ≤ 24 h); PATCH `baseRev` → 409 `INSPECTION_MSG.stale`;
+    no change → no write; soft delete (409 when already deleted; edits of a deleted round → 409). No restore endpoint.
+  - Not scored; ignored by reset-level, `checkRemovedWeeks` (calendar changes) and the workbook import/export.
+- `evidence.ts`: `saveEvidence(ctx, input) → id` (`incident.create | reward.create | reward.propose` + level), `readEvidence(user, id)`, `decodeImageDataUrl(dataUrl)` (JPEG/PNG/WebP, magic bytes checked, ≤ `EVIDENCE_MAX_BYTES` = 700 KB), `EvidenceDoc`.
 - `session.ts`: `recordLogin(user, ip?) → MeResponse` (sets `lastLoginAt` and audits LOGIN in one batch), `recordLogout(user, ip?)`,
   `recordLoginFailed(email, reason, ip) → "recorded" | "invalid-email" | "duplicate" | "daily-cap" | "error"`: anonymous, so bounded –
   only valid e-mails, `reason` reduced to known Firebase codes (else "other"), one entry per e-mail per 10 min per instance, at most
@@ -267,8 +303,8 @@ Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ l
   cap has `detail.dailyCapReached`), never throws. `resetLoginFailedState()` (tests).
 - `digest-size.ts`: `assertDigestSize(docId, data)`, `estimateBytes(data)`, `DIGEST_MAX_BYTES = 900_000`.
 
-**Stored-field conventions** (incidents and rewards): `createdBy` is the uid. `createdByName` is the display name. `updatedBy` and
-`deletedBy` hold the actor's **email**. `gvcnNoteBy` holds the display name. `reporter` defaults to the creator's display name.
+**Stored-field conventions** (incidents, rewards and inspections): `createdBy` is the uid. `createdByName` is the display name. `updatedBy` and
+`deletedBy` hold the actor's **email**. `gvcnNoteBy` and `remediationBy` hold the display name. `reporter` defaults to the creator's display name.
 Edits keep the original catalog snapshot (penalty, unit) unless `errorCode` changes, and they keep student snapshots unless the class changes.
 Editors cannot modify a reward that is already "Đã xác nhận". Changing a status to or from "Đã xác nhận" needs `reward.verify`.
 
@@ -289,9 +325,15 @@ Editors cannot modify a reward that is already "Đã xác nhận". Changing a st
 | `PATCH /api/incidents/:id` | editAny, or own & < 24 h | recomputes every derived field and moves the incident between week digests; optional `baseRev` → 409 when stale; a new date must be in the calendar |
 | `DELETE /api/incidents/:id` | record.delete | body `{ reason }`. Soft delete, 409 if already deleted. |
 | `POST /api/incidents/:id/restore` | record.delete | 409 if not deleted, or if its week is no longer in the calendar |
-| `POST /api/incidents/:id/feedback` | GVCN of the class, or ADMIN | sets `gvcnNote`/`gvcnNoteBy`/`gvcnNoteAt`/`status` |
-| `POST /api/rewards`, `GET ?level&deleted=1`, `PATCH/DELETE /:id`, `POST /:id/restore` | as for incidents; "Đã xác nhận" needs reward.verify | class must exist and be active, date not in the future and in the calendar, points > 0; `baseRev` like incidents |
-| `POST /api/evidence` | incident.create or reward.create, + level | 201 `{ id }`, audit UPLOAD_EVIDENCE |
+| `POST /api/incidents` + `notDuplicateOf` | incident.create | ids of same-level incidents reviewed as "không trùng" (else 400) |
+| `POST /api/incidents/:id/feedback` | `anyPermission: incident.gvcnFeedback, incident.remediate`; service: GVCN of the class or ADMIN (note + status + remediation), EDITOR with incident.remediate (remediation + status) | sets `gvcnNote`/`gvcnNoteBy`/`gvcnNoteAt`/`status`/`remediation`/`remediationBy`/`remediationAt` |
+| `POST /api/incidents/:id/not-duplicate` | data.inspect + level | `NotDuplicateSchema { otherIds (1–20) }` → `ListResponse<Incident>` (see `markNotDuplicate`) |
+| `POST /api/rewards` | **reward.propose** (+ level); without reward.create: own class only, status "Mới ghi nhận", `proposed` | integer 1–5, reason ≥ 5 chars; 201 (200 for a repeated `clientRequestId`) |
+| `GET ?level&deleted=1`, `PATCH/DELETE /api/rewards/:id`, `POST /:id/restore` | as for incidents; "Đã xác nhận" needs reward.verify | class must exist and be active, date not in the future and in the calendar; changed points → 1–5, changed reason → ≥ 5 chars; `baseRev` like incidents |
+| `POST /api/evidence` | incident.create, reward.create or reward.propose, + level | 201 `{ id }`, audit UPLOAD_EVIDENCE |
+| `POST /api/inspections` | inspection.manage + level | `InspectionCreateSchema` → 201 `Inspection` (200 + existing round for a repeated `clientRequestId`) |
+| `PATCH /api/inspections/:id` | inspection.manage; ADMIN any, EDITOR own ≤ 24 h | `InspectionUpdateSchema` (+ `baseRev` → 409) → `Inspection` |
+| `DELETE /api/inspections/:id` | inspection.manage; ADMIN any, EDITOR own ≤ 24 h | body `{ reason }` → `{ ok: true }`; soft delete, 409 if already deleted |
 | `GET /api/evidence/:id` | level access | bytes, `Cache-Control: private, max-age=86400, immutable` |
 | `GET /api/health` | public | `{ ok: true, time }` |
 
@@ -320,7 +362,8 @@ Tips:
 - After editing a profile directly in Firestore, call `invalidateProfileCache(uid)`.
 - To test the 24 h window, update `createdAt` on the stored doc.
 - The emulator uses gRPC. REST transport is used only against real Firestore.
-- Run: `npx vitest run src/lib/server/__tests__/` (server-core files are `core-*.test.ts`).
+- Run: `npx vitest run src/lib/server/__tests__/` (server-core files are `core-*.test.ts`; REQ_V2 server rules are covered by
+  `v2-{inspections,rewards,feedback,duplicates,settings}.test.ts`, project ids `demo-test-v2-*`).
 - `setupTestProject` also clears the dataset memo (`invalidateDatasetCache`) and the LOGIN_FAILED state. After writing digests directly
   (without a version bump) call `invalidateDatasetCache()`.
 - Never call the Auth emulator's keyed client endpoints (`/v1/accounts:signUp?key=…`, `signInWithPassword`) from tests: they target the
@@ -337,12 +380,13 @@ Composite indexes:
 |---|---|---|
 | incidents | levelId ASC, deletedAt DESC | `listDeletedIncidents` |
 | rewards | levelId ASC, deletedAt DESC | `listDeletedRewards` |
-| digests | levelId ASC, kind ASC | `rebuildIncidentDigests` (stale week cleanup) |
+| digests | levelId ASC, kind ASC | `rebuildIncidentDigests` / `rebuildRewardDigest` / `rebuildInspectionDigests` (stale digest cleanup) |
 | auditLogs | action ASC, ts DESC · email ASC, ts DESC · levelId ASC, ts DESC · uid ASC, ts DESC | `/api/audit-logs` filters (equality filters combine through index merging; a `ts` range is allowed) |
 | actions | levelId ASC, createdAt DESC · levelId ASC, deadline ASC | `/api/actions` |
 | importBatches | levelId ASC, createdAt DESC | reset/import history |
 | students | levelId ASC, classCode ASC, name ASC | class rosters ordered by name |
 
+REQ_V2 adds no composite index: `rebuildInspectionDigests` queries `inspections` by `levelId` only (automatic single-field index).
 Single-field index exemptions (large or opaque values that are never queried): `digests.items/classes/catalog/weeks/config`,
 `evidence.data`, `auditLogs.detail`, `incidents.dataIssues`, `incidents.detail`, `students.history`.
 If you add a query with an inequality or `orderBy` on another field, add its index here. This file belongs to server-core, so ask its owner to add it.
@@ -367,13 +411,14 @@ permission. Inputs are the zod **outputs** of the contract schemas (`z.output<ty
 | `POST /api/students/:id/promote-level` | students.manage + both levels | `promoteStudentLevel(ctx, id, StudentPromoteSchema)` | chuyển cấp `{ toLevelId, classCode, date, note? }`: same Mã HS, history kept + TRANSFER_IN with `fromLevel/toLevel`, ACTIVE in an active class of the target level (other level only, else 400); both `__stu` digests and both versions in one transaction; audit TRANSFER_STUDENT `detail.promoteLevel` |
 | `POST /api/imports/students/preview` · `/commit` | students.manage | `previewStudentImport` · `commitStudentImport` | maxDuration 60. See below |
 | `POST /api/imports/workbook/preview` · `/commit` | excel.import | `previewWorkbook` · `commitWorkbook` | maxDuration 60. See below |
-| `POST /api/exports/log` | excel.export | `logExport` | audit EXPORT_EXCEL (`entityId` = kind; details > 4 000 chars are dropped) |
+| `POST /api/exports/log` | excel.export | `logExport` | audit EXPORT_EXCEL (`entityId` = kind: workbook, html, ranking, gvcn, students, audit, `report` = Báo cáo tuần/tháng; details > 4 000 chars are dropped) |
 | `GET /api/actions?level=` | actions.view | `listActions(user, levelId)` | Open → Doing → Done, then deadline, then code |
 | `POST /api/actions` | actions.manage | `createAction` | 201, code `HD-yyyymmdd-NNN` (creation day), status Open, history; `scopeClass` must exist |
 | `PATCH /api/actions/:id` | actions.manage | `updateAction` | Done with empty evidence (after merge) → 400 "Cần nhập minh chứng hoàn tất trước khi chuyển sang Hoàn thành" (AC-014); history entry (`note` or auto text); `closedAt` set/cleared |
 | `GET /api/audit-logs` | audit.view (school-wide admins only) | `queryAuditLogs(AuditQuerySchema output)` | `?action&email&level&from&to&cursor&limit` (limit 1–100, default 50) |
 | `GET /api/rankings` | view.dashboard + level | `getRankings(user, RankingsQuerySchema output)` | `?level&mode&key&classCode&grade`; no `mode` = current week (`defaultPeriod`) |
 | `PUT /api/settings/:level/config` | settings.manage | `putConfig(ctx, level, input, { allowHidingRecords })` | merge; firstWeek must be Monday; semesters ordered, non-overlapping; audit UPDATE_CONFIG `{ changes: { field: { before, after } } }`. While the calendar is generated from the config (no stored weeks), a firstWeek/semester change is checked like PUT weeks (`?allowHidingRecords=1`). |
+| `PUT /api/settings/:level/early-warning` | settings.manage | `putEarlyWarning(ctx, level, EarlyWarningPutSchema output)` | replaces `config.earlyWarning` (fixed key order, unique `seriousGroups`) through `saveReferenceParts` (`__ref` + version bump + audit UPDATE_CONFIG `detail.changes.earlyWarning { before, after }`); unchanged (canonical JSON) → no write. `putConfig` and the workbook config import spread the stored config and keep it. `normalizeEarlyWarning(input)` |
 | `PUT /api/settings/:level/catalog` | settings.manage | `putCatalog` | replace; unique codes; missing items → `active:false` (never deleted); audit `{ added, updated, deactivated }` |
 | `PUT /api/settings/:level/classes` | settings.manage | `putClasses` | same semantics; grade must belong to the level; email lower-cased |
 | `PUT /api/settings/:level/weeks` | settings.manage | `putWeeks(ctx, level, input, { allowHidingRecords })` | `{ items }` replaces (Mondays, unique, known semester) or `{ regenerate: true }` (keeps counted/note of existing weeks). Removed weeks that hold records → 409 `details: { weeks, incidents, rewards }` unless `?allowHidingRecords=1` (audit `detail.hiddenRecords`). An unchanged calendar writes nothing. |
@@ -381,8 +426,8 @@ permission. Inputs are the zod **outputs** of the contract schemas (`z.output<ty
 | `PATCH /api/users/:uid` | users.manage | `updateUser` | the last active **school-wide** ADMIN (active, `levels = []`) cannot lose the role, be locked or be restricted → 400; an admin cannot change their own role/levels or lock themselves → 400; profile cache invalidated; locking sets `sessionsValidAfter`, disables the Auth user and revokes tokens |
 | `POST /api/users/:uid/reset-password` | users.manage | `resetPassword` | `{ tempPassword }` (never written to the audit); revokes refresh tokens and sets `sessionsValidAfter` (tokens issued before → 401) |
 | `POST /api/users/bulk-gvcn` | users.manage | `bulkCreateGvcn(ctx, levelId, { sync })` | maxDuration 60. Existing Auth accounts are linked/re-secured like `createUser` (re-secured ones are in `created` with a temp password). `sync: true` also removes this level's class assignments that no longer match the class list (`unassigned`) |
-| `POST /api/admin/rebuild-digests` | settings.manage | `rebuildDigests(ctx, levelId?)` | `{ ok: true, results: { [level]: RebuildResult } }`; audit REBUILD_DIGESTS per level |
-| `POST /api/admin/reset-level` | data.reset | `resetLevel` | `confirmText` must be exactly `XOA <LEVEL>` (400). Soft-deletes live incidents+rewards with `deleteReason "RESET:<batchId>"` |
+| `POST /api/admin/rebuild-digests` | settings.manage | `rebuildDigests(ctx, levelId?)` | `{ ok: true, results: { [level]: RebuildResult } }` (incl. `inspections`); audit REBUILD_DIGESTS per level |
+| `POST /api/admin/reset-level` | data.reset | `resetLevel` | `confirmText` must be exactly `XOA <LEVEL>` (400). Soft-deletes live incidents+rewards with `deleteReason "RESET:<batchId>"` (inspection rounds are not scored and are left untouched) |
 | `POST /api/admin/restore-reset` | data.reset | `restoreReset` | 404 unknown batch / other level, 409 already restored; works on a reset that stopped half-way |
 | `POST /api/admin/evidence` | data.reset | `maintainEvidence(ctx, EvidenceMaintenanceSchema)` | `{ levelId, dryRun = true }` → `EvidenceMaintenanceResult` (total, bytes, attached, orphaned). `dryRun: false` deletes photos that are not attached to any record and older than 48 h (photos still referenced by a record's `photoIds` are re-linked instead); audit RESET_DATA `detail.purgeEvidence` |
 
@@ -449,7 +494,8 @@ Student mutations update `__stu` + bump the version in the same transaction. Act
 - `batches.ts`: `unfinishedBatches(levelId)`, `settleUnfinishedBatches(batches, repairedBy)`, `finishBatch(ref, status, error?)`, `BATCH_STALE_MS`.
 - `evidence-maintenance.ts`: `maintainEvidence(ctx, { levelId, dryRun })`, `EVIDENCE_GRACE_MS` (48 h).
 - `workbook-incidents.ts`: `importHashOf(content)`, `unchangedSinceImport(incident)`, `incidentContent(incident)`; `workbook-rewards.ts`:
-  `rewardUnchangedSinceImport`, `rewardContent`; `workbook-students.ts`: `changedInAppSinceImport(student)`, `isWorkbookEvent(event)`;
+  `rewardUnchangedSinceImport`, `rewardContent`, `REWARD_POINTS_SCALE_WARNING` (REQ_V2: points > 0 outside 1–5 are imported as in the file with the
+  WARNING "Mức điểm cộng ngoài thang 1–5 (giữ theo file)." on rows that are written); `workbook-students.ts`: `changedInAppSinceImport(student)`, `isWorkbookEvent(event)`;
   `workbook-text.ts`: `parseIncidentStatus`, `parseRewardStatus`, `resolveImportedStatus`; `workbook-links.ts`: `leftClassOnOrAfter`.
 - `common.ts`: `loadStudentsInOtherLevels(levelId, ids)` (full docs; `findStudentsInOtherLevels` returns level/class only).
 - `audit-query.ts`: `AuditQuerySchema`, `vnDayStartIso(date)`, `encodeCursor/decodeCursor`, `MAX_SCAN = 3000` (in-memory filters scan at most
@@ -460,7 +506,7 @@ Student mutations update `__stu` + bump the version in the same transaction. Act
 ### Scripts
 - `npm run seed` (`scripts/seed.ts`): loads `.env.local`, **refuses to run unless `FIRESTORE_EMULATOR_HOST` and
   `FIREBASE_AUTH_EMULATOR_HOST` are set**, imports `data/seed/{TH,THCS,THPT}.xlsx` with every section (actor `seed@nshm.local`), approves RAG
-  thresholds (demo), creates the demo accounts below (password **Nshm@2026**), 4 "[Demo] …" rewards (mixed statuses) and 3 "[Demo] …" actions
+  thresholds (demo), creates the demo accounts below (password **Nshm@2026**), 4 "[Demo] …" rewards (mixed statuses, points 1–5, reasons ≥ 5 chars) and 3 "[Demo] …" actions
   per level. Re-runnable.
 
   | email | role | scope |

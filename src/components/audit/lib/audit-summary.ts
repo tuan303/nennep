@@ -40,6 +40,14 @@ const FIELD_LABELS: Record<string, string> = {
   evidenceUrls: "liên kết minh chứng",
   photoIds: "ảnh minh chứng",
   gvcnNote: "phản hồi GVCN",
+  remediation: "biện pháp khắc phục",
+  notDuplicateOf: "đánh dấu không trùng",
+  shift: "buổi",
+  category: "mảng",
+  classCodes: "lớp được kiểm tra",
+  inspector: "người kiểm tra",
+  earlyWarning: "ngưỡng cảnh báo sớm",
+  proposed: "GVCN đề xuất",
   reason: "lý do / nội dung",
   note: "ghi chú",
   name: "họ tên",
@@ -189,6 +197,18 @@ function changesText(d: Detail): string | undefined {
   return status ? `${status.label}: ${status.before} → ${status.after} (+${rows.length - 1} mục)` : `Đổi ${names.join(", ")}`;
 }
 
+/** "21/10/2026 · 3 lớp · Nề nếp lớp học" | "… · Kiểm tra chung" (inspection rounds). */
+function inspectionText(d: Detail): string | undefined {
+  const date = str(d.date);
+  const classes = Array.isArray(d.classCodes) ? d.classCodes.length : undefined;
+  if (!date && classes === undefined) return undefined;
+  return join([
+    date && isIsoDate(date) ? formatDateVN(date) : date,
+    classes !== undefined ? `${formatNumberVN(classes)} lớp` : undefined,
+    str(d.category) ?? "Kiểm tra chung",
+  ]);
+}
+
 function genericText(d: Detail): string {
   return Object.entries(d)
     .filter(([, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
@@ -218,11 +238,17 @@ export function summarizeAudit(log: Pick<AuditLog, "action" | "detail" | "ip">):
       return clip(join([str(d.classCode), str(d.errorCode), pointsText(d.points), str(d.reason) && `Lý do: ${str(d.reason)}`]));
     case "CREATE_REWARD":
     case "RESTORE_REWARD":
-      return clip(join([str(d.classCode), pointsText(d.points, "+"), str(d.reason)]));
+      return clip(join([str(d.classCode), pointsText(d.points, "+"), d.proposed === true ? "GVCN đề xuất" : undefined, str(d.reason)]));
     case "DELETE_REWARD":
       return clip(join([str(d.classCode), pointsText(d.points, "+"), str(d.reason) && `Lý do xóa: ${str(d.reason)}`]));
     case "GVCN_FEEDBACK":
       return clip(join([str(d.classCode), str(d.code), changesText(d)]));
+    case "CREATE_INSPECTION":
+      return clip(join([str(d.code), inspectionText(d)]));
+    case "UPDATE_INSPECTION":
+      return clip(join([str(d.code), changesText(d)]) || genericText(d));
+    case "DELETE_INSPECTION":
+      return clip(join([str(d.code), inspectionText(d), str(d.reason) && `Lý do: ${str(d.reason)}`]));
     case "ADD_STUDENT":
       return clip(join([str(d.name), str(d.classCode)]));
     case "TRANSFER_STUDENT":
@@ -309,6 +335,11 @@ export function summarizeAudit(log: Pick<AuditLog, "action" | "detail" | "ip">):
       return clip(join([str(d.fileName) ?? str(d.mime), size !== undefined ? `${formatNumberVN(Math.round(size / 1024))} KB` : undefined]));
     }
     case "UPDATE_INCIDENT":
+      if (Array.isArray(d.notDuplicate)) {
+        const others = d.notDuplicate.filter((c): c is string => typeof c === "string" && c !== d.code);
+        return clip(join([str(d.code), `Đánh dấu không trùng với ${others.join(", ") || "sự việc khác"}`]));
+      }
+      return clip(join([str(d.code), changesText(d)]) || genericText(d));
     case "UPDATE_REWARD":
     case "UPDATE_STUDENT":
     case "UPDATE_CONFIG":

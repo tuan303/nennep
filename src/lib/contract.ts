@@ -17,19 +17,20 @@
  *  GET    /api/me                           → –                           → MeResponse
  *  GET    /api/dataset?level=THCS           → If-None-Match: "<version>"  → LevelDataset | 304       (view.dashboard + level access; GVCN redacted)
  *  GET    /api/rankings?level&mode&key&classCode → –                      → RankingsResponse         (view.dashboard)
- *  POST   /api/incidents                    → IncidentCreateSchema        → Incident (201)           (incident.create)
+ *  POST   /api/incidents                    → IncidentCreateSchema (+notDuplicateOf) → Incident (201) (incident.create)
  *  GET    /api/incidents?level=THCS&deleted=1 → –                         → ListResponse<Incident>   (record.delete) soft-deleted items
  *  GET    /api/incidents/:id                → –                           → Incident                 (canSeeClassDetail)
  *  PATCH  /api/incidents/:id                → IncidentUpdateSchema        → Incident                 (record.editAny | own & recent)
  *  DELETE /api/incidents/:id                → DeleteSchema (JSON body)    → OkResponse               (record.delete; soft delete)
  *  POST   /api/incidents/:id/restore        → {}                          → Incident                 (record.delete)
- *  POST   /api/incidents/:id/feedback       → GvcnFeedbackSchema          → Incident                 (incident.gvcnFeedback & own class, or ADMIN)
- *  POST   /api/rewards                      → RewardCreateSchema          → Reward (201)             (reward.create)
+ *  POST   /api/incidents/:id/feedback       → GvcnFeedbackSchema (+remediation) → Incident   (incident.gvcnFeedback & own class | incident.remediate | ADMIN)
+ *  POST   /api/incidents/:id/not-duplicate  → NotDuplicateSchema          → ListResponse<Incident>   (data.inspect + level; marks every pair of {id} ∪ otherIds)
+ *  POST   /api/rewards                      → RewardCreateSchema (points 1–5, reason ≥ 5) → Reward (201) (reward.propose; without reward.create: own class, status forced "Mới ghi nhận", proposed)
  *  GET    /api/rewards?level=THCS&deleted=1 → –                           → ListResponse<Reward>     (record.delete)
  *  PATCH  /api/rewards/:id                  → RewardUpdateSchema          → Reward                   (record.editAny | own & recent; status→"Đã xác nhận" needs reward.verify)
  *  DELETE /api/rewards/:id                  → DeleteSchema                → OkResponse               (record.delete)
  *  POST   /api/rewards/:id/restore          → {}                          → Reward                   (record.delete)
- *  POST   /api/evidence                     → EvidenceUploadSchema        → { id: string } (201)     (incident.create | reward.create)
+ *  POST   /api/evidence                     → EvidenceUploadSchema        → { id } (201)             (incident.create | reward.create | reward.propose)
  *  GET    /api/evidence/:id                 → –                           → image bytes              (level access)
  *  GET    /api/students/:id                 → –                           → Student                  (canSeeClassDetail of current class)
  *  POST   /api/students                     → StudentCreateSchema         → Student (201)            (students.manage; audit ADD_STUDENT)
@@ -43,6 +44,9 @@
  *  POST   /api/imports/workbook/preview     → WorkbookPreviewSchema       → WorkbookPreview          (excel.import)
  *  POST   /api/imports/workbook/commit      → WorkbookCommitSchema        → WorkbookCommitResult     (excel.import; audit IMPORT_EXCEL)
  *  POST   /api/exports/log                  → ExportLogSchema             → OkResponse               (excel.export; audit EXPORT_EXCEL)
+ *  POST   /api/inspections                  → InspectionCreateSchema      → Inspection (201)         (inspection.manage + level)
+ *  PATCH  /api/inspections/:id              → InspectionUpdateSchema      → Inspection               (inspection.manage; ADMIN any, EDITOR own ≤ 24 h; baseRev → 409)
+ *  DELETE /api/inspections/:id              → DeleteSchema                → OkResponse               (inspection.manage; ADMIN any, EDITOR own ≤ 24 h; soft delete)
  *  GET    /api/actions?level=THCS           → –                           → ListResponse<ActionItem> (actions.view)
  *  POST   /api/actions                      → ActionCreateSchema          → ActionItem (201)         (actions.manage)
  *  PATCH  /api/actions/:id                  → ActionUpdateSchema          → ActionItem               (actions.manage; Done requires evidence → 400)
@@ -51,6 +55,7 @@
  *  PUT    /api/settings/:level/catalog      → CatalogPutSchema            → ListResponse<CatalogItem>(settings.manage)
  *  PUT    /api/settings/:level/classes      → ClassesPutSchema            → ListResponse<ClassInfo>  (settings.manage)
  *  PUT    /api/settings/:level/weeks        → WeeksPutSchema              → ListResponse<SchoolWeek> (settings.manage; 409 when removed weeks hold records unless ?allowHidingRecords=1)
+ *  PUT    /api/settings/:level/early-warning → EarlyWarningPutSchema      → LevelConfig              (settings.manage; audit UPDATE_CONFIG)
  *  GET    /api/users                        → –                           → ListResponse<UserProfile>(users.manage)
  *  POST   /api/users                        → UserCreateSchema            → UserCreateResult (201)   (users.manage)
  *  PATCH  /api/users/:uid                   → UserUpdateSchema            → UserProfile              (users.manage)
@@ -109,13 +114,17 @@ export const IncidentCreateSchema = z.object({
   detail: zText(2000).optional(),
   /** Idempotency key generated by the client per form submission (uuid). Same key → same incident returned. */
   clientRequestId: z.string().min(8).max(64).optional(),
+  /** "Không trùng, vẫn lưu": doc ids of existing incidents of the same level confirmed as NOT duplicates of this one. */
+  notDuplicateOf: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
 });
 export type IncidentCreateInput = z.input<typeof IncidentCreateSchema>;
 
 /** `rev` of the incident the form was opened from (absent → 0). A different current `rev` → 409 (stale edit). */
 const zBaseRev = z.number().int().min(0).optional();
 
-export const IncidentUpdateSchema = IncidentCreateSchema.omit({ levelId: true, clientRequestId: true }).partial().extend({ baseRev: zBaseRev });
+export const IncidentUpdateSchema = IncidentCreateSchema.omit({ levelId: true, clientRequestId: true, notDuplicateOf: true })
+  .partial()
+  .extend({ baseRev: zBaseRev });
 export type IncidentUpdateInput = z.input<typeof IncidentUpdateSchema>;
 
 export const DeleteSchema = z.object({ reason: z.string().trim().min(3, "Nhập lý do xóa (tối thiểu 3 ký tự)").max(500) });
@@ -125,9 +134,20 @@ export const GvcnFeedbackSchema = z
   .object({
     note: zText(1000).optional(),
     status: z.enum(["Mới ghi nhận", "Đang xử lý", "Đã đóng"]).optional(),
+    /** Biện pháp xử lý / khắc phục ("" clears it). */
+    remediation: zText(1000).optional(),
   })
-  .refine((v) => v.note !== undefined || v.status !== undefined, "Cần nhập phản hồi hoặc trạng thái");
+  .refine(
+    (v) => v.note !== undefined || v.status !== undefined || v.remediation !== undefined,
+    "Cần nhập phản hồi, biện pháp khắc phục hoặc trạng thái",
+  );
 export type GvcnFeedbackInput = z.input<typeof GvcnFeedbackSchema>;
+
+/** "Không trùng": doc ids of incidents of the same level reviewed as NOT duplicates of the incident in the URL. */
+export const NotDuplicateSchema = z.object({
+  otherIds: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
+});
+export type NotDuplicateInput = z.input<typeof NotDuplicateSchema>;
 
 /* --------------------------------- rewards -------------------------------- */
 
@@ -135,19 +155,28 @@ export const RewardCreateSchema = z.object({
   levelId: zLevelId,
   date: zIsoDate,
   classCode: zClassCode,
-  points: z.number().positive("Điểm thưởng phải > 0").max(100),
-  reason: z.string().trim().min(3, "Nhập nội dung thưởng").max(500),
+  /** Mức điểm cộng: số nguyên 1–5 (REWARD_POINT_LEVELS). */
+  points: z.number().int("Mức điểm cộng là số nguyên từ 1 đến 5").min(1, "Mức điểm cộng từ 1 đến 5").max(5, "Mức điểm cộng từ 1 đến 5"),
+  /** Lý do cộng điểm (bắt buộc). */
+  reason: z.string().trim().min(5, "Nhập lý do cộng điểm (tối thiểu 5 ký tự)").max(500),
   reporter: zText(120).optional(),
   evidenceUrls: z.array(zUrl).max(5).default([]),
   photoIds: z.array(z.string().max(80)).max(5).default([]),
   note: zText(1000).optional(),
-  /** EDITOR may only use "Mới ghi nhận" | "Đang xác minh"; "Đã xác nhận" requires reward.verify. */
+  /** EDITOR may only use "Mới ghi nhận" | "Đang xác minh"; "Đã xác nhận" requires reward.verify. Forced to "Mới ghi nhận" for proposals. */
   status: z.enum(["Mới ghi nhận", "Đang xác minh", "Đã xác nhận"]).default("Mới ghi nhận"),
   clientRequestId: z.string().min(8).max(64).optional(),
 });
 export type RewardCreateInput = z.input<typeof RewardCreateSchema>;
 
-export const RewardUpdateSchema = RewardCreateSchema.omit({ levelId: true, clientRequestId: true }).partial().extend({ baseRev: zBaseRev });
+/** Edits keep legacy values valid while unchanged; the service applies the create rules to CHANGED points / reason. */
+export const RewardUpdateSchema = RewardCreateSchema.omit({ levelId: true, clientRequestId: true, points: true, reason: true })
+  .partial()
+  .extend({
+    points: z.number().positive("Điểm thưởng phải > 0").max(100).optional(),
+    reason: z.string().trim().min(3, "Nhập lý do cộng điểm").max(500).optional(),
+    baseRev: zBaseRev,
+  });
 export type RewardUpdateInput = z.input<typeof RewardUpdateSchema>;
 
 /* -------------------------------- evidence -------------------------------- */
@@ -436,7 +465,7 @@ export interface WorkbookCommitResult {
 
 export const ExportLogSchema = z.object({
   levelId: zLevelId.optional(),
-  kind: z.enum(["workbook", "html", "ranking", "gvcn", "students", "audit"]),
+  kind: z.enum(["workbook", "html", "ranking", "gvcn", "students", "audit", "report"]),
   detail: z.record(z.unknown()).optional(),
 });
 export type ExportLogInput = z.input<typeof ExportLogSchema>;
@@ -466,6 +495,39 @@ export const ActionUpdateSchema = z.object({
   note: zText(500).optional(), // appended to history
 });
 export type ActionUpdateInput = z.input<typeof ActionUpdateSchema>;
+
+/* ------------------------------ inspections ------------------------------ */
+
+export const InspectionCreateSchema = z.object({
+  levelId: zLevelId,
+  date: zIsoDate,
+  /** "" = không ghi buổi. */
+  shift: z.enum(["Sáng", "Chiều", ""]).optional(),
+  /** Mảng kiểm tra (catalog category); "" / omitted = kiểm tra chung. */
+  category: zText(200).optional(),
+  /** Classes inspected (server deduplicates; each must exist and be active). */
+  classCodes: z.array(zClassCode).min(1, "Chọn ít nhất 1 lớp được kiểm tra").max(300),
+  /** Người kiểm tra; empty → the creator's display name. */
+  inspector: zText(120).optional(),
+  note: zText(1000).optional(),
+  clientRequestId: z.string().min(8).max(64).optional(),
+});
+export type InspectionCreateInput = z.input<typeof InspectionCreateSchema>;
+
+export const InspectionUpdateSchema = InspectionCreateSchema.omit({ levelId: true, clientRequestId: true }).partial().extend({ baseRev: zBaseRev });
+export type InspectionUpdateInput = z.input<typeof InspectionUpdateSchema>;
+
+/* ------------------------------ early warning ----------------------------- */
+
+export const EarlyWarningPutSchema = z.object({
+  risingPct: z.number().int().min(10).max(500),
+  risingMinPoints: z.number().min(0).max(1000),
+  risingBaselineWeeks: z.number().int().min(1).max(12),
+  prolongedWeeks: z.number().int().min(2).max(12),
+  seriousGroups: z.array(z.string().trim().min(1).max(60)).max(10),
+  seriousMinPenalty: z.number().min(0).max(1000),
+});
+export type EarlyWarningPutInput = z.input<typeof EarlyWarningPutSchema>;
 
 /* -------------------------------- settings -------------------------------- */
 

@@ -19,13 +19,15 @@ export interface InsightsCardProps {
   period: Period;
   today: string;
   canOpenActions: boolean;
+  /** Narrow column (next to "Cảnh báo sớm"): findings stacked, at most 2 side by side. */
+  compact?: boolean;
   className?: string;
 }
 
 const MAX_FINDINGS = 3;
 
 /** "Nhận định nhanh": the 3 most severe findings of the engine Decision Brief for the period (level-wide). */
-export function InsightsCard({ ds, period, today, canOpenActions, className }: InsightsCardProps) {
+export function InsightsCard({ ds, period, today, canOpenActions, compact, className }: InsightsCardProps) {
   const brief = useMemo(() => buildDecisionBrief(ds, period, today), [ds, period, today]);
   const findings = brief.findings.slice(0, MAX_FINDINGS);
 
@@ -47,7 +49,7 @@ export function InsightsCard({ ds, period, today, canOpenActions, className }: I
       {findings.length === 0 ? (
         <p className="text-[13.5px] leading-relaxed text-slate-600">{brief.impact}</p>
       ) : (
-        <ul className={cn("grid gap-3", findings.length > 1 && "md:grid-cols-2 xl:grid-cols-3")}>
+        <ul className={cn("grid gap-3", findings.length > 1 && (compact ? "md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3"))}>
           {findings.map((f) => {
             const look = LOOK[f.severity];
             const Icon = look.icon;

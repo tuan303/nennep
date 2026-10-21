@@ -1,6 +1,6 @@
 /**
  * Navigation model: sidebar groups, bottom tab bar slots and the "Thêm" sheet.
- * Pure (icons are plain component references) – unit-tested in nav-config.test.ts.
+ * Pure (icons are plain component references) – unit-tested in __tests__/nav.test.ts.
  */
 import {
   Award,
@@ -8,6 +8,7 @@ import {
   ClipboardPen,
   Database,
   FileSpreadsheet,
+  FileText,
   LayoutDashboard,
   Layers,
   ListChecks,
@@ -37,6 +38,7 @@ export const NAV_ICONS: Record<AppRouteId, LucideIcon> = {
   ranking: Trophy,
   classes: Layers,
   gvcn: ClipboardList,
+  reports: FileText,
   students: Users,
   entry: ClipboardPen,
   rewards: Award,
@@ -54,7 +56,7 @@ function item(id: AppRouteId): NavItem {
 
 /** Full sidebar structure (before permission filtering), in display order. */
 export const NAV_GROUPS: NavGroup[] = [
-  { id: "overview", label: "Tổng quan", items: [item("overview"), item("school"), item("ranking"), item("classes"), item("gvcn"), item("students")] },
+  { id: "overview", label: "Tổng quan", items: [item("overview"), item("school"), item("ranking"), item("classes"), item("gvcn"), item("reports"), item("students")] },
   { id: "record", label: "Ghi nhận", items: [item("entry"), item("rewards")] },
   { id: "operate", label: "Điều hành", items: [item("actions")] },
   { id: "admin", label: "Quản trị", items: [item("studentAdmin"), item("data"), item("excel"), item("audit"), item("settings")] },

@@ -12,3 +12,7 @@ export * from "./rag";
 export * from "./ranking";
 export * from "./analytics";
 export * from "./brief";
+export * from "./duplicates";
+export * from "./integrity";
+export * from "./early-warning";
+export * from "./inspections";

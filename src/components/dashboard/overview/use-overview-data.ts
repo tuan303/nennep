@@ -20,9 +20,10 @@ import { buildKpiViews, contextPeriod, crossFilterScopes, pendingRewards, sparkW
 
 export interface OverviewData {
   filtered: Incident[];
-  /** Cross-filter scopes (see crossFilterScopes): for "Phân bổ theo mảng" and "Top 5 vấn đề". */
+  /** Cross-filter scopes (see crossFilterScopes): for "Phân bổ theo mảng", "Top 5 vấn đề" and "Theo nhóm lỗi". */
   byCategory: Incident[];
   byError: Incident[];
+  byGroup: Incident[];
   current: Kpis;
   previousLabel?: string;
   kpis: KpiView[];
@@ -40,6 +41,7 @@ export function useOverviewData(ds: LevelDataset, filters: GlobalFilters, today:
   const cross = useMemo(() => crossFilterScopes(filters), [filters]);
   const byCategory = useMemo(() => filterIncidents(ds, cross.category), [ds, cross]);
   const byError = useMemo(() => filterIncidents(ds, cross.error), [ds, cross]);
+  const byGroup = useMemo(() => filterIncidents(ds, cross.group), [ds, cross]);
   const comparison = useMemo(() => kpiComparison(ds, filters), [ds, filters]);
   const trend = useMemo(() => weeklyTrend(ds, filters, today), [ds, filters, today]);
   const ranking = useMemo(
@@ -54,10 +56,10 @@ export function useOverviewData(ds: LevelDataset, filters: GlobalFilters, today:
     const perWeek = weeks.map((key) => computeKpis(ds, { ...filters, period: { mode: "week", key } }));
     const spark: Record<KpiId, number[]> = {
       incidents: perWeek.map((k) => k.incidents),
-      students: perWeek.map((k) => k.relatedStudents),
+      turns: perWeek.map((k) => k.violationTurns),
+      students: perWeek.map((k) => k.uniqueStudents),
       penalty: perWeek.map((k) => k.penaltyPoints),
       reward: perWeek.map((k) => k.rewardPoints),
-      classes: perWeek.map((k) => k.classesWithIncidents),
       confidence: perWeek.map((k) => Math.round(k.confidence * 1000) / 10),
     };
     return buildKpiViews({
@@ -76,6 +78,7 @@ export function useOverviewData(ds: LevelDataset, filters: GlobalFilters, today:
     filtered,
     byCategory,
     byError,
+    byGroup,
     current: comparison.current,
     previousLabel: comparison.previousLabel,
     kpis,

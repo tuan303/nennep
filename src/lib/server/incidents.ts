@@ -4,11 +4,13 @@
  * - Dates must fall in a calendar week (otherwise the record would be invisible, see calendar.ts).
  * - Every mutation increments `rev`; PATCH with `baseRev` ≠ current rev → 409 (stale form).
  * - Attached photos are linked to the record (`evidence.attachedTo`), removed ones unlinked.
+ * - REQ_V2: remediation (biện pháp khắc phục) through the feedback endpoint; "không trùng" reviews (`notDuplicateOf`)
+ *   on create and through `markNotDuplicate` (the duplicate check itself is the engine's, never blocking).
  */
 import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import type { z } from "zod";
 import { hasPermission, isGvcnOfClass } from "../constants";
-import type { GvcnFeedbackSchema, IncidentCreateSchema, IncidentUpdateSchema } from "../contract";
+import type { GvcnFeedbackSchema, IncidentCreateSchema, IncidentUpdateSchema, NotDuplicateSchema } from "../contract";
 import { todayVN } from "../engine/dates";
 import { editRuleContext } from "../engine/edit-context";
 import { buildIncidentCore, validateIncidentRules } from "../engine/scoring";
@@ -38,11 +40,12 @@ import {
 } from "./records";
 import { findCatalogItem, findClass, loadReference } from "./reference";
 import { bumpVersions } from "./versions";
-import { readDoc, runTx, type Reader } from "./write";
+import { readDoc, readDocs, runTx, type Reader } from "./write";
 
 export type IncidentCreateData = z.output<typeof IncidentCreateSchema>;
 export type IncidentUpdateData = z.output<typeof IncidentUpdateSchema>;
 export type GvcnFeedbackData = z.output<typeof GvcnFeedbackSchema>;
+export type NotDuplicateData = z.output<typeof NotDuplicateSchema>;
 
 export const INCIDENT_MSG = {
   notFound: "Không tìm thấy sự việc.",
@@ -50,6 +53,10 @@ export const INCIDENT_MSG = {
   alreadyDeleted: "Sự việc này đã bị xóa trước đó.",
   notDeleted: "Sự việc này chưa bị xóa nên không cần khôi phục.",
   feedbackForbidden: "Chỉ GVCN của lớp hoặc quản trị viên mới được phản hồi sự việc này.",
+  noteGvcnOnly: "Chỉ GVCN của lớp được ghi phản hồi GVCN.",
+  notDuplicateMissing: "Không tìm thấy sự việc để đánh dấu “không trùng”.",
+  notDuplicateTooMany: "Mỗi lần chỉ đánh dấu “không trùng” tối đa 21 sự việc.",
+  notDuplicateNeedOther: "Chọn ít nhất một sự việc khác để đánh dấu “không trùng”.",
   stale: "Sự việc đã được người khác cập nhật trong lúc bạn đang sửa. Vui lòng tải lại để xem bản mới nhất rồi sửa tiếp.",
 } as const;
 
@@ -109,6 +116,23 @@ function auditDetail(i: Incident): Record<string, unknown> {
   };
 }
 
+/** Sorted unique ids (stored form of `notDuplicateOf`). */
+function sortedUnique(ids: Iterable<string>): string[] {
+  return [...new Set(ids)].sort();
+}
+
+/**
+ * READ phase: "Không trùng, vẫn lưu" ids of a new incident – every id must be an incident of the same level
+ * (soft-deleted ones included), else 400. Returns them sorted and unique.
+ */
+async function readNotDuplicateIds(tx: Transaction, levelId: LevelId, ids: readonly string[]): Promise<string[]> {
+  const unique = sortedUnique(ids);
+  if (unique.length === 0) return [];
+  const snaps = await readDocs(tx, unique.map((id) => incidentRef(id)));
+  if (snaps.some((s) => !s.exists || (s.data() as Incident).levelId !== levelId)) throw Errors.validation(INCIDENT_MSG.notDuplicateMissing);
+  return unique;
+}
+
 /** POST /api/incidents. Returns `created: false` when the clientRequestId was already used (idempotent). */
 export async function createIncident(ctx: ServiceCtx, input: IncidentCreateData): Promise<{ incident: Incident; created: boolean }> {
   const { user } = ctx;
@@ -128,6 +152,7 @@ export async function createIncident(ctx: ServiceCtx, input: IncidentCreateData)
     const ref = await loadReference(levelId, tx);
     const studentsById = await readStudentLites(tx, input.studentIds, levelId);
     await assertEvidenceIds(tx, levelId, input.photoIds);
+    const reviewedIds = await readNotDuplicateIds(tx, levelId, input.notDuplicateOf ?? []);
 
     const catalogItem = findCatalogItem(ref, input.errorCode);
     const classInfo = findClass(ref, input.classCode);
@@ -172,11 +197,13 @@ export async function createIncident(ctx: ServiceCtx, input: IncidentCreateData)
     const photos = await planEvidenceLinks(tx, alloc.id, [], input.photoIds);
 
     // ---------------- writes ----------------
+    const notDuplicateOf = reviewedIds.filter((x) => x !== alloc.id);
     const incident: Incident = {
       id: alloc.id,
       code: alloc.code,
       levelId,
       ...core,
+      ...(notDuplicateOf.length > 0 ? { notDuplicateOf } : {}),
       source: "app",
       createdBy: user.uid,
       createdByName: actorName(user),
@@ -348,23 +375,43 @@ export async function restoreIncident(ctx: ServiceCtx, id: string): Promise<Inci
   });
 }
 
-/** POST /api/incidents/:id/feedback — GVCN of the incident's class, or ADMIN. Sets note and/or status. */
+/**
+ * POST /api/incidents/:id/feedback.
+ * - ADMIN (level access) or the GVCN of the incident's class (`incident.gvcnFeedback`): note, status, remediation.
+ * - `incident.remediate` (EDITOR, level access): remediation + status; a `note` → 403 (GVCN note is the GVCN's).
+ * - Anyone else → 403. `gvcnNoteBy/At` are set only when the input has note/status and the caller is ADMIN or the
+ *   class GVCN; `remediationBy/At` whenever the remediation changes (also when cleared). No change → no write.
+ */
 export async function gvcnFeedback(ctx: ServiceCtx, id: string, input: GvcnFeedbackData): Promise<Incident> {
   const { user } = ctx;
   return runTx(async (tx) => {
     const before = await readIncident(tx, id);
-    if (user.profile.role === "ADMIN") requireLevel(user, before.levelId);
-    else if (!(hasPermission(user.profile, "incident.gvcnFeedback") && isGvcnOfClass(user.profile, before.levelId, before.classCode))) {
+    let gvcnRole: boolean;
+    if (user.profile.role === "ADMIN") {
+      requireLevel(user, before.levelId);
+      gvcnRole = true;
+    } else if (hasPermission(user.profile, "incident.gvcnFeedback") && isGvcnOfClass(user.profile, before.levelId, before.classCode)) {
+      gvcnRole = true;
+    } else if (hasPermission(user.profile, "incident.remediate")) {
+      requireLevel(user, before.levelId);
+      if (input.note !== undefined) throw Errors.forbidden(INCIDENT_MSG.noteGvcnOnly);
+      gvcnRole = false;
+    } else {
       throw Errors.forbidden(INCIDENT_MSG.feedbackForbidden);
     }
     if (before.deletedAt) throw Errors.conflict(INCIDENT_MSG.deleted);
 
-    let after: Incident = { ...before, gvcnNoteBy: actorName(user), gvcnNoteAt: nowIso(), rev: nextRev(before) };
+    let after: Incident = { ...before };
     if (input.note !== undefined) after = input.note ? { ...after, gvcnNote: input.note } : omitKeys(after, ["gvcnNote"]);
     if (input.status) after.status = input.status;
-    const changes = auditDiff(before, after, ["gvcnNote", "status"]);
-    // Same note and status again: nothing to store, no version bump (every open tab would refetch).
+    if (input.remediation !== undefined) after = input.remediation ? { ...after, remediation: input.remediation } : omitKeys(after, ["remediation"]);
+    const changes = auditDiff(before, after, ["gvcnNote", "status", "remediation"]);
+    // Same note, status and remediation again: nothing to store, no version bump (every open tab would refetch).
     if (Object.keys(changes).length === 0) return before;
+    const at = nowIso();
+    if (gvcnRole && (input.note !== undefined || input.status !== undefined)) after = { ...after, gvcnNoteBy: actorName(user), gvcnNoteAt: at };
+    if (changes.remediation) after = { ...after, remediationBy: actorName(user), remediationAt: at };
+    after.rev = nextRev(before);
     const digests = await loadIncidentDigests(tx, before.levelId, [before.week]);
 
     tx.set(incidentRef(id), after);
@@ -394,4 +441,59 @@ export async function listDeletedIncidents(levelId: LevelId, limit = 500): Promi
     .limit(limit)
     .get();
   return snap.docs.map((d) => d.data() as Incident);
+}
+
+/**
+ * POST /api/incidents/:id/not-duplicate (data.inspect): members = {id} ∪ otherIds (≤ 21, same level, else 400;
+ * soft-deleted members ignored). Every live member lists every other live member in `notDuplicateOf`; members whose
+ * list does not change are not written; changed ones get `rev + 1`, `updatedBy/updatedAt` and a digest upsert. One
+ * UPDATE_INCIDENT audit (entityId = id, `detail: { code, notDuplicate: [codes] }`) when anything changed.
+ * Returns the live members (current state), sorted by code.
+ */
+export async function markNotDuplicate(ctx: ServiceCtx, id: string, input: NotDuplicateData): Promise<Incident[]> {
+  const { user } = ctx;
+  requirePermission(user, "data.inspect");
+  const memberIds = [...new Set([id, ...input.otherIds])];
+  if (memberIds.length > 21) throw Errors.validation(INCIDENT_MSG.notDuplicateTooMany);
+  if (memberIds.length < 2) throw Errors.validation(INCIDENT_MSG.notDuplicateNeedOther);
+  return runTx(async (tx) => {
+    // ---------------- reads ----------------
+    const base = await readIncident(tx, id);
+    requireLevel(user, base.levelId);
+    const snaps = await readDocs(tx, memberIds.slice(1).map((x) => incidentRef(x)));
+    if (snaps.some((s) => !s.exists || (s.data() as Incident).levelId !== base.levelId)) throw Errors.validation(INCIDENT_MSG.notDuplicateMissing);
+    const members = [base, ...snaps.map((s) => s.data() as Incident)];
+    const live = members.filter((m) => !m.deletedAt);
+    const liveIds = live.map((m) => m.id);
+    const at = nowIso();
+    const changed: Incident[] = [];
+    const result = live.map((m) => {
+      const next = sortedUnique([...(m.notDuplicateOf ?? []), ...liveIds.filter((x) => x !== m.id)]);
+      if (JSON.stringify(next) === JSON.stringify(m.notDuplicateOf ?? [])) return m;
+      const after: Incident = { ...m, notDuplicateOf: next, updatedBy: user.email, updatedAt: at, rev: nextRev(m) };
+      changed.push(after);
+      return after;
+    });
+    if (changed.length === 0) return result.sort((a, b) => a.code.localeCompare(b.code));
+    const digests = await loadIncidentDigests(tx, base.levelId, changed.map((m) => m.week));
+
+    // ---------------- writes ----------------
+    for (const m of changed) {
+      tx.set(incidentRef(m.id), m);
+      digests.upsert(m);
+    }
+    digests.write(tx);
+    bumpVersions(tx, [base.levelId]);
+    writeAudit(
+      tx,
+      auditOf(user, "UPDATE_INCIDENT", {
+        entity: "incident",
+        entityId: id,
+        levelId: base.levelId,
+        ip: ctx.ip,
+        detail: { code: base.code, notDuplicate: live.map((m) => m.code).sort() },
+      }),
+    );
+    return result.sort((a, b) => a.code.localeCompare(b.code));
+  });
 }

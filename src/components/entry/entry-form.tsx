@@ -12,10 +12,12 @@ import { calendarStart } from "@/lib/engine";
 import type { Incident, IncidentStatus, LevelDataset } from "@/lib/types";
 import { EntryActionBar, type SaveMode } from "./action-bar";
 import { ClassField } from "./class-field";
+import { DuplicateConfirmDialog, DuplicateNotice } from "./duplicate-parts";
 import { ErrorMeta } from "./error-meta";
 import { EvidenceLinks } from "./evidence-links";
 import { FormStep } from "./form-step";
 import { entryEditAccess } from "./lib/edit-access";
+import { entryDuplicates, notDuplicateIds, withNotDuplicate } from "./lib/duplicates";
 import {
   entryDateHint,
   entryDraftKey,
@@ -32,6 +34,7 @@ import {
 } from "./lib/form-model";
 import { payloadKey, requestFor, toIncidentCreateInput, toIncidentUpdateInput, type PendingRequest } from "./lib/payload";
 import { computeEntryPreview, entryCalendarProblem, resolveCatalogItem } from "./lib/preview";
+import { rosterNames } from "./lib/student-names";
 import { PointsPreview } from "./points-preview";
 import { ScopeField, StudentsField } from "./scope-students";
 import { sameParam } from "./lib/leave-guard";
@@ -81,6 +84,8 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
   const [round, setRound] = useState(0); // remounts pickers with inner state (search text, photo previews) after a reset
   const [focusTick, setFocusTick] = useState(0);
   const pending = useRef<PendingRequest | null>(null);
+  /** Possible duplicates found when saving, waiting for "Không trùng, vẫn lưu" / "Hủy". */
+  const [dupConfirm, setDupConfirm] = useState<{ mode: SaveMode; items: Incident[] } | null>(null);
   const inFlight = useRef(false); // blocks a double tap before the disabled state renders
   const errorId = useId();
   const previewId = useId();
@@ -88,6 +93,12 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
   const preview = useMemo(() => computeEntryPreview(ds, form, today, editing), [ds, form, today, editing]);
   const set = (patch: Partial<EntryFormState>) => setForm((f) => ({ ...f, ...patch }));
   const formDirty = useMemo(() => entryFormDirty(form, baseline), [form, baseline]);
+  const roster = useMemo(() => rosterNames(ds.students), [ds.students]);
+  // Same date + class + error (+ students) as a recorded incident: warn early, confirm on save (never blocks).
+  const duplicates = useMemo(
+    () => entryDuplicates(ds.incidents, { date: form.date, classCode: form.classCode, errorCode: form.errorCode, studentIds: form.studentIds }, editing),
+    [ds.incidents, form.date, form.classCode, form.errorCode, form.studentIds, editing],
+  );
 
   // Keep a copy of unsaved input for this tab; forget it once the form is back to its baseline.
   useEffect(() => {
@@ -140,7 +151,8 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
     if (editing) window.scrollTo({ top: 0, behavior: "smooth" });
   }, [editing]);
 
-  async function submit(mode: SaveMode) {
+  /** `confirmed`: the possible duplicates the user reviewed as different events ("Không trùng, vẫn lưu"). */
+  async function submit(mode: SaveMode, confirmed?: readonly Incident[]) {
     if (inFlight.current || saving || uploading) return;
     if (photoBlocker) {
       toast.error(`Chưa thể lưu: ${photoBlocker}`);
@@ -149,6 +161,10 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
     if (!preview.canSave || !preview.unit) {
       setAttempted(true);
       document.getElementById(previewId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (!confirmed && duplicates.length > 0) {
+      setDupConfirm({ mode, items: duplicates });
       return;
     }
     inFlight.current = true;
@@ -167,7 +183,7 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
         onEditSaved();
         return;
       }
-      const payload = toIncidentCreateInput(ds.levelId, form, preview.unit);
+      const payload = withNotDuplicate(toIncidentCreateInput(ds.levelId, form, preview.unit), confirmed ? notDuplicateIds(confirmed) : []);
       // Same payload retried after a failure → same idempotency key, so a lost response never creates a duplicate.
       const request = requestFor(pending.current, payloadKey(payload), newClientRequestId);
       pending.current = request;
@@ -290,6 +306,7 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
             </FormStep>
 
             <FormStep n={5} id={previewId} title="Điểm trừ" done={preview.canSave}>
+              <DuplicateNotice duplicates={duplicates} today={today} roster={roster} onOpen={onOpenDetail} />
               <PointsPreview preview={preview} scope={form.scope} classCode={form.classCode} attempted={attempted} storedPoints={editing?.points} />
             </FormStep>
 
@@ -333,10 +350,27 @@ export function EntryForm({ ds, today, editing, recentClasses, onClassUsed, onOp
           onSaveNext={() => void submit("next")}
           onCancelEdit={cancelEdit}
           previewId={previewId}
+          duplicateCodes={duplicates.map((d) => d.code)}
         />
       </form>
-      {/* Outside the <form>: keys in the dialog must not reach the form's Ctrl+Enter shortcut. */}
+      {/* Outside the <form>: keys in the dialogs must not reach the form's Ctrl+Enter shortcut. */}
       {leaveGuard}
+      <DuplicateConfirmDialog
+        duplicates={dupConfirm?.items ?? null}
+        editing={!!editing}
+        today={today}
+        roster={roster}
+        onCancel={() => setDupConfirm(null)}
+        onConfirm={() => {
+          const pendingSave = dupConfirm;
+          setDupConfirm(null);
+          if (pendingSave) void submit(pendingSave.mode, pendingSave.items);
+        }}
+        onOpen={(i) => {
+          setDupConfirm(null);
+          onOpenDetail(i);
+        }}
+      />
     </>
   );
 }

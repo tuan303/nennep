@@ -1,13 +1,14 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ChartColumn, ChartLine, ChartPie, Gauge, ListChecks, ShieldCheck, Smartphone, UserRound } from "lucide-react";
-import { Badge, Button, Card, EmptyState, ProgressBar, SegmentedControl, toneHex } from "@/components/ui";
+import { Calculator, ChartColumn, ChartLine, ChartPie, ChevronDown, CopyX, Gauge, ListChecks, ShieldCheck, Smartphone, UserRound } from "lucide-react";
+import { Badge, Button, Card, EmptyState, ProgressBar, SegmentedControl, cn, toneHex, toneSoft } from "@/components/ui";
 import { BarChart, DonutChart, EChart, LineChart } from "@/components/charts";
-import { fmtNumber, fmtPercent } from "@/lib/client/format";
-import { weeklyTrend } from "@/lib/engine";
+import { fmtDate, fmtNumber, fmtPercent } from "@/lib/client/format";
+import { integrityIssues, weeklyTrend, type IntegrityIssue } from "@/lib/engine";
 import { formatNumberVN } from "@/lib/engine/text";
 import type { GlobalFilters, Incident, LevelDataset } from "@/lib/types";
 import { dataCheckCounts } from "./lib/incident-rows";
+import { INTEGRITY_KINDS, INTEGRITY_KIND_META, integrityCounts, integrityIncidentCount, type DuplicateTotals } from "./lib/duplicates-view";
 import { classConfidence, confidenceBarOption, confidenceChartHeight, confidenceTrend, issueCodeCounts, reporterStats, sourceStats, toPct } from "./lib/quality";
 
 const LOWEST = 15;
@@ -21,10 +22,15 @@ export interface QualityTabProps {
   filters: GlobalFilters;
   today: string;
   onGoReview: () => void;
+  /** Possible duplicates of the scope ("Có thể trùng" tab). */
+  duplicates?: DuplicateTotals;
+  onGoDuplicates?: () => void;
+  /** Opens a record listed by the integrity check. */
+  onOpen?: (incident: Incident) => void;
 }
 
 /** "Chất lượng dữ liệu": overall / per-class / per-source / per-reporter confidence, issue mix and weekly trend. */
-export function QualityTab({ ds, incidents, confidence, filters, today, onGoReview }: QualityTabProps) {
+export function QualityTab({ ds, incidents, confidence, filters, today, onGoReview, duplicates, onGoDuplicates, onOpen }: QualityTabProps) {
   const min = ds.config.rag.minConfidence;
   const [showAll, setShowAll] = useState(false);
   const counts = useMemo(() => dataCheckCounts(incidents), [incidents]);
@@ -117,6 +123,8 @@ export function QualityTab({ ds, incidents, confidence, filters, today, onGoRevi
         )}
       </Card>
 
+      <IntegrityCard incidents={incidents} duplicates={duplicates} onGoDuplicates={onGoDuplicates} onOpen={onOpen} className="md:col-span-2 xl:col-span-12" />
+
       <Card className="xl:col-span-4" title="Vấn đề dữ liệu theo loại" subtitle="Số sự việc có từng loại vấn đề" icon={ChartPie}>
         <DonutChart data={donut} centerLabel="vấn đề" legend="bottom" emptyTitle="Không có vấn đề dữ liệu" emptyDescription="Mọi sự việc trong phạm vi lọc đều hợp lệ." ariaLabel="Phân bổ vấn đề dữ liệu theo loại" />
       </Card>
@@ -175,5 +183,131 @@ export function QualityTab({ ds, incidents, confidence, filters, today, onGoRevi
         />
       </Card>
     </div>
+  );
+}
+
+const INTEGRITY_PAGE = 8;
+
+export interface IntegrityCardProps {
+  /** Engine-filtered incidents of the scope (never redacted on this screen). */
+  incidents: Incident[];
+  duplicates?: DuplicateTotals;
+  onGoDuplicates?: () => void;
+  onOpen?: (incident: Incident) => void;
+  className?: string;
+}
+
+/**
+ * "Kiểm tra công thức & dữ liệu" (REQ_V2 §7.3): re-check of the STORED records (engine integrityIssues) – points vs the
+ * formula, student counts, students of another class – plus the possible duplicates of the scope.
+ */
+export function IntegrityCard({ incidents, duplicates, onGoDuplicates, onOpen, className }: IntegrityCardProps) {
+  const [limit, setLimit] = useState(INTEGRITY_PAGE);
+  const issues = useMemo(() => integrityIssues(incidents), [incidents]);
+  const counts = integrityCounts(issues);
+  const affected = integrityIncidentCount(issues);
+  const clean = issues.length === 0;
+
+  return (
+    <Card
+      className={className}
+      title="Kiểm tra công thức & dữ liệu"
+      subtitle="Tính lại điểm trừ và số học sinh của các sự việc đã lưu trong phạm vi lọc"
+      icon={Calculator}
+      actions={
+        <Badge tone={clean ? "ok" : "bad"} icon={clean ? ShieldCheck : Calculator}>
+          {clean ? "Không phát hiện sai lệch" : `${fmtNumber(affected)} sự việc cần kiểm tra`}
+        </Badge>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {INTEGRITY_KINDS.map((kind) => {
+            const meta = INTEGRITY_KIND_META[kind];
+            const n = counts[kind];
+            return (
+              <div key={kind} className="flex flex-col gap-1.5 rounded-control bg-surface-2 p-3 ring-1 ring-inset ring-border">
+                <span className="flex items-center justify-between gap-2">
+                  <span className={cn("inline-flex h-6 items-center rounded-full px-2 text-xs font-semibold ring-1 ring-inset", n > 0 ? toneSoft[meta.tone] : toneSoft.ok)}>
+                    {meta.label}
+                  </span>
+                  <span className={cn("num text-xl font-bold", n > 0 ? "text-bad-strong" : "text-ok-strong")}>{fmtNumber(n)}</span>
+                </span>
+                <span className="text-[13px] leading-snug text-slate-600">{meta.explanation}</span>
+              </div>
+            );
+          })}
+          <div className="flex flex-col gap-1.5 rounded-control bg-surface-2 p-3 ring-1 ring-inset ring-border">
+            <span className="flex items-center justify-between gap-2">
+              <span className={cn("inline-flex h-6 items-center gap-1 rounded-full px-2 text-xs font-semibold ring-1 ring-inset", duplicates?.groups ? toneSoft.warn : toneSoft.ok)}>
+                <CopyX aria-hidden className="size-3.5" strokeWidth={2.25} />
+                Có thể trùng
+              </span>
+              <span className={cn("num text-xl font-bold", duplicates?.groups ? "text-warn-strong" : "text-ok-strong")}>{fmtNumber(duplicates?.groups ?? 0)}</span>
+            </span>
+            <span className="text-[13px] leading-snug text-slate-600">
+              {duplicates?.groups
+                ? `Nhóm sự việc có thể ghi trùng – có thể tính trùng −${fmtNumber(duplicates.extraPoints)} điểm.`
+                : "Không có sự việc cùng ngày, lớp, lỗi và học sinh."}
+            </span>
+            {duplicates?.groups && onGoDuplicates ? (
+              <Button variant="secondary" size="sm" icon={CopyX} onClick={onGoDuplicates} className="mt-auto self-start">
+                Xem nhóm có thể trùng
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {clean ? (
+          <p className="flex items-center gap-2 text-[13px] text-ok-strong">
+            <ShieldCheck aria-hidden className="size-4 shrink-0" strokeWidth={2.25} />
+            Không phát hiện sai lệch: điểm trừ và số học sinh của mọi sự việc khớp với công thức.
+          </p>
+        ) : (
+          <>
+            <ul className="divide-y divide-border overflow-hidden rounded-control ring-1 ring-inset ring-border" aria-label="Sự việc có sai lệch">
+              {issues.slice(0, limit).map((issue, k) => (
+                <IntegrityRow key={`${issue.incident.id}|${issue.kind}|${k}`} issue={issue} onOpen={onOpen} />
+              ))}
+            </ul>
+            {issues.length > limit ? (
+              <Button variant="ghost" size="sm" iconRight={ChevronDown} onClick={() => setLimit((n) => n + INTEGRITY_PAGE * 2)} className="self-center">
+                Xem thêm {fmtNumber(Math.min(INTEGRITY_PAGE * 2, issues.length - limit))} sai lệch
+              </Button>
+            ) : null}
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function IntegrityRow({ issue, onOpen }: { issue: IntegrityIssue; onOpen?: (incident: Incident) => void }) {
+  const i = issue.incident;
+  const meta = INTEGRITY_KIND_META[issue.kind];
+  const body = (
+    <>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+        <span className="num font-semibold text-brand-900">{i.code}</span>
+        <span className="num text-slate-500">{fmtDate(i.date)}</span>
+        <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-bold text-brand-800">Lớp {i.classCode}</span>
+        <Badge tone={meta.tone} size="sm">
+          {meta.label}
+        </Badge>
+      </span>
+      <span className="text-[13px] text-slate-700">{issue.message}</span>
+    </>
+  );
+  if (!onOpen) return <li className="flex flex-col gap-1 px-3 py-2.5">{body}</li>;
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onOpen(i)}
+        className="flex min-h-11 w-full flex-col items-start gap-1 px-3 py-2.5 text-left transition-colors hover:bg-brand-50/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500"
+      >
+        {body}
+      </button>
+    </li>
   );
 }

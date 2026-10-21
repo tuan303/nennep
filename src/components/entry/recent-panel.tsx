@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { ClipboardList, History, Pencil } from "lucide-react";
-import { incidentEditHref, useNow } from "@/components/app/widgets";
+import { ScopeBadge, incidentEditHref, useNow } from "@/components/app/widgets";
 import { canEditIncident } from "@/components/app/widgets/lib/incident-access";
 import { Badge, Card, EmptyState, StatusBadge, buttonClasses, cn } from "@/components/ui";
 import { fmtNumber, fmtTime } from "@/lib/client/format";
@@ -108,6 +108,7 @@ function RecentRow({ incident: i, today, editing, canEdit, onOpen, roster }: Rec
           </span>
           <span className="flex flex-wrap items-center gap-1.5">
             <StatusBadge status={i.status} size="sm" />
+            <ScopeBadge scope={i.scope} size="sm" />
             {editing ? (
               <Badge tone="star" size="sm">
                 Đang sửa

@@ -5,8 +5,9 @@
  */
 import { useMemo } from "react";
 import { Combobox, SegmentedControl, Select, type ComboOption } from "@/components/ui";
-import type { UseFiltersResult } from "@/lib/client/filters";
+import type { StudentFilterOption, UseFiltersResult } from "@/lib/client/filters";
 import { fmtNumber } from "@/lib/client/format";
+import { STUDENT_STATUS_LABELS } from "@/lib/constants";
 import type { PeriodMode } from "@/lib/types";
 import { PeriodPicker } from "./period-picker";
 import { PERIOD_MODE_OPTIONS } from "./period-utils";
@@ -133,6 +134,63 @@ export function ErrorField({ f, className, id }: FieldProps) {
       emptyText="Không có lỗi phù hợp"
       clearable
       disabled={options.length === 0 && !f.filters.errorCode}
+      className={className}
+    />
+  );
+}
+
+export function GroupField({ f, className, id }: FieldProps) {
+  const options = useMemo(() => f.options.groups.map((g) => ({ value: g, label: g })), [f.options.groups]);
+  return (
+    <Select<string>
+      id={id}
+      aria-label={id ? undefined : "Nhóm lỗi"}
+      options={options}
+      value={f.filters.group}
+      onChange={(v) => f.setFilters({ group: v })}
+      placeholder="Tất cả nhóm lỗi"
+      allowEmpty
+      disabled={options.length === 0 && !f.filters.group}
+      wrapperClassName={className}
+    />
+  );
+}
+
+/** Option text of the "Học sinh" filter: label = Họ tên, description = "Mã HS · Lớp" (+ status when not studying). */
+export function studentOption(s: StudentFilterOption): ComboOption<string> {
+  const status = s.status === "ACTIVE" ? "" : ` · ${STUDENT_STATUS_LABELS[s.status]}`;
+  return {
+    value: s.id,
+    label: s.name,
+    group: `Lớp ${s.classCode}`,
+    description: `${s.id} · ${s.classCode}${status}`,
+    keywords: [s.id, s.classCode],
+  };
+}
+
+/** Pill / summary text of the student filter: "HS Nguyễn Văn A" (falls back to the Mã HS). */
+export function studentFilterLabel(f: Pick<UseFiltersResult, "filters" | "options">): string | undefined {
+  const id = f.filters.studentId;
+  if (!id) return undefined;
+  const s = f.options.students.find((o) => o.id === id);
+  return `HS ${s ? s.name : id}`;
+}
+
+export function StudentField({ f, className, id }: FieldProps) {
+  const options = useMemo<ComboOption<string>[]>(() => f.options.students.map(studentOption), [f.options.students]);
+  return (
+    <Combobox<string>
+      id={id}
+      aria-label="Học sinh"
+      title="Chọn học sinh"
+      options={options}
+      value={f.filters.studentId}
+      onChange={(v) => f.setFilters({ studentId: v })}
+      placeholder="Tất cả học sinh"
+      searchPlaceholder="Tìm tên hoặc mã học sinh…"
+      emptyText="Không có học sinh phù hợp"
+      clearable
+      disabled={options.length === 0 && !f.filters.studentId}
       className={className}
     />
   );

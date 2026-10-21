@@ -108,7 +108,7 @@ export function ClassScreen({ ds }: { ds: LevelDataset }) {
       {cls ? (
         <ClassDetail key={cls.code} ds={ds} cls={cls} filters={filters} today={today} />
       ) : (
-        <ClassOverview ds={ds} period={filters.period} grade={filters.grade} today={today} ownCodes={ownCodes} onPick={pick} />
+        <ClassOverview ds={ds} period={filters.period} grade={filters.grade} today={today} ownCodes={ownCodes} onPick={pick} filters={filters} />
       )}
     </div>
   );

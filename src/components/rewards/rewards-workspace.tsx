@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
-import { Info } from "lucide-react";
+import { HandHeart, Info } from "lucide-react";
+import { ownClassesOf } from "@/components/gvcn-report/lib/report-model";
 import { useFilters } from "@/lib/client/filters";
 import { useSession } from "@/lib/client/session";
 import type { LevelDataset, Reward, RewardStatus } from "@/lib/types";
+import { PROPOSAL_NOTICE, rewardModeOf } from "./lib/reward-form";
 import { countedStatusesText, rewardRows } from "./lib/reward-list";
 import { RewardDeleteDialog, RewardEditDialog } from "./reward-dialogs";
 import { RewardDetailSheet } from "./reward-detail-sheet";
@@ -19,17 +21,21 @@ export interface RewardsWorkspaceProps {
 /**
  * Counted-status notice, the create form (two field columns from 32rem) and the full-width period list,
  * stacked so the table keeps all its columns readable next to the sidebar.
+ * GVCN (reward.propose without reward.create): proposal form + list limited to own classes, no edit / delete.
  */
 export function RewardsWorkspace({ ds, today }: RewardsWorkspaceProps) {
   const { filters } = useFilters();
-  const { can } = useSession();
+  const { can, profile } = useSession();
+  const mode = rewardModeOf(can) ?? "propose";
+  const proposing = mode === "propose";
+  const ownClasses = useMemo(() => (proposing ? ownClassesOf(profile, ds.levelId, ds.classes) : undefined), [proposing, profile, ds.levelId, ds.classes]);
   const { busyId, setStatus, remove } = useRewardActions(ds);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailFallback, setDetailFallback] = useState<Reward | null>(null);
   const [editing, setEditing] = useState<Reward | null>(null);
   const [deleting, setDeleting] = useState<Reward | null>(null);
 
-  const rows = useMemo(() => rewardRows(ds, filters), [ds, filters]);
+  const rows = useMemo(() => rewardRows(ds, filters, ownClasses), [ds, filters, ownClasses]);
   // Always show the freshest copy of the open reward (after a status change the dataset is refetched).
   const detail = detailId ? (ds.rewards.find((r) => r.id === detailId) ?? (detailFallback?.id === detailId ? detailFallback : null)) : null;
 
@@ -43,23 +49,36 @@ export function RewardsWorkspace({ ds, today }: RewardsWorkspaceProps) {
   return (
     <>
       <div role="note" className="flex items-start gap-3 rounded-card border border-brand-100 bg-brand-50/70 px-4 py-3 text-sm leading-6 text-brand-900">
-        <Info aria-hidden className="mt-1 size-4 shrink-0 text-brand-600" strokeWidth={2.25} />
+        {proposing ? (
+          <HandHeart aria-hidden className="mt-1 size-4 shrink-0 text-brand-600" strokeWidth={2.25} />
+        ) : (
+          <Info aria-hidden className="mt-1 size-4 shrink-0 text-brand-600" strokeWidth={2.25} />
+        )}
         <p>
-          {statuses ? (
+          {proposing ? (
             <>
-              Chỉ điểm thưởng có trạng thái <strong className="font-semibold">{statuses}</strong> được cộng vào điểm thi đua.
+              {PROPOSAL_NOTICE}{" "}
+              <span className="text-brand-700/80">Thầy/cô chỉ đề xuất được cho lớp mình chủ nhiệm; mỗi đề xuất cộng từ 1 đến 5 điểm kèm lý do.</span>
             </>
           ) : (
-            "Hiện chưa có trạng thái điểm thưởng nào được cộng vào điểm thi đua (xem Cài đặt)."
-          )}{" "}
-          <span className="text-brand-700/80">
-            {can("reward.verify") ? "Thầy/cô có thể xác nhận ngay trong danh sách." : "Quản trị sẽ kiểm tra minh chứng và xác nhận."}
-          </span>
+            <>
+              {statuses ? (
+                <>
+                  Chỉ điểm thưởng có trạng thái <strong className="font-semibold">{statuses}</strong> được cộng vào điểm thi đua.
+                </>
+              ) : (
+                "Hiện chưa có trạng thái điểm thưởng nào được cộng vào điểm thi đua (xem Cài đặt)."
+              )}{" "}
+              <span className="text-brand-700/80">
+                {can("reward.verify") ? "Thầy/cô có thể xác nhận ngay trong danh sách." : "Quản trị sẽ kiểm tra minh chứng và xác nhận."}
+              </span>
+            </>
+          )}
         </p>
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-5">
-        <RewardFormCard ds={ds} today={today} onOpen={open} />
+        <RewardFormCard ds={ds} today={today} onOpen={open} mode={mode} ownClasses={ownClasses} />
         <RewardListCard
           ds={ds}
           rows={rows}
@@ -69,6 +88,7 @@ export function RewardsWorkspace({ ds, today }: RewardsWorkspaceProps) {
           onEdit={setEditing}
           onDelete={setDeleting}
           onStatus={onStatus}
+          ownClassesOnly={proposing}
         />
       </div>
 
@@ -87,8 +107,12 @@ export function RewardsWorkspace({ ds, today }: RewardsWorkspaceProps) {
         }}
         onStatus={onStatus}
       />
-      <RewardEditDialog ds={ds} today={today} reward={editing} onClose={() => setEditing(null)} />
-      <RewardDeleteDialog reward={deleting} onClose={() => setDeleting(null)} onConfirm={remove} />
+      {proposing ? null : (
+        <>
+          <RewardEditDialog ds={ds} today={today} reward={editing} onClose={() => setEditing(null)} />
+          <RewardDeleteDialog reward={deleting} onClose={() => setDeleting(null)} onConfirm={remove} />
+        </>
+      )}
     </>
   );
 }

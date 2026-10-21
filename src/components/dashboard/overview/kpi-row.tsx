@@ -1,15 +1,15 @@
 "use client";
-import { Award, ClipboardList, School, ShieldCheck, TriangleAlert, Users, type LucideIcon } from "lucide-react";
+import { Activity, Award, ClipboardList, ShieldCheck, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import { KpiCard, cn, toneHex } from "@/components/ui";
 import { Sparkline } from "@/components/charts";
 import type { KpiId, KpiView } from "../lib/overview-model";
 
 const ICONS: Record<KpiId, LucideIcon> = {
   incidents: ClipboardList,
+  turns: Activity,
   students: Users,
   penalty: TriangleAlert,
   reward: Award,
-  classes: School,
   confidence: ShieldCheck,
 };
 

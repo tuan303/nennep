@@ -1,8 +1,9 @@
 "use client";
-import { Award, ClipboardList, ShieldCheck, TriangleAlert, Trophy, Users } from "lucide-react";
+import { Activity, Award, ClipboardList, ShieldCheck, TriangleAlert, Trophy, Users } from "lucide-react";
 import { KpiCard, type KpiDelta } from "@/components/ui";
 import { countedRewardHint, countedRewardTerm } from "@/components/rewards/lib/reward-list";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
+import { KPI_TERMS } from "@/lib/constants";
 import type { Kpis, TrendPoint } from "@/lib/engine";
 import type { LevelConfig, RankingRow } from "@/lib/types";
 import { lastValues } from "./lib/class-view";
@@ -27,7 +28,10 @@ function delta(cur: number, prev: number | undefined, goodWhen: "up" | "down", n
   return { value: Math.round((cur - prev) * 100) / 100, goodWhen, label: `so với ${noun}` };
 }
 
-/** Sự việc, Điểm trừ, Điểm thưởng, Điểm thi đua, HS liên quan, Độ tin cậy of the class in the period. */
+/**
+ * Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ (shared KPI_TERMS vocabulary, REQ_V2 §13), Điểm thưởng, Điểm thi đua and
+ * Độ tin cậy of the class in the period.
+ */
 export function ClassKpis({ current: c, previous: p, previousNoun, row, trend, scores, config, hidden }: ClassKpisProps) {
   const lowConfidence = c.incidents > 0 && c.confidence < config.rag.minConfidence;
   const confidenceDelta =
@@ -44,21 +48,44 @@ export function ClassKpis({ current: c, previous: p, previousNoun, row, trend, s
       : undefined;
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 2xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-7">
       <KpiCard
-        label="Sự việc"
+        label={KPI_TERMS.incidents.label}
         value={c.incidents}
         icon={ClipboardList}
         tone="brand"
+        hint={KPI_TERMS.incidents.hint}
         delta={delta(c.incidents, p?.incidents, "down", previousNoun)}
         sparkline={lastValues(trend.map((t) => t.incidents))}
       />
       <KpiCard
-        label="Điểm trừ"
+        label={KPI_TERMS.violationTurns.label}
+        value={c.violationTurns}
+        icon={Activity}
+        tone="warn"
+        hint={KPI_TERMS.violationTurns.hint}
+        delta={delta(c.violationTurns, p?.violationTurns, "down", previousNoun)}
+      />
+      <KpiCard
+        label={KPI_TERMS.uniqueStudents.label}
+        value={hidden ? "–" : c.uniqueStudents}
+        icon={Users}
+        tone="muted"
+        hint={KPI_TERMS.uniqueStudents.hint}
+        delta={hidden ? undefined : delta(c.uniqueStudents, p?.uniqueStudents, "down", previousNoun)}
+        footer={
+          hidden
+            ? `Tên học sinh được ẩn · ${fmtNumber(c.relatedStudents)} ${KPI_TERMS.relatedStudents.label}`
+            : `${fmtNumber(c.relatedStudents)} ${KPI_TERMS.relatedStudents.label}${c.unnamedStudentCount > 0 ? ` · + ${fmtNumber(c.unnamedStudentCount)} HS chưa rõ tên` : ""}`
+        }
+      />
+      <KpiCard
+        label={KPI_TERMS.penaltyPoints.label}
         value={c.penaltyPoints}
         unit="điểm"
         icon={TriangleAlert}
         tone="bad"
+        hint={KPI_TERMS.penaltyPoints.hint}
         delta={delta(c.penaltyPoints, p?.penaltyPoints, "down", previousNoun)}
         sparkline={lastValues(trend.map((t) => t.points))}
       />
@@ -80,19 +107,6 @@ export function ClassKpis({ current: c, previous: p, previousNoun, row, trend, s
         hint={`Điểm thi đua = Điểm nền + ${countedRewardTerm(config)} − Điểm trừ, tính mọi lỗi trong kỳ.`}
         sparkline={lastValues(scores)}
         footer={row ? `Hạng ${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)} · điểm nền ${fmtNumber(row.base)}` : "Không xếp hạng"}
-      />
-      <KpiCard
-        label="Học sinh liên quan"
-        value={c.relatedStudents}
-        icon={Users}
-        tone="muted"
-        hint="Tổng lượt học sinh trong các sự việc (gồm cả học sinh chưa rõ tên)."
-        delta={delta(c.relatedStudents, p?.relatedStudents, "down", previousNoun)}
-        footer={
-          hidden
-            ? "Tên học sinh được ẩn"
-            : `${fmtNumber(c.uniqueStudents)} HS có tên${c.unnamedStudentCount > 0 ? ` · ${fmtNumber(c.unnamedStudentCount)} chưa rõ tên` : ""}`
-        }
       />
       <KpiCard
         label="Độ tin cậy dữ liệu"

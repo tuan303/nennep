@@ -14,13 +14,46 @@ export interface RewardRow {
   counted: boolean;
 }
 
-/** Newest first (date, then code). */
-export function rewardRows(ds: LevelDataset, filters: GlobalFilters): RewardRow[] {
-  const rewards = filterRewards(ds, filters);
+/** Newest first (date, then code). `onlyClasses`: a GVCN sees the rewards of own classes only. */
+export function rewardRows(ds: LevelDataset, filters: GlobalFilters, onlyClasses?: readonly string[]): RewardRow[] {
+  const allowed = onlyClasses ? new Set(onlyClasses) : undefined;
+  const rewards = filterRewards(ds, filters).filter((r) => !allowed || allowed.has(r.classCode));
   const counted = new Set(countedRewards(rewards, ds.config).map((r) => r.id));
   return rewards
     .map((reward) => ({ reward, counted: counted.has(reward.id) }))
     .sort((a, b) => (a.reward.date === b.reward.date ? b.reward.code.localeCompare(a.reward.code) : b.reward.date.localeCompare(a.reward.date)));
+}
+
+/** Rewards proposed by a GVCN (`reward.propose`). */
+export function isProposedReward(r: Pick<Reward, "proposed">): boolean {
+  return r.proposed === true;
+}
+
+/** List filter "Đề xuất của GVCN". */
+export function filterProposedRows(rows: readonly RewardRow[], onlyProposed: boolean): RewardRow[] {
+  return onlyProposed ? rows.filter((r) => isProposedReward(r.reward)) : [...rows];
+}
+
+/** Proposals in the list, and how many still wait for verification. */
+export function proposalCounts(rows: readonly RewardRow[]): { total: number; pending: number } {
+  let total = 0;
+  let pending = 0;
+  for (const { reward } of rows) {
+    if (!isProposedReward(reward)) continue;
+    total += 1;
+    if (reward.status !== VERIFIED_REWARD_STATUS) pending += 1;
+  }
+  return { total, pending };
+}
+
+/** Global filters that do not apply to rewards (Mảng, Lỗi, Nhóm lỗi, Học sinh) – shown as a note under the list. */
+export function ignoredRewardFilters(f: Pick<GlobalFilters, "category" | "errorCode" | "group" | "studentId">): string[] {
+  const out: string[] = [];
+  if (f.category) out.push("Mảng");
+  if (f.errorCode) out.push("Lỗi");
+  if (f.group) out.push("Nhóm lỗi");
+  if (f.studentId) out.push("Học sinh");
+  return out;
 }
 
 export interface RewardSummary {

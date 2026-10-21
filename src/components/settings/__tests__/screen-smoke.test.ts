@@ -58,9 +58,20 @@ describe("Cài đặt screen (SSR smoke)", () => {
   it("renders the tab list and the config tab by default", () => {
     nav.query = "";
     const html = renderToStaticMarkup(h(SettingsScreen));
-    for (const label of ["Cấu hình thi đua", "Danh mục lỗi", "Lớp &amp; GVCN", "Lịch tuần", "Người dùng", "Bảo trì"]) expect(html).toContain(label);
+    for (const label of ["Cấu hình thi đua", "Cảnh báo sớm", "Danh mục lỗi", "Lớp &amp; GVCN", "Lịch tuần", "Người dùng", "Bảo trì"]) expect(html).toContain(label);
     expect(html).toContain("Năm học &amp; điểm nền");
     expect(html).toContain("Áp dụng: Trung học cơ sở");
+  });
+
+  it("renders the early-warning tab with its live preview", () => {
+    const html = renderTab("canh-bao");
+    expect(html).toContain("Lớp tăng lỗi");
+    expect(html).toContain("Lỗi kéo dài");
+    expect(html).toContain("Sự việc nghiêm trọng");
+    expect(html).toContain("Nhóm lỗi nghiêm trọng");
+    expect(html).toContain("Với ngưỡng này:");
+    expect(html).toContain("cảnh báo trong tuần hiện tại");
+    expect(html).toContain("Mở Cấu hình thi đua → Cảnh báo học sinh");
   });
 
   it("renders the catalog tab", () => {

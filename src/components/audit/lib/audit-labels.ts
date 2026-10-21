@@ -27,6 +27,7 @@ export const AUDIT_KIND_LABELS: Record<AuditKind, string> = {
 const G_AUTH = "Đăng nhập & tài khoản";
 const G_INC = "Sự việc";
 const G_REW = "Điểm thưởng";
+const G_INS = "Đợt kiểm tra";
 const G_STU = "Học sinh";
 const G_IO = "Nhập / xuất dữ liệu";
 const G_CFG = "Cấu hình";
@@ -51,12 +52,15 @@ export const AUDIT_ACTION_META: Record<AuditAction, AuditActionMeta> = {
   UPDATE_INCIDENT: { label: "Sửa sự việc", kind: "update", group: G_INC },
   DELETE_INCIDENT: { label: "Xóa sự việc", kind: "delete", group: G_INC },
   RESTORE_INCIDENT: { label: "Khôi phục sự việc", kind: "update", group: G_INC },
-  GVCN_FEEDBACK: { label: "Phản hồi GVCN", kind: "update", group: G_INC },
+  GVCN_FEEDBACK: { label: "Phản hồi / khắc phục sự việc", kind: "update", group: G_INC },
   UPLOAD_EVIDENCE: { label: "Tải ảnh minh chứng", kind: "create", group: G_INC },
   CREATE_REWARD: { label: "Tạo điểm thưởng", kind: "create", group: G_REW },
   UPDATE_REWARD: { label: "Sửa điểm thưởng", kind: "update", group: G_REW },
   DELETE_REWARD: { label: "Xóa điểm thưởng", kind: "delete", group: G_REW },
   RESTORE_REWARD: { label: "Khôi phục điểm thưởng", kind: "update", group: G_REW },
+  CREATE_INSPECTION: { label: "Ghi đợt kiểm tra", kind: "create", group: G_INS },
+  UPDATE_INSPECTION: { label: "Sửa đợt kiểm tra", kind: "update", group: G_INS },
+  DELETE_INSPECTION: { label: "Xóa đợt kiểm tra", kind: "delete", group: G_INS },
   ADD_STUDENT: { label: "Thêm học sinh", kind: "create", group: G_STU },
   UPDATE_STUDENT: { label: "Sửa thông tin học sinh", kind: "update", group: G_STU },
   TRANSFER_STUDENT: { label: "Chuyển lớp", kind: "update", group: G_STU },
@@ -103,6 +107,7 @@ export function auditActionTone(action: string): Tone {
 const ENTITY_LABELS: Record<string, string> = {
   incident: "Sự việc",
   reward: "Điểm thưởng",
+  inspection: "Đợt kiểm tra",
   student: "Học sinh",
   user: "Tài khoản",
   action: "Hành động",
@@ -128,6 +133,7 @@ export const EXPORT_KIND_LABELS: Record<string, string> = {
   gvcn: "Báo cáo GVCN",
   students: "Danh sách học sinh",
   audit: "Nhật ký hệ thống",
+  report: "Báo cáo tuần/tháng",
 };
 
 export function roleLabel(role: Role | "" | undefined): string {

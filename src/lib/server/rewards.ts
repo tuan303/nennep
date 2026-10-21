@@ -2,17 +2,20 @@
  * Reward (điểm thưởng) service: one transaction per mutation (reward doc + monthly reward digest + versions + audit).
  * "Đã xác nhận" status (counted in rankings) requires `reward.verify`. Like incidents: dates must be in a calendar
  * week, every mutation increments `rev` (PATCH `baseRev` → 409 when stale), photos are linked to the record.
+ * REQ_V2 §5.3: new rewards carry an integer 1–5 (`REWARD_POINT_LEVELS`) and a reason ≥ 5 chars; edits apply those
+ * rules only to CHANGED points / reason (legacy values stay valid while unchanged). Callers with `reward.propose`
+ * but without `reward.create` (GVCN) propose rewards for their own classes: status "Mới ghi nhận", `proposed: true`.
  */
 import type { DocumentReference } from "firebase-admin/firestore";
 import type { z } from "zod";
-import { hasPermission } from "../constants";
+import { REWARD_POINT_LEVELS, REWARD_REASON_MIN_LENGTH, hasPermission, isGvcnOfClass } from "../constants";
 import type { RewardCreateSchema, RewardUpdateSchema } from "../contract";
 import { isIsoDate, todayVN, weekInfo } from "../engine/dates";
 import { round2 } from "../engine/scoring";
 import { COL } from "../firestore-paths";
 import type { LevelId, Reward, RewardStatus } from "../types";
 import { auditDiff, auditOf, writeAudit } from "./audit";
-import { actorName, requireLevel, requirePermission, type SessionUser } from "./auth";
+import { actorName, requireAnyPermission, requireLevel, requirePermission, type SessionUser } from "./auth";
 import { assertRestorableWeek, calendarProblem } from "./calendar";
 import { loadRewardDigests } from "./digests";
 import { Errors } from "./errors";
@@ -50,6 +53,9 @@ export const REWARD_MSG = {
   futureDate: "Không thể ghi nhận điểm thưởng ở ngày trong tương lai.",
   invalidDate: "Ngày không hợp lệ.",
   invalidPoints: "Điểm thưởng phải lớn hơn 0.",
+  pointLevels: "Mức điểm cộng là số nguyên từ 1 đến 5 (mức cũ được giữ nếu không sửa).",
+  reasonShort: `Nhập lý do cộng điểm (tối thiểu ${REWARD_REASON_MIN_LENGTH} ký tự).`,
+  proposeOwnClass: "GVCN chỉ được đề xuất điểm thưởng cho lớp mình chủ nhiệm.",
   stale: "Điểm thưởng đã được người khác cập nhật trong lúc bạn đang sửa. Vui lòng tải lại để xem bản mới nhất rồi sửa tiếp.",
 } as const;
 
@@ -68,6 +74,19 @@ export const REWARD_AUDIT_FIELDS = [
 ] as const satisfies ReadonlyArray<keyof Reward>;
 
 const OPTIONAL_KEYS = ["reporter", "note"] as const satisfies ReadonlyArray<keyof Reward>;
+
+/** Proposal status of a GVCN (`reward.propose` without `reward.create`). */
+export const PROPOSAL_STATUS: RewardStatus = "Mới ghi nhận";
+
+/** True for an integer of the 1–5 scale (`REWARD_POINT_LEVELS`). */
+export function isRewardPointLevel(points: number): boolean {
+  return (REWARD_POINT_LEVELS as readonly number[]).includes(points);
+}
+
+/** True when the trimmed reason is long enough for a new / changed reward. */
+export function isRewardReasonValid(reason: string): boolean {
+  return reason.trim().length >= REWARD_REASON_MIN_LENGTH;
+}
 
 export function rewardRef(id: string): DocumentReference {
   return db().collection(COL.rewards).doc(id);
@@ -111,15 +130,23 @@ function assertStatusChange(user: SessionUser, from: RewardStatus | undefined, t
 }
 
 function auditDetail(r: Reward): Record<string, unknown> {
-  return { code: r.code, date: r.date, classCode: r.classCode, points: r.points, status: r.status, reason: r.reason };
+  const d: Record<string, unknown> = { code: r.code, date: r.date, classCode: r.classCode, points: r.points, status: r.status, reason: r.reason };
+  if (r.proposed) d.proposed = true;
+  return d;
 }
 
-/** POST /api/rewards. `created: false` when the clientRequestId was already used. */
+/**
+ * POST /api/rewards (reward.propose). `created: false` when the clientRequestId was already used.
+ * Without `reward.create` (GVCN): own classes only (403), status forced "Mới ghi nhận", `proposed: true`.
+ */
 export async function createReward(ctx: ServiceCtx, input: RewardCreateData): Promise<{ reward: Reward; created: boolean }> {
   const { user } = ctx;
-  requirePermission(user, "reward.create");
+  requireAnyPermission(user, ["reward.create", "reward.propose"]);
   requireLevel(user, input.levelId);
-  assertStatusChange(user, undefined, input.status);
+  const proposal = !hasPermission(user.profile, "reward.create");
+  if (proposal && !isGvcnOfClass(user.profile, input.levelId, input.classCode)) throw Errors.forbidden(REWARD_MSG.proposeOwnClass);
+  const status: RewardStatus = proposal ? PROPOSAL_STATUS : input.status;
+  assertStatusChange(user, undefined, status);
   assertHttpUrls(input.evidenceUrls);
   const today = ctx.today ?? todayVN();
   const levelId = input.levelId;
@@ -133,6 +160,9 @@ export async function createReward(ctx: ServiceCtx, input: RewardCreateData): Pr
     const ref = await loadReference(levelId, tx);
     await assertEvidenceIds(tx, levelId, input.photoIds);
     const errors = validateRewardRules(input, ref, today);
+    // The schema already enforces these; repeated for direct service callers (scripts).
+    if (!isRewardPointLevel(input.points)) errors.push(REWARD_MSG.pointLevels);
+    if (!isRewardReasonValid(input.reason)) errors.push(REWARD_MSG.reasonShort);
     const cls = findClass(ref, input.classCode);
     if (errors.length > 0 || !cls) throw Errors.validationList(errors);
     const alloc = await nextCode(tx, "KT", levelId, input.date, COL.rewards);
@@ -157,7 +187,8 @@ export async function createReward(ctx: ServiceCtx, input: RewardCreateData): Pr
         evidenceUrls: input.evidenceUrls,
         photoIds: input.photoIds,
         note: input.note,
-        status: input.status,
+        status,
+        ...(proposal ? { proposed: true } : {}),
         source: "app",
         createdBy: user.uid,
         createdByName: actorName(user),
@@ -199,11 +230,15 @@ export async function updateReward(ctx: ServiceCtx, id: string, patch: RewardUpd
     const date = patch.date ?? before.date;
     const classCode = patch.classCode ?? before.classCode;
     const points = patch.points ?? before.points;
+    const reason = patch.reason ?? before.reason;
     const classChanged = classCode !== before.classCode;
     // An unchanged class that was later deactivated must not block editing other fields.
     const errors = validateRewardRules({ date, classCode, points }, ref, today, { checkCalendar: date !== before.date }).filter(
       (m) => classChanged || !m.startsWith(`Lớp ${classCode} đã ngừng`),
     );
+    // REQ_V2 §5.3: the 1–5 scale and the reason length apply to CHANGED values only (legacy values stay valid).
+    if (points !== before.points && !isRewardPointLevel(points)) errors.push(REWARD_MSG.pointLevels);
+    if (reason !== before.reason && !isRewardReasonValid(reason)) errors.push(REWARD_MSG.reasonShort);
     const cls = findClass(ref, classCode) ?? (classChanged ? undefined : { code: before.classCode, grade: before.grade });
     if (errors.length > 0 || !cls) throw Errors.validationList(errors);
 
@@ -218,7 +253,7 @@ export async function updateReward(ctx: ServiceCtx, id: string, patch: RewardUpd
         classCode: cls.code,
         grade: cls.grade,
         points: round2(points),
-        reason: patch.reason ?? before.reason,
+        reason,
         reporter: patch.reporter ?? before.reporter,
         evidenceUrls: patch.evidenceUrls ?? before.evidenceUrls,
         photoIds: patch.photoIds ?? before.photoIds,

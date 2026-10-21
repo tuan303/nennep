@@ -2,28 +2,29 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Award, ClipboardList, Database, FileSpreadsheet, Gauge, ListChecks, ShieldCheck, Trash2, TriangleAlert, Users } from "lucide-react";
+import { Award, ClipboardList, CopyX, Database, FileSpreadsheet, Gauge, ListChecks, Repeat, ShieldCheck, Trash2, TriangleAlert, UserRound } from "lucide-react";
 import { KpiCard, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger, buttonClasses } from "@/components/ui";
 import { useNavBadge } from "@/components/app/shell";
 import { IncidentDetailSheet, StudentHistorySheet } from "@/components/app/widgets";
 import { rosterNames } from "@/components/entry/lib/student-names";
-import { LEVELS } from "@/lib/constants";
+import { KPI_TERMS, LEVELS } from "@/lib/constants";
 import { useFilters } from "@/lib/client/filters";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
-import { computeKpis, filterIncidents, filterRewards, periodLabel } from "@/lib/engine";
+import { computeKpis, filterIncidents, filterRewards, findPossibleDuplicates, periodLabel } from "@/lib/engine";
 import type { Incident, LevelDataset } from "@/lib/types";
 import { DeletedTab } from "./deleted-tab";
+import { DuplicatesTab } from "./duplicates-tab";
 import { IncidentsTab } from "./incidents-tab";
 import { QualityTab } from "./quality-tab";
 import { ReviewTab } from "./review-tab";
 import { RewardsTab } from "./rewards-tab";
-import { dataCheckCounts } from "./lib/incident-rows";
+import { duplicateTotals } from "./lib/duplicates-view";
 import { rewardRows } from "./lib/records";
 import { reviewQueue } from "./lib/review-queue";
 
-export const DATA_TABS = ["tat-ca", "ra-soat", "diem-thuong", "da-xoa", "chat-luong"] as const;
+export const DATA_TABS = ["tat-ca", "ra-soat", "trung-lap", "diem-thuong", "da-xoa", "chat-luong"] as const;
 export type DataTab = (typeof DATA_TABS)[number];
 
 function initialTab(raw: string | null, canDelete: boolean): DataTab {
@@ -32,7 +33,10 @@ function initialTab(raw: string | null, canDelete: boolean): DataTab {
   return t;
 }
 
-/** SCR-11 "Dữ liệu & rà soát": KPIs, all incidents, review queue, rewards, deleted records and data quality. */
+/**
+ * SCR-11 "Dữ liệu & rà soát": KPIs (shared KPI_TERMS vocabulary), all incidents, review queue, possible duplicates
+ * (REQ_V2 §7.3, `?tab=trung-lap`), rewards, deleted records and data quality (incl. the integrity re-check).
+ */
 export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
   const { filters, setFilters } = useFilters();
   const { can } = useSession();
@@ -41,15 +45,22 @@ export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
   const canDelete = can("record.delete");
   const [tab, setTab] = useState<DataTab>(() => initialTab(searchParams.get("tab"), canDelete));
   const [openIncident, setOpenIncident] = useState<Incident | null>(null);
+  /** Reason prefilled in "Xóa" when a record is opened from the duplicate review. */
+  const [deleteHint, setDeleteHint] = useState<string | undefined>();
+  const open = useCallback((i: Incident, reason?: string) => {
+    setDeleteHint(reason);
+    setOpenIncident(i);
+  }, []);
   const [studentId, setStudentId] = useState<string | null>(null);
 
   const incidents = useMemo(() => filterIncidents(ds, filters), [ds, filters]);
   const roster = useMemo(() => rosterNames(ds.students), [ds.students]);
   const kpis = useMemo(() => computeKpis(ds, filters), [ds, filters]);
-  const checks = useMemo(() => dataCheckCounts(incidents), [incidents]);
   const queue = useMemo(() => reviewQueue(incidents), [incidents]);
+  const dupGroups = useMemo(() => findPossibleDuplicates(incidents), [incidents]);
+  const dupTotals = useMemo(() => duplicateTotals(dupGroups), [dupGroups]);
   const rewards = useMemo(() => rewardRows(filterRewards(ds, filters), ds.config), [ds, filters]);
-  useNavBadge("/du-lieu", queue.length);
+  useNavBadge("/du-lieu", queue.length + dupGroups.length);
 
   const wholeYear = filters.period.mode === "all";
   const showWholeYear = useCallback(() => setFilters({ period: { mode: "all" } }), [setFilters]);
@@ -73,24 +84,34 @@ export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <KpiCard label="Sự việc" value={kpis.incidents} icon={ClipboardList} tone="brand" footer={`${fmtNumber(kpis.penaltyPoints)} điểm trừ`} onClick={() => setTab("tat-ca")} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-6">
+        <KpiCard
+          label={KPI_TERMS.incidents.label}
+          value={kpis.incidents}
+          icon={ClipboardList}
+          tone="brand"
+          hint={KPI_TERMS.incidents.hint}
+          footer={`${fmtNumber(kpis.classesWithIncidents)} lớp phát sinh`}
+          onClick={() => setTab("tat-ca")}
+        />
+        <KpiCard label={KPI_TERMS.violationTurns.label} value={kpis.violationTurns} icon={Repeat} tone="muted" hint={KPI_TERMS.violationTurns.hint} />
+        <KpiCard
+          label={KPI_TERMS.uniqueStudents.label}
+          value={kpis.uniqueStudents}
+          icon={UserRound}
+          tone="muted"
+          hint={KPI_TERMS.uniqueStudents.hint}
+          footer={kpis.unnamedStudentCount > 0 ? `+ ${fmtNumber(kpis.unnamedStudentCount)} HS chưa rõ tên` : undefined}
+        />
+        <KpiCard label={KPI_TERMS.penaltyPoints.label} value={kpis.penaltyPoints} unit="điểm" icon={TriangleAlert} tone="bad" hint={KPI_TERMS.penaltyPoints.hint} />
         <KpiCard
           label="Cần rà soát"
           value={kpis.reviewCount}
-          icon={TriangleAlert}
+          icon={ListChecks}
           tone={kpis.reviewCount > 0 ? "bad" : "ok"}
-          hint="Sự việc thiếu dữ liệu hoặc lệch với quy định – làm giảm độ tin cậy."
-          onClick={() => setTab("ra-soat")}
-        />
-        <KpiCard
-          label="Thiếu tên HS"
-          value={checks.THIEU_TEN_HS}
-          icon={Users}
-          tone={checks.THIEU_TEN_HS > 0 ? "warn" : "ok"}
-          footer={`${fmtNumber(kpis.unnamedStudentCount)} HS chưa rõ tên`}
-          hint="Lỗi tính theo HS có học sinh chưa rõ tên – vẫn được tính điểm."
-          onClick={() => setTab("ra-soat")}
+          hint="Sự việc thiếu dữ liệu hoặc lệch với quy định – làm giảm độ tin cậy. Sự việc thiếu tên HS vẫn được tính điểm."
+          footer={dupTotals.groups > 0 ? `${fmtNumber(dupTotals.groups)} nhóm có thể trùng` : `${fmtNumber(queue.length - kpis.reviewCount)} thiếu tên HS`}
+          onClick={() => setTab(dupTotals.groups > 0 && kpis.reviewCount === 0 ? "trung-lap" : "ra-soat")}
         />
         <KpiCard
           label="Độ tin cậy dữ liệu"
@@ -111,6 +132,9 @@ export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
           <TabsTrigger value="ra-soat" icon={ListChecks} count={queue.length}>
             Cần rà soát
           </TabsTrigger>
+          <TabsTrigger value="trung-lap" icon={CopyX} count={dupGroups.length}>
+            Có thể trùng
+          </TabsTrigger>
           <TabsTrigger value="diem-thuong" icon={Award} count={rewards.length}>
             Điểm thưởng
           </TabsTrigger>
@@ -125,10 +149,13 @@ export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
         </TabsList>
 
         <TabsContent value="tat-ca">
-          <IncidentsTab incidents={incidents} roster={roster} onOpen={setOpenIncident} onShowWholeYear={wholeYear ? undefined : showWholeYear} />
+          <IncidentsTab incidents={incidents} roster={roster} onOpen={open} onShowWholeYear={wholeYear ? undefined : showWholeYear} />
         </TabsContent>
         <TabsContent value="ra-soat">
-          <ReviewTab ds={ds} queue={queue} onOpen={setOpenIncident} onShowWholeYear={wholeYear ? undefined : showWholeYear} />
+          <ReviewTab ds={ds} queue={queue} onOpen={open} onShowWholeYear={wholeYear ? undefined : showWholeYear} />
+        </TabsContent>
+        <TabsContent value="trung-lap">
+          <DuplicatesTab levelId={ds.levelId} groups={dupGroups} roster={roster} onOpen={open} onShowWholeYear={wholeYear ? undefined : showWholeYear} />
         </TabsContent>
         <TabsContent value="diem-thuong">
           <RewardsTab ds={ds} rows={rewards} onShowWholeYear={wholeYear ? undefined : showWholeYear} />
@@ -139,13 +166,24 @@ export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
           </TabsContent>
         ) : null}
         <TabsContent value="chat-luong">
-          <QualityTab ds={ds} incidents={incidents} confidence={kpis.confidence} filters={filters} today={today} onGoReview={() => setTab("ra-soat")} />
+          <QualityTab
+            ds={ds}
+            incidents={incidents}
+            confidence={kpis.confidence}
+            filters={filters}
+            today={today}
+            onGoReview={() => setTab("ra-soat")}
+            duplicates={dupTotals}
+            onGoDuplicates={() => setTab("trung-lap")}
+            onOpen={open}
+          />
         </TabsContent>
       </Tabs>
 
       <IncidentDetailSheet
         ds={ds}
         incident={openIncident}
+        suggestedDeleteReason={deleteHint}
         onClose={() => setOpenIncident(null)}
         onOpenStudent={(id) => {
           setOpenIncident(null);
@@ -159,7 +197,7 @@ export function DataInspectScreen({ ds }: { ds: LevelDataset }) {
         period={filters.period}
         onOpenIncident={(i) => {
           setStudentId(null);
-          setOpenIncident(i);
+          open(i);
         }}
       />
     </div>

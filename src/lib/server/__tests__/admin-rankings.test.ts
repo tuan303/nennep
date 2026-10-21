@@ -44,8 +44,10 @@ describe("GET /api/rankings (AC-007..AC-011)", () => {
     }
     const reward = (classCode: string, points: number, status: string) =>
       callRoute(rewardPOST, { method: "POST", url: "/api/rewards", token: t.admin, body: { levelId: "THCS", date: day, classCode, points, reason: "Thưởng phong trào", status } });
-    expect((await reward("6A01", 10, "Đã xác nhận")).status).toBe(201);
-    expect((await reward("6A10", 50, "Mới ghi nhận")).status).toBe(201); // not counted
+    // Rewards are 1–5 points each (REQ_V2): 6A01 gets 5 + 5 = 10 counted points.
+    expect((await reward("6A01", 5, "Đã xác nhận")).status).toBe(201);
+    expect((await reward("6A01", 5, "Đã xác nhận")).status).toBe(201);
+    expect((await reward("6A10", 5, "Mới ghi nhận")).status).toBe(201); // not counted
   });
 
   it("AC-007: score = base + counted rewards − penalties (100 + 10 − 25 = 85)", async () => {

@@ -11,11 +11,15 @@ import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
 import { periodLabel } from "@/lib/engine";
 import type { Incident, LevelDataset } from "@/lib/types";
+import { selectedGroup } from "../lib/history-model";
 import { myClassRows, selectedCategory } from "../lib/overview-model";
 import { hrefWithParams } from "../lib/view-helpers";
+import { CumulativeCard } from "./cumulative-card";
 import { CategoryCard, WeekdayCard } from "./distribution-cards";
+import { EarlyWarningCard } from "./early-warning-card";
 import { FiveSCard } from "./five-s-card";
 import { GradeCard } from "./grade-card";
+import { GroupCard } from "./group-card";
 import { HeatmapCard } from "./heatmap-card";
 import { InsightsCard } from "./insights-card";
 import { KpiRow } from "./kpi-row";
@@ -72,11 +76,37 @@ export function OverviewScreen({ ds }: { ds: LevelDataset }) {
 
       <KpiRow views={data.kpis} onOpen={kpiDrill} />
 
-      <InsightsCard ds={ds} period={filters.period} today={today} canOpenActions={can("actions.view")} />
+      <div className={`${ROW} xl:grid-cols-12`}>
+        <InsightsCard ds={ds} period={filters.period} today={today} canOpenActions={can("actions.view")} compact className="xl:col-span-7" />
+        <EarlyWarningCard
+          ds={ds}
+          filters={filters}
+          today={today}
+          profile={profile}
+          canOpenActions={can("actions.view")}
+          search={search}
+          onOpenClass={openClass}
+          onOpenStudent={openStudent}
+          onOpenIncident={setIncident}
+          className="xl:col-span-5"
+        />
+      </div>
 
       <div className={`${ROW} xl:grid-cols-12`}>
         <TrendCard ds={ds} trend={data.trend} period={filters.period} onPickWeek={pickWeek} className="xl:col-span-8" />
         <RagCard ds={ds} ranking={data.ranking} grade={filters.grade} onOpenClass={openClass} className="xl:col-span-4" />
+      </div>
+
+      <div className={`${ROW} xl:grid-cols-12`}>
+        <GroupCard
+          ds={ds}
+          incidents={data.byGroup}
+          group={filters.group}
+          highlighted={selectedGroup(filters, ds.catalog)}
+          onPick={(group) => setFilters({ group })}
+          className="xl:col-span-5"
+        />
+        <CumulativeCard ds={ds} filters={filters} today={today} onPickWeek={pickWeek} className="xl:col-span-7" />
       </div>
 
       <div className={`${ROW} md:grid-cols-2 xl:grid-cols-12`}>

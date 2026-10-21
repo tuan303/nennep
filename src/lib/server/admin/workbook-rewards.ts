@@ -4,7 +4,10 @@
  * Idempotent by doc id `${level}_${code}` like incidents (KT codes generated when empty); like incidents, a code of
  * another class is an ERROR and rewards changed in the app since their last import are not overwritten (WARNING)
  * unless `options.overwriteAppChanges`.
+ * REQ_V2 §5.3: legacy points > 0 outside the 1–5 scale are still imported as in the file, with a WARNING on the rows
+ * that are written (`REWARD_POINTS_SCALE_WARNING`).
  */
+import { REWARD_POINT_LEVELS } from "../../constants";
 import type { WorkbookPayload } from "../../contract";
 import { isIsoDate, mondayOf, weekInfo } from "../../engine/dates";
 import { round2 } from "../../engine/scoring";
@@ -26,6 +29,7 @@ export const REWARD_DELETED_SKIP_MESSAGE = "Điểm thưởng này đã bị xó
 export const REWARD_APP_CHANGED_SKIP_MESSAGE =
   "Điểm thưởng đã được cập nhật trong phần mềm sau lần nhập trước (xác nhận, chỉnh sửa…) – giữ bản trong phần mềm, không cập nhật theo file. " +
   "Chọn “Ghi đè thay đổi trong phần mềm” nếu muốn cập nhật theo file.";
+export const REWARD_POINTS_SCALE_WARNING = "Mức điểm cộng ngoài thang 1–5 (giữ theo file).";
 const OPTIONAL_KEYS = ["reporter", "note", "externalId"] as const satisfies ReadonlyArray<keyof RewardDraft>;
 
 export function rewardContent(r: Reward): RewardDraft {
@@ -129,6 +133,7 @@ export function planRewards(input: {
       continue;
     }
     if (action !== "skip") warnings.push(...status.warnings);
+    if (action !== "skip" && !(REWARD_POINT_LEVELS as readonly number[]).includes(fields.points)) warnings.push(REWARD_POINTS_SCALE_WARNING);
     report.row("rewards", { rowNumber: p.row.rowNumber, key: code, warnings, action });
     if (action !== "skip") writes.push({ action, draft, existing });
   }
