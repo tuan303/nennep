@@ -1,0 +1,439 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   NSHM Nền nếp – design tokens
+   Light theme only. Brand = nhận diện Trường Ngôi Sao Hoàng Mai (hoangmaistarschool.edu.vn):
+   đỏ NSHM #D21235 (logo) + xanh navy #23328C, font Lexend; vàng "ngôi sao" là màu nhấn phụ.
+   Every token below becomes a Tailwind utility, e.g. bg-brand-600,
+   text-star-700, bg-ok-soft, rounded-card, shadow-card, animate-fade-in.
+   ========================================================================== */
+
+/* Font: the root layout loads Lexend (font of the NSHM website) via next/font as --font-lexend.
+   `inline` so utilities resolve the variable on the element that uses them. */
+@theme inline {
+  --font-sans: var(--font-lexend, system-ui), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* Accent of the level being viewed (data-cap on <html>, set by the app shell) – same identity as the
+   "Phiếu đánh giá giờ dạy" app: Tiểu học #FFAD00 · THCS #2DA037 · THPT #23328C · toàn trường = đỏ NSHM.
+   Used for the header accent bar, the selected level, tab underlines and page eyebrows. */
+:root {
+  --acc-brand: #d21235;
+  --acc-series: #d21235;
+  --acc-ink: #ae0e2b;
+  --acc-fill: #d21235;
+  --acc-on: #ffffff;
+  --acc-bar: #d21235;
+  --acc-soft: #fff1f3;
+}
+:root[data-cap="TH"] {
+  --acc-brand: #ffad00;
+  --acc-series: #ec9f07;
+  --acc-ink: #875800;
+  --acc-fill: #ffad00;
+  --acc-on: #1f1500;
+  --acc-bar: #ffad00;
+  --acc-soft: #fdf0d7;
+}
+:root[data-cap="THCS"] {
+  --acc-brand: #2da037;
+  --acc-series: #24922d;
+  --acc-ink: #236f27;
+  --acc-fill: #207e27;
+  --acc-on: #ffffff;
+  --acc-bar: #2da037;
+  --acc-soft: #e3f2e4;
+}
+:root[data-cap="THPT"] {
+  --acc-brand: #23328c;
+  --acc-series: #384db8;
+  --acc-ink: #23328c;
+  --acc-fill: #23328c;
+  --acc-on: #ffffff;
+  --acc-bar: #647ee0;
+  --acc-soft: #e8ebf7;
+}
+
+@theme inline {
+  --color-acc: var(--acc-brand);
+  --color-acc-series: var(--acc-series);
+  --color-acc-ink: var(--acc-ink);
+  --color-acc-fill: var(--acc-fill);
+  --color-acc-on: var(--acc-on);
+  --color-acc-bar: var(--acc-bar);
+  --color-acc-soft: var(--acc-soft);
+  /* Fixed level colours (dots, legends) – independent of the level being viewed. */
+  --color-lv-th: #ffad00;
+  --color-lv-thcs: #2da037;
+  --color-lv-thpt: #23328c;
+}
+
+@theme {
+  /* Brand – NSHM crimson for interactive shades (50–700; 600 = logo red #D21235) and the school navy
+     for the dark shades (800–950: headings text-brand-900, sidebar/hero surfaces). Never mix the two
+     halves in one gradient. */
+  --color-brand-50: #fff1f3;
+  --color-brand-100: #ffe1e6;
+  --color-brand-200: #fec8d1;
+  --color-brand-300: #fb9dae;
+  --color-brand-400: #f2647d;
+  --color-brand-500: #e33452;
+  --color-brand-600: #d21235;
+  --color-brand-700: #ae0e2b;
+  --color-brand-800: #23328c;
+  --color-brand-900: #1a2366;
+  --color-brand-950: #10163f;
+
+  /* Star gold – 500 is the signature accent. 700+ are text-safe on white. */
+  --color-star-50: #fffbeb;
+  --color-star-100: #fef3c7;
+  --color-star-200: #fde68a;
+  --color-star-300: #fcd34d;
+  --color-star-400: #f9c623;
+  --color-star-500: #f5b301;
+  --color-star-600: #d49b00;
+  --color-star-700: #9a6b00;
+  --color-star-800: #6e4c00;
+  --color-star-900: #4a3300;
+
+  /* Status (always paired with an icon + text, never colour alone) */
+  --color-ok: #16a34a;
+  --color-ok-soft: #e8f7ee;
+  --color-ok-strong: #15803d;
+  --color-warn: #d97706;
+  --color-warn-fill: #facc15;
+  --color-warn-soft: #fef6e0;
+  --color-warn-strong: #b45309;
+  --color-bad: #dc2626;
+  --color-bad-soft: #fdecec;
+  --color-bad-strong: #b91c1c;
+  --color-muted: #64748b;
+  --color-muted-soft: #eef1f6;
+  --color-muted-strong: #475569;
+
+  /* Surfaces */
+  --color-canvas: #f4f6fb;
+  --color-surface: #ffffff;
+  --color-surface-2: #f8fafd;
+  --color-surface-3: #f0f3f9;
+  --color-border: #e4e9f2;
+  --color-border-strong: #cbd3e1;
+  --color-ink: #0f172a;
+
+  /* Radius – 14px cards, 10px controls */
+  --radius-card: 14px;
+  --radius-control: 10px;
+
+  /* Depth – navy-tinted, soft */
+  --shadow-card: 0 1px 2px rgb(11 31 77 / 0.04), 0 2px 8px -2px rgb(11 31 77 / 0.06);
+  --shadow-raised: 0 2px 4px -2px rgb(11 31 77 / 0.06), 0 8px 20px -6px rgb(11 31 77 / 0.12);
+  --shadow-pop: 0 4px 8px -4px rgb(11 31 77 / 0.1), 0 16px 40px -8px rgb(11 31 77 / 0.22);
+  --shadow-gold: 0 1px 0 rgb(255 255 255 / 0.35) inset, 0 6px 16px -6px rgb(212 155 0 / 0.65);
+  --shadow-press: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 1px 2px rgb(11 31 77 / 0.18);
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Motion */
+  --animate-fade-in: fade-in 160ms var(--ease-soft) both;
+  --animate-fade-out: fade-out 120ms ease-in both;
+  --animate-slide-up: slide-up 220ms var(--ease-soft) both;
+  --animate-scale-in: scale-in 180ms var(--ease-soft) both;
+  --animate-scale-out: scale-out 120ms ease-in both;
+  --animate-sheet-up: sheet-up 260ms var(--ease-soft) both;
+  --animate-sheet-down: sheet-down 180ms ease-in both;
+  --animate-sheet-left: sheet-left 260ms var(--ease-soft) both;
+  --animate-sheet-right: sheet-right 180ms ease-in both;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-pop: pop 260ms var(--ease-soft) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.97);
+    }
+  }
+  @keyframes scale-out {
+    to {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-down {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-left {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes sheet-right {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -50% 0;
+    }
+  }
+  @keyframes pop {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+  }
+}
+
+/* ------------------------------- base layer ------------------------------- */
+
+@layer base {
+  /* Tailwind v4 defaults borders to currentColor – use the design border instead. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scroll-padding-top: 5rem;
+    color-scheme: light;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--color-canvas);
+    color: var(--color-slate-900);
+    font-family: var(--font-lexend, system-ui), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--color-brand-900);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background-color: var(--color-star-200);
+    color: var(--color-brand-950);
+  }
+
+  /* Keyboard focus is always visible; mouse focus stays quiet. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Scrollbars: thin and calm */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-slate-400);
+  }
+}
+
+/* -------------------------------- utilities ------------------------------- */
+
+/* Numbers in tables, KPIs and badges */
+@utility num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* White card on the canvas */
+@utility card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Visible keyboard focus for custom interactive elements */
+@utility focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  &:focus-visible {
+    outline-color: var(--color-brand-500);
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Faint constellation used on brand bands (hero, login) */
+@utility bg-stars {
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgb(255 255 255 / 0.55) 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 68%, rgb(255 255 255 / 0.4) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 46% 18%, rgb(255 255 255 / 0.35) 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 54%, rgb(255 255 255 / 0.45) 50%, transparent 51%),
+    radial-gradient(2px 2px at 82% 26%, rgb(245 179 1 / 0.8) 50%, transparent 51%),
+    radial-gradient(1px 1px at 90% 78%, rgb(255 255 255 / 0.35) 50%, transparent 51%),
+    radial-gradient(1px 1px at 6% 86%, rgb(255 255 255 / 0.3) 50%, transparent 51%);
+}
+
+/* Skeleton shimmer surface */
+@utility shimmer {
+  background-color: var(--color-surface-3);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.75) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: var(--animate-shimmer);
+}
+
+/* ---------------------------------- motion -------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Busy indicators still turn (slowly): they carry state, not decoration. */
+  .animate-spin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ---------------------------------- print --------------------------------- */
+
+@page {
+  size: A4;
+  margin: 12mm 12mm 14mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    font-size: 11pt;
+  }
+  [data-print-hide],
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  .card {
+    box-shadow: none;
+  }
+  table {
+    break-inside: auto;
+  }
+  tr,
+  img,
+  figure {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+  /* Canvas charts are re-rendered at the print width (charts/print-resize.ts); never let one overflow the column. */
+  [data-chart] div {
+    max-width: 100% !important;
+  }
+  [data-chart] canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Layered (unlike the print rules above) so a screen can let a tall card (long table/list) flow across pages
+   with the `print:break-inside-auto` utility instead of pushing it whole to the next page. */
+@layer base {
+  @media print {
+    .card {
+      break-inside: avoid;
+    }
+  }
+}

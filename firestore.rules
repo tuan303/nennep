@@ -1,0 +1,18 @@
+rules_version = '2';
+// All business data is read and written ONLY by the server (Vercel API routes using firebase-admin,
+// which bypasses these rules). Browsers may only listen to the tiny version counter document,
+// which contains no personal data, to know when to refetch.
+// Only accounts that were granted access in the app (an ACTIVE users/{uid} profile) may listen: a self-registered
+// Firebase Auth account (public sign-up API) gets nothing, not even a way to burn the daily read quota.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /meta/versions {
+      allow read: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+      allow write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
