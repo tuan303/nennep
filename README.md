@@ -32,6 +32,9 @@ Next.js 15 · React 19 · TypeScript · Tailwind CSS 4 · Firebase Auth + Firest
 Tài liệu: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (thiết kế), [docs/SERVER_API.md](docs/SERVER_API.md),
 [docs/FRONTEND_API.md](docs/FRONTEND_API.md), **[docs/HUONG_DAN_TRIEN_KHAI.md](docs/HUONG_DAN_TRIEN_KHAI.md)** (triển khai).
 
+Hướng dẫn sử dụng cho người dùng: trang **`/huong-dan`** trong phần mềm (đọc được cả khi chưa đăng nhập; mở từ nút
+*Hướng dẫn sử dụng* dưới khung đăng nhập hoặc mục cuối menu; in / lưu PDF được). Nội dung nằm ở `src/components/guide/content/`.
+
 ```bash
 npm run typecheck
 ```

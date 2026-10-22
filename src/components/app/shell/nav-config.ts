@@ -4,6 +4,7 @@
  */
 import {
   Award,
+  BookOpen,
   ClipboardList,
   ClipboardPen,
   Database,
@@ -20,11 +21,29 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { APP_ROUTES, canSeeRoute, isRouteActive, type AppRoute, type AppRouteId, type RouteAccessContext } from "./routes";
+import { APP_ROUTES, GUIDE_ROUTE, canSeeRoute, isRouteActive, type AppRoute, type AppRouteId, type RouteAccessContext } from "./routes";
 
 export interface NavItem extends AppRoute {
   icon: LucideIcon;
 }
+
+/** Link outside the permission groups, shown to every signed-in user (e.g. the user guide). */
+export interface FooterNavItem {
+  id: typeof GUIDE_ROUTE.id;
+  href: string;
+  title: string;
+  shortLabel: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+export const GUIDE_NAV_ITEM: FooterNavItem = { ...GUIDE_ROUTE, icon: BookOpen };
+
+/**
+ * Bottom of the desktop sidebar and last tiles of the phone "Thêm" sheet – the same for every role
+ * (no permission: the guide is public).
+ */
+export const FOOTER_NAV_ITEMS: readonly FooterNavItem[] = [GUIDE_NAV_ITEM];
 
 export interface NavGroup {
   id: "overview" | "record" | "operate" | "admin";
@@ -78,6 +97,8 @@ export interface BottomNavModel {
   slots: BottomSlot[];
   /** Remaining permitted items, grouped like the sidebar (for the "Thêm" sheet). */
   more: NavGroup[];
+  /** Always-available links appended after `more` in the "Thêm" sheet (Hướng dẫn sử dụng). */
+  extras: FooterNavItem[];
 }
 
 /**
@@ -96,7 +117,7 @@ export function bottomNavModel(ctx: RouteAccessContext): BottomNavModel {
   }
   const taken = new Set(slots.map((s) => s.item.id));
   const more = groups.map((g) => ({ ...g, items: g.items.filter((i) => !taken.has(i.id)) })).filter((g) => g.items.length > 0);
-  return { slots, more };
+  return { slots, more, extras: [...FOOTER_NAV_ITEMS] };
 }
 
 /** The nav item owning `pathname` among `items` (longest href match). */

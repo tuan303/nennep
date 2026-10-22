@@ -5,7 +5,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Tooltip, cn } from "@/components/ui";
 import { SCHOOL_NAME } from "@/lib/constants";
 import { Logo, LogoMark } from "./logo";
-import { activeNavItem, type NavItem } from "./nav-config";
+import { activeNavItem, type FooterNavItem, type NavItem } from "./nav-config";
 import { useShellContext, type NavBadgeValue } from "./shell-context";
 import { useNavModel } from "./use-nav";
 
@@ -27,7 +27,17 @@ function writeCollapsed(collapsed: boolean): void {
   }
 }
 
-function NavLink({ item, active, compact, badge }: { item: NavItem; active: boolean; compact: boolean; badge?: NavBadgeValue }) {
+function NavLink({
+  item,
+  active,
+  compact,
+  badge,
+}: {
+  item: Pick<NavItem | FooterNavItem, "href" | "title" | "icon">;
+  active: boolean;
+  compact: boolean;
+  badge?: NavBadgeValue;
+}) {
   const Icon = item.icon;
   const link = (
     <Link
@@ -65,7 +75,7 @@ function NavLink({ item, active, compact, badge }: { item: NavItem; active: bool
  * (remembered per device). Items are filtered by permission; active item gets a gold marker.
  */
 export function Sidebar() {
-  const { groups, pathname } = useNavModel();
+  const { groups, footer, pathname } = useNavModel();
   const { badges } = useShellContext();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const toggle = () => {
@@ -98,6 +108,19 @@ export function Sidebar() {
     </nav>
   );
 
+  // Hướng dẫn sử dụng: last item, pinned under the permission groups, for every role (FOOTER_NAV_ITEMS).
+  const renderFooterLinks = (compact: boolean) => (
+    <nav aria-label="Trợ giúp">
+      <ul className="flex flex-col gap-0.5">
+        {footer.map((it) => (
+          <li key={it.id}>
+            <NavLink item={it} active={false} compact={compact} />
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+
   const shell = "sticky top-0 h-dvh shrink-0 flex-col bg-brand-900 text-white shadow-[inset_-1px_0_0_rgb(255_255_255/0.06)]";
   const header = (compact: boolean) => (
     <div className={cn("flex h-16 shrink-0 items-center", compact ? "justify-center" : "px-5")}>
@@ -113,6 +136,7 @@ export function Sidebar() {
       <aside data-print-hide aria-label="Thanh điều hướng" className={cn(shell, "box-content hidden w-[76px] pl-[env(safe-area-inset-left)] md:flex lg:hidden")}>
         {header(true)}
         {renderNav(true)}
+        <div className="shrink-0 border-t border-white/10 p-3">{renderFooterLinks(true)}</div>
       </aside>
       {/* Desktops: full or collapsed */}
       <aside
@@ -122,8 +146,9 @@ export function Sidebar() {
       >
         {header(collapsed)}
         {renderNav(collapsed)}
-        <div className={cn("shrink-0 border-t border-white/10 p-3", collapsed && "flex justify-center")}>
-          {!collapsed ? <p className="mb-2 truncate px-2.5 text-2xs text-white/60">{SCHOOL_NAME}</p> : null}
+        <div className="shrink-0 border-t border-white/10 px-3 pt-3">{renderFooterLinks(collapsed)}</div>
+        <div className={cn("shrink-0 px-3 pb-3 pt-2", collapsed && "flex justify-center")}>
+          {!collapsed ? <p className="mb-2 truncate border-t border-white/10 px-2.5 pt-3 text-2xs text-white/60">{SCHOOL_NAME}</p> : null}
           <Tooltip content="Mở rộng thanh bên" side="right" disabled={!collapsed}>
             <button
               type="button"

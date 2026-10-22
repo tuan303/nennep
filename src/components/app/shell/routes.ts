@@ -198,6 +198,23 @@ export const APP_ROUTES: Record<AppRouteId, AppRoute> = {
 
 export const APP_ROUTE_LIST: AppRoute[] = Object.values(APP_ROUTES);
 
+/**
+ * Public user guide (src/app/huong-dan): outside the signed-in shell, no permission, no dataset.
+ * Not an AppRoute – it is linked from the login page, the bottom of the sidebar and the last "Thêm" tile.
+ */
+export const GUIDE_ROUTE = {
+  id: "guide",
+  href: "/huong-dan",
+  title: "Hướng dẫn sử dụng",
+  shortLabel: "Hướng dẫn",
+  description: "Cách dùng từng màn hình, quy tắc tính điểm và câu hỏi thường gặp.",
+} as const;
+
+/** Link to the guide, optionally to one section: guideHref("xep-hang") → "/huong-dan#xep-hang". */
+export function guideHref(sectionId?: string): string {
+  return sectionId ? `${GUIDE_ROUTE.href}#${encodeURIComponent(sectionId)}` : GUIDE_ROUTE.href;
+}
+
 /** `metadata` export for a route segment layout: `export const metadata = routeMetadata("ranking")`. */
 export function routeMetadata(id: AppRouteId): Metadata {
   return { title: APP_ROUTES[id].title };

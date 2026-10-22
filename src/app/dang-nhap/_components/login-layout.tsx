@@ -1,6 +1,10 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
-import { ClipboardPen, ShieldCheck, Trophy, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardPen, ShieldCheck, Trophy, type LucideIcon } from "lucide-react";
+import { CreditLine } from "@/components/app/shell/credit-line";
 import { Logo, STAR_PATH } from "@/components/app/shell/logo";
+import { GUIDE_ROUTE } from "@/components/app/shell/routes";
+import { buttonClasses } from "@/components/ui/button";
 import { SCHOOL_NAME } from "@/lib/constants";
 import { todayVN } from "@/lib/engine/dates";
 
@@ -76,6 +80,16 @@ function MobileHeader() {
   );
 }
 
+/** "Hướng dẫn sử dụng" under the login card (all widths): the public guide, readable before signing in. */
+function GuideLink() {
+  return (
+    <Link href={GUIDE_ROUTE.href} className={buttonClasses({ variant: "secondary", className: "mx-auto mt-4 flex w-fit" })}>
+      <BookOpen aria-hidden strokeWidth={2.25} />
+      {GUIDE_ROUTE.title}
+    </Link>
+  );
+}
+
 /** Split-screen login layout: brand panel (desktop) / brand header (mobile) + centered card. */
 export function LoginLayout({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
@@ -83,12 +97,14 @@ export function LoginLayout({ children, footer }: { children: ReactNode; footer?
       <Hero />
       <div className="flex min-h-dvh flex-col">
         <MobileHeader />
-        <main className="flex flex-1 items-start justify-center px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:px-6 lg:items-center lg:py-12">
+        <main className="flex flex-1 items-start justify-center px-4 pb-8 sm:px-6 lg:items-center lg:py-12">
           <div className="-mt-12 w-full max-w-[420px] lg:mt-0">
             <div className="card relative p-6 shadow-raised sm:p-8">{children}</div>
+            <GuideLink />
             {footer ? <div className="mt-5 text-center text-xs leading-relaxed text-slate-500">{footer}</div> : null}
           </div>
         </main>
+        <CreditLine className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2" />
       </div>
     </div>
   );

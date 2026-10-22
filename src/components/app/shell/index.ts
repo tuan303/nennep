@@ -5,6 +5,7 @@
 export { AppShell, loginHref } from "./app-shell";
 export { Providers } from "./providers";
 export { Logo, LogoMark, STAR_PATH, type LogoProps, type LogoMarkProps, type LogoSize } from "./logo";
+export { CreditLine, CREDIT_TEXT, type CreditLineProps } from "./credit-line";
 export { Sidebar } from "./sidebar";
 export { TopBar } from "./top-bar";
 export { BottomNav } from "./bottom-nav";
@@ -33,6 +34,30 @@ export { AccountBlocked, AccountBlockedScreen } from "./account-blocked";
 export { StatusScreen, NotFoundScreen, type StatusScreenProps } from "./status-screen";
 export { useShellOptions, useNavBadge, useFilterSheet, type ShellOptions, type NavBadgeValue } from "./shell-context";
 export { useNavModel, usePageChrome, useSignOut, type NavModel } from "./use-nav";
-export { NAV_GROUPS, NAV_ICONS, visibleNavGroups, bottomNavModel, activeNavItem, type NavItem, type NavGroup, type BottomSlot, type BottomNavModel } from "./nav-config";
-export { APP_ROUTES, APP_ROUTE_LIST, routeForPath, isRouteActive, canSeeRoute, routeMetadata, type AppRoute, type AppRouteId } from "./routes";
+export {
+  NAV_GROUPS,
+  NAV_ICONS,
+  GUIDE_NAV_ITEM,
+  FOOTER_NAV_ITEMS,
+  visibleNavGroups,
+  bottomNavModel,
+  activeNavItem,
+  type NavItem,
+  type NavGroup,
+  type FooterNavItem,
+  type BottomSlot,
+  type BottomNavModel,
+} from "./nav-config";
+export {
+  APP_ROUTES,
+  APP_ROUTE_LIST,
+  GUIDE_ROUTE,
+  guideHref,
+  routeForPath,
+  isRouteActive,
+  canSeeRoute,
+  routeMetadata,
+  type AppRoute,
+  type AppRouteId,
+} from "./routes";
 export { InShellNotFound } from "./in-shell-not-found";

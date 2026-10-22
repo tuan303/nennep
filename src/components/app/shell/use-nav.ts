@@ -5,13 +5,15 @@ import { toast } from "@/components/ui/toaster";
 import { errorMessage } from "@/lib/client/api-errors";
 import { APP_NAME } from "@/lib/constants";
 import { useSession } from "@/lib/client/session";
-import { bottomNavModel, visibleNavGroups, type BottomNavModel, type NavGroup } from "./nav-config";
+import { FOOTER_NAV_ITEMS, bottomNavModel, visibleNavGroups, type BottomNavModel, type FooterNavItem, type NavGroup } from "./nav-config";
 import { routeForPath, type AppRoute } from "./routes";
 import { useShellContext } from "./shell-context";
 
 export interface NavModel {
   groups: NavGroup[];
   bottom: BottomNavModel;
+  /** Links for every signed-in user at the bottom of the sidebar (Hướng dẫn sử dụng). */
+  footer: readonly FooterNavItem[];
   pathname: string;
   /** Route of the current page (undefined for unknown paths). */
   route?: AppRoute;
@@ -24,7 +26,7 @@ export function useNavModel(): NavModel {
   const levelCount = accessibleLevels.length;
   return useMemo(() => {
     const ctx = { can, levelCount };
-    return { groups: visibleNavGroups(ctx), bottom: bottomNavModel(ctx), pathname, route: routeForPath(pathname) };
+    return { groups: visibleNavGroups(ctx), bottom: bottomNavModel(ctx), footer: FOOTER_NAV_ITEMS, pathname, route: routeForPath(pathname) };
   }, [can, levelCount, pathname]);
 }
 

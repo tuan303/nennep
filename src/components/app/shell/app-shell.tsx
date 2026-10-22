@@ -7,6 +7,7 @@ import { useSession } from "@/lib/client/session";
 import { AccountBlockedScreen } from "./account-blocked";
 import { AppLoadingScreen } from "./app-loading";
 import { BottomNav } from "./bottom-nav";
+import { CreditLine } from "./credit-line";
 import { FilterBar, FilterBarSkeleton, FilterChips, FilterChipsSkeleton } from "./filter-bar";
 import { FilterSheet } from "./filter-sheet";
 import { CONTENT_MAX_W, GUTTER_X } from "./layout-classes";
@@ -75,10 +76,15 @@ function ShellFrame({ children }: { children: ReactNode }) {
           <main
             id="main-content"
             tabIndex={-1}
-            className={cn(CONTENT_MAX_W, GUTTER_X, "flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4 outline-none md:pb-12 lg:pt-6")}
+            className={cn(CONTENT_MAX_W, GUTTER_X, "flex flex-1 flex-col pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4 outline-none md:pb-8 lg:pt-6")}
           >
-            <PageFilters />
-            <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+            {/* Block wrapper: pages keep their normal flow; flex-1 pushes the credit line to the bottom on short pages. */}
+            <div className="min-w-0 flex-1">
+              <PageFilters />
+              <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+            </div>
+            {/* Inside main's bottom padding, so the phone tab bar never covers it; hidden when printing. */}
+            <CreditLine className="mt-10" />
           </main>
         </div>
         <BottomNav />

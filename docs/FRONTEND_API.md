@@ -303,12 +303,13 @@ FILTER / PERIOD
 
 CHROME (already mounted by the (app) layout; exported for reuse)
 - Layout: `Providers({ children })` (SessionProvider → DataProvider → Tooltip.Provider + Toaster), `AppShell({ children })`, `loginHref(path): string`.
-- Navigation pieces: `Sidebar`, `TopBar`, `BottomNav`, `MoreSheet({ open, onOpenChange, groups: NavGroup[], activeId? })`.
+- Navigation pieces: `Sidebar`, `TopBar`, `BottomNav`, `MoreSheet({ open, onOpenChange, groups: NavGroup[], activeId?, extras?: readonly FooterNavItem[] })` (`extras` = last tiles for every role, default `FOOTER_NAV_ITEMS`).
 - Top-bar pieces: `LevelSwitcher({ variant?: "auto"|"segmented"|"select", className? })`, `SyncIndicator({ className? })`, `UserMenu({ className? })`, `profileScopeText(profile): string`.
 - `ChangePasswordDialog({ open, onOpenChange })`.
 - Screens: `AppLoadingScreen({ message?, onSignOut? })`, `AccountBlocked({ className? })`, `AccountBlockedScreen()`, `StatusScreen({ icon, tone?, code?, title, description?, home?: { href, label } | null, showBack?, onRetry?, retryLabel?, footer?, children? })`, `NotFoundScreen()`.
 - Brand: `Logo({ size?: "sm"|"md"|"lg", tone?: "dark"|"light", showText?, className? })`, `LogoMark({ size?: "xs"|"sm"|"md"|"lg"|"xl", label?, className? })`, `STAR_PATH` (24×24 star path).
-- Hooks: `useNavModel(): { groups, bottom, pathname, route? }`, `usePageChrome(): { title, showFilters, showLevelSwitcher }`, `useSignOut(): () => Promise<void>`.
+- Credit: `CreditLine({ tone?: "light"|"onDark", printable? = false, className? })` and `CREDIT_TEXT` ("© Designed & Developed by Tuan™"). Shown under the login card, at the foot of every signed-in page (AppShell) and in the guide footer; hidden when printing unless `printable`.
+- Hooks: `useNavModel(): { groups, bottom, footer, pathname, route? }` (`footer` = `FOOTER_NAV_ITEMS`), `usePageChrome(): { title, showFilters, showLevelSwitcher }`, `useSignOut(): () => Promise<void>`.
 
 NAV / ROUTES (pure)
 - `APP_ROUTES: Record<AppRouteId, AppRoute>` and `APP_ROUTE_LIST`.
@@ -316,13 +317,15 @@ NAV / ROUTES (pure)
   - AppRouteId: overview | school | ranking | classes | gvcn | reports | students | entry | rewards | actions | studentAdmin | data | excel | audit | settings.
   - REQ_V2: `reports` = /bao-cao (`view.dashboard`, after Báo GVCN, FileText icon, no global filter bar); `rewards` opens with `reward.propose` (GVCN see Điểm thưởng for proposals). /nhap-lieu's page guard is `incident.create` OR `inspection.manage`.
 - `routeMetadata(id): Metadata`, `routeForPath(pathname)`, `isRouteActive(href, pathname)`, `canSeeRoute(route, { can, levelCount })`.
-- `NAV_GROUPS`, `NAV_ICONS`, `visibleNavGroups(ctx)`, `bottomNavModel(ctx): { slots: BottomSlot[]; more: NavGroup[] }`, `activeNavItem(items, pathname)`.
+- `NAV_GROUPS`, `NAV_ICONS`, `visibleNavGroups(ctx)`, `bottomNavModel(ctx): { slots: BottomSlot[]; more: NavGroup[]; extras: FooterNavItem[] }`, `activeNavItem(items, pathname)`.
+- User guide link (no permission, every role): `GUIDE_ROUTE` ({ id: "guide", href: "/huong-dan", title: "Hướng dẫn sử dụng", shortLabel, description }; not an AppRoute), `guideHref(sectionId?)` (e.g. `guideHref("xep-hang")` → "/huong-dan#xep-hang" – use it for in-app help links), `GUIDE_NAV_ITEM`, `FOOTER_NAV_ITEMS` (pinned at the bottom of the sidebar/tablet rail and last tile of the phone "Thêm" sheet), type `FooterNavItem`.
 - Filter bar defaults per route:
   - Shown on /, /xep-hang, /lop, /bao-gvcn, /hoc-sinh, /du-lieu; hidden elsewhere.
   - Level switcher hidden on /toan-truong and /nhat-ky.
 
 ROUTES
-- `/dang-nhap` (login).
+- `/dang-nhap` (login; "Hướng dẫn sử dụng" button under the card).
+- `/huong-dan` (src/app/huong-dan, outside `(app)`): public user guide – no sign-in guard, no dataset, static. Renderer and schema in `@/components/guide`, content (pure data, `GUIDE: GuideContent`) in `src/components/guide/content/`, checked by `src/components/guide/__tests__/content.test.ts` (ids, routes, links, no personal data). Section anchors are the section ids (`/huong-dan#<id>`).
 - `src/app/(app)/` pages for `/`, `/toan-truong`, `/xep-hang`, `/lop`, `/bao-gvcn`, `/bao-cao` (REQ_V2), `/hoc-sinh`, `/nhap-lieu`, `/diem-thuong`, `/hanh-dong`, `/quan-ly-hoc-sinh`, `/du-lieu`, `/nhap-xuat`, `/nhat-ky`, `/cai-dat`.
   - Each `page.tsx` is a small "use client" page inside the right RequirePermission (/toan-truong also uses LevelGuard minLevels=2).
   - Each route folder also has a `layout.tsx` that only exports the tab title; keep it.

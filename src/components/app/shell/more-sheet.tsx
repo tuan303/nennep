@@ -6,7 +6,7 @@ import { Avatar, Button, Sheet, cn } from "@/components/ui";
 import { useSession } from "@/lib/client/session";
 import { ROLE_LABELS } from "@/lib/constants";
 import { ChangePasswordDialog } from "./change-password-dialog";
-import type { NavGroup } from "./nav-config";
+import { FOOTER_NAV_ITEMS, type FooterNavItem, type NavGroup, type NavItem } from "./nav-config";
 import type { AppRouteId } from "./routes";
 import { useShellContext } from "./shell-context";
 import { useSignOut } from "./use-nav";
@@ -18,10 +18,37 @@ export interface MoreSheetProps {
   /** Permitted items that are not in the tab bar. */
   groups: NavGroup[];
   activeId?: AppRouteId;
+  /** Tiles after the features, for every role (default: Hướng dẫn sử dụng). */
+  extras?: readonly FooterNavItem[];
+}
+
+const TILE =
+  "relative flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-card px-1.5 py-3 text-center text-[12.5px] font-semibold leading-tight ring-1 ring-inset transition-colors focus-visible:outline-2 focus-visible:outline-brand-500";
+
+function Tile({ item, active, badge, onNavigate }: { item: NavItem | FooterNavItem; active: boolean; badge?: number | string; onNavigate: () => void }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(TILE, active ? "bg-brand-50 text-brand-800 ring-brand-300" : "bg-surface-2 text-slate-700 ring-border active:bg-brand-50")}
+    >
+      <span className={cn("inline-flex size-10 items-center justify-center rounded-xl", active ? "bg-brand-600 text-white" : "bg-brand-50 text-brand-600")}>
+        <Icon aria-hidden className="size-5" strokeWidth={2} />
+      </span>
+      <span className="line-clamp-2">{item.title}</span>
+      {badge !== undefined ? (
+        <span className="num absolute right-2 top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-star-500 px-1.5 text-2xs font-bold text-brand-950">
+          {badge}
+        </span>
+      ) : null}
+    </Link>
+  );
 }
 
 /** "Thêm" bottom sheet on phones: remaining features as tiles (in sidebar order) + account actions. */
-export function MoreSheet({ open, onOpenChange, groups, activeId }: MoreSheetProps) {
+export function MoreSheet({ open, onOpenChange, groups, activeId, extras = FOOTER_NAV_ITEMS }: MoreSheetProps) {
   const { profile } = useSession();
   const { badges } = useShellContext();
   const signOut = useSignOut();
@@ -36,34 +63,17 @@ export function MoreSheet({ open, onOpenChange, groups, activeId }: MoreSheetPro
         <div className="flex flex-col gap-5">
           {items.length === 0 ? <p className="text-sm text-slate-500">Các chức năng của bạn đã có trên thanh điều hướng.</p> : null}
           <ul className="grid grid-cols-3 gap-2">
-            {items.map((it) => {
-              const Icon = it.icon;
-              const active = it.id === activeId;
-              const badge = badges[it.href];
-              return (
-                <li key={it.id}>
-                  <Link
-                    href={it.href}
-                    onClick={close}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "relative flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-card px-1.5 py-3 text-center text-[12.5px] font-semibold leading-tight ring-1 ring-inset transition-colors focus-visible:outline-2 focus-visible:outline-brand-500",
-                      active ? "bg-brand-50 text-brand-800 ring-brand-300" : "bg-surface-2 text-slate-700 ring-border active:bg-brand-50",
-                    )}
-                  >
-                    <span className={cn("inline-flex size-10 items-center justify-center rounded-xl", active ? "bg-brand-600 text-white" : "bg-brand-50 text-brand-600")}>
-                      <Icon aria-hidden className="size-5" strokeWidth={2} />
-                    </span>
-                    <span className="line-clamp-2">{it.title}</span>
-                    {badge !== undefined ? (
-                      <span className="num absolute right-2 top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-star-500 px-1.5 text-2xs font-bold text-brand-950">
-                        {badge}
-                      </span>
-                    ) : null}
-                  </Link>
-                </li>
-              );
-            })}
+            {items.map((it) => (
+              <li key={it.id}>
+                <Tile item={it} active={it.id === activeId} badge={badges[it.href]} onNavigate={close} />
+              </li>
+            ))}
+            {/* Hướng dẫn sử dụng: always the last tile, whatever the role. */}
+            {extras.map((it) => (
+              <li key={it.id}>
+                <Tile item={it} active={false} onNavigate={close} />
+              </li>
+            ))}
           </ul>
           {profile ? (
             <section aria-label="Tài khoản" className="rounded-card bg-surface-2 p-3 ring-1 ring-inset ring-border">

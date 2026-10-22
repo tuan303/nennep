@@ -85,7 +85,7 @@ export function BottomNav() {
           </li>
         </ul>
       </nav>
-      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} groups={bottom.more} activeId={active?.id} />
+      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} groups={bottom.more} extras={bottom.extras} activeId={active?.id} />
     </>
   );
 }
