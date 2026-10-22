@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { ArrowLeft, House, RefreshCw, SearchX, type LucideIcon } from "lucide-react";
 import { Button, buttonClasses, cn } from "@/components/ui";
 import { SCHOOL_NAME } from "@/lib/constants";
+import { CreditLine } from "./credit-line";
 import { Logo, STAR_PATH } from "./logo";
 
 export interface StatusScreenProps {
@@ -96,7 +97,10 @@ export function StatusScreen({
           {footer ? <div className="mt-6 text-xs text-slate-500">{footer}</div> : null}
         </div>
       </main>
-      <footer className="relative px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center text-xs text-slate-500">{SCHOOL_NAME}</footer>
+      <footer className="relative px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center text-xs text-slate-500">
+        {SCHOOL_NAME}
+        <CreditLine className="mt-1" />
+      </footer>
     </div>
   );
 }

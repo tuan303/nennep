@@ -4,6 +4,7 @@
  * self-contained: no providers, no UI kit – only the global stylesheet.
  */
 import { useEffect } from "react";
+import { CREDIT_TEXT } from "@/components/app/shell/credit-line";
 import "./globals.css";
 
 const STAR = "M12 2.6l2.76 5.6 6.18.9-4.47 4.36 1.05 6.15L12 16.7l-5.52 2.91 1.05-6.15L3.06 9.1l6.18-.9z";
@@ -18,7 +19,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
       <head>
         <title>Đã có lỗi xảy ra · NSHM Nền nếp</title>
       </head>
-      <body className="flex min-h-dvh items-center justify-center bg-canvas p-4 text-slate-900 antialiased">
+      <body className="flex min-h-dvh flex-col items-center justify-center bg-canvas p-4 text-slate-900 antialiased">
         <main className="card w-full max-w-md px-6 py-10 text-center">
           <span className="mx-auto inline-flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 shadow-raised">
             <svg viewBox="0 0 24 24" aria-hidden className="size-8">
@@ -46,6 +47,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           </div>
           {error.digest ? <p className="num mt-6 text-xs text-slate-500">Mã lỗi: {error.digest}</p> : null}
         </main>
+        <p className="mt-6 text-center text-2xs font-medium text-slate-600">{CREDIT_TEXT}</p>
       </body>
     </html>
   );

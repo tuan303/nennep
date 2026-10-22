@@ -308,7 +308,7 @@ CHROME (already mounted by the (app) layout; exported for reuse)
 - `ChangePasswordDialog({ open, onOpenChange })`.
 - Screens: `AppLoadingScreen({ message?, onSignOut? })`, `AccountBlocked({ className? })`, `AccountBlockedScreen()`, `StatusScreen({ icon, tone?, code?, title, description?, home?: { href, label } | null, showBack?, onRetry?, retryLabel?, footer?, children? })`, `NotFoundScreen()`.
 - Brand: `Logo({ size?: "sm"|"md"|"lg", tone?: "dark"|"light", showText?, className? })`, `LogoMark({ size?: "xs"|"sm"|"md"|"lg"|"xl", label?, className? })`, `STAR_PATH` (24×24 star path).
-- Credit: `CreditLine({ tone?: "light"|"onDark", printable? = false, className? })` and `CREDIT_TEXT` ("© Designed & Developed by Tuan™"). Shown under the login card, at the foot of every signed-in page (AppShell) and in the guide footer; hidden when printing unless `printable`.
+- Credit: `CreditLine({ tone?: "light"|"onDark", printable? = false, className? })` and `CREDIT_TEXT` ("© Designed & Developed by Tuan™"). Shown at the foot of every page: login, every signed-in page (AppShell), the guide and the status screens (404, errors, blocked account); hidden when printing unless `printable`.
 - Hooks: `useNavModel(): { groups, bottom, footer, pathname, route? }` (`footer` = `FOOTER_NAV_ITEMS`), `usePageChrome(): { title, showFilters, showLevelSwitcher }`, `useSignOut(): () => Promise<void>`.
 
 NAV / ROUTES (pure)

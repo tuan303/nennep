@@ -1,6 +1,6 @@
 import { cn } from "@/components/ui/cn";
 
-/** Author credit shown under the login card, at the foot of every signed-in page and of the user guide. */
+/** Author credit at the foot of every page: login, every signed-in page, the user guide and the status screens (404, errors, blocked account). */
 export const CREDIT_TEXT = "© Designed & Developed by Tuan™";
 
 export interface CreditLineProps {
