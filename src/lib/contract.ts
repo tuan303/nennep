@@ -419,6 +419,12 @@ export const WorkbookPreviewSchema = z.object({
    * Send the same value to preview and commit (it is part of the preview hash).
    */
   overwriteAppChanges: z.boolean().optional(),
+  /**
+   * Re-score stored incidents that are in the file with the CURRENT error table (the file's "Bảng điểm lỗi" when that
+   * section is imported) instead of the penalty/unit they were recorded with – for a rule the school changed
+   * retroactively ("Tính lại sự việc đã ghi theo bảng điểm mới"). Same value for preview and commit (preview hash).
+   */
+  rescoreExisting: z.boolean().optional(),
 });
 export type WorkbookPreviewInput = z.input<typeof WorkbookPreviewSchema>;
 

@@ -14,13 +14,28 @@ export interface ImportOptionsPanelProps {
   /** "Ghi đè thay đổi trong phần mềm" (top-level `overwriteAppChanges` of preview and commit). */
   overwriteAppChanges: boolean;
   onOverwriteChange: (next: boolean) => void;
+  /** "Tính lại sự việc đã ghi theo bảng điểm mới" (top-level `rescoreExisting` of preview and commit). */
+  rescoreExisting: boolean;
+  onRescoreChange: (next: boolean) => void;
   onPreview: () => void;
   previewing: boolean;
   disabled?: boolean;
 }
 
 /** Step 2: which sections to import (WorkbookImportOptions) and the "Kiểm tra trước" action. */
-export function ImportOptionsPanel({ options, onChange, counts, requestBytes, overwriteAppChanges, onOverwriteChange, onPreview, previewing, disabled }: ImportOptionsPanelProps) {
+export function ImportOptionsPanel({
+  options,
+  onChange,
+  counts,
+  requestBytes,
+  overwriteAppChanges,
+  onOverwriteChange,
+  rescoreExisting,
+  onRescoreChange,
+  onPreview,
+  previewing,
+  disabled,
+}: ImportOptionsPanelProps) {
   const tooLarge = requestBytes > MAX_REQUEST_BYTES;
   return (
     <div className="flex flex-col gap-4">
@@ -62,6 +77,23 @@ export function ImportOptionsPanel({ options, onChange, counts, requestBytes, ov
           description="Mặc định, sự việc / điểm thưởng / học sinh đã được sửa trong phần mềm sau lần nhập trước (phản hồi GVCN, sửa khi rà soát, chuyển lớp…) được giữ nguyên và dòng tương ứng chỉ báo Cảnh báo; mã trùng nhưng khác lớp / khác lỗi bị báo Lỗi. Chỉ chọn khi file là bản đúng nhất."
         />
       </div>
+
+      <div className={cn("rounded-control px-3 py-2.5 ring-1 ring-inset transition-colors", rescoreExisting ? "bg-warn-soft/60 ring-warn/30" : "bg-surface ring-border")}>
+        <Checkbox
+          checked={rescoreExisting}
+          onChange={onRescoreChange}
+          disabled={disabled || previewing || !options.incidents}
+          label={<span className="font-semibold text-slate-800">Tính lại sự việc đã ghi theo bảng điểm mới</span>}
+          description="Mặc định, sự việc đã có trong hệ thống giữ mức trừ và đơn vị (/HS, /lần) lúc ghi nhận. Chọn khi nhà trường đổi cách tính một lỗi và muốn áp dụng cho cả các sự việc cũ có trong file. Sự việc nhập hoặc sửa trong phần mềm chỉ được tính lại khi chọn cả “Ghi đè thay đổi trong phần mềm”."
+        />
+      </div>
+
+      {rescoreExisting && options.incidents ? (
+        <Notice tone="warn" role="alert" title="Điểm các tuần trước có thể thay đổi">
+          Các sự việc đã ghi có trong file được tính lại theo mức trừ và đơn vị trong bảng điểm lỗi hiện tại{options.catalog ? " (bảng trong file)" : ""}; xếp hạng các tuần trước có thể thay đổi.
+          {overwriteAppChanges ? "" : " Sự việc nhập hoặc sửa trong phần mềm được giữ nguyên (cần chọn thêm “Ghi đè thay đổi trong phần mềm”)."}
+        </Notice>
+      ) : null}
 
       {overwriteAppChanges ? (
         <Notice tone="warn" role="alert" title="Sẽ ghi đè thay đổi đã làm trong phần mềm">

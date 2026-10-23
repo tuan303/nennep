@@ -1,7 +1,7 @@
 /**
  * Regression tests of the workbook import: history-aware links (RULES-2), catalog snapshot kept (RULES-3), BR-POINT-04
  * on import (RULES-6), reward status (RULES-9), app changes never reverted silently (INTEGRITY-2), code collisions
- * (INTEGRITY-5), crash recovery (INTEGRITY-8).
+ * (INTEGRITY-5), crash recovery (INTEGRITY-8), re-scoring stored incidents with a new error table (RESCORE).
  */
 import { beforeAll, describe, expect, it } from "vitest";
 import { POST as commitPOST } from "@/app/api/imports/workbook/commit/route";
@@ -174,5 +174,74 @@ describe("workbook import fixes", () => {
     expect(digest.some((i) => i.code === code(9))).toBe(true);
     expect(await getDoc("importBatches", "dead-batch")).toMatchObject({ status: "interrupted", repairedBy: retry.result.batchId });
     expect((await listDocs<{ status?: string }>("importBatches")).filter((b) => b.status === "running")).toHaveLength(0);
+  });
+
+  it("RESCORE: 'Tính lại sự việc đã ghi' re-scores stored incidents with the file's new error table; without it the snapshot stays", async () => {
+    // L03 is 1 điểm/HS: a collective row without named students scores 0; with 2 unnamed students it scores 2.
+    const d3 = addDays(today, -3);
+    const old = payload({
+      incidents: [
+        row(20, { errorCode: "L03", scope: "Tập thể", pointsInFile: 0 }),
+        row(21, { errorCode: "L03", scope: "Tập thể", pointsInFile: 0 }),
+        row(22, { errorCode: "L03", scope: "Tập thể", unnamedCount: 2, pointsInFile: 2 }),
+      ],
+    });
+    await importAll(old);
+    expect(await incident(20)).toMatchObject({ penalty: 1, unit: "/HS", points: 0 });
+    expect(await incident(22)).toMatchObject({ unnamedCount: 2, points: 2 });
+    // An incident recorded in the app (no import hash) with the same error.
+    const app = await callRoute<Incident>(incidentPOST, {
+      method: "POST",
+      url: "/api/incidents",
+      token: t.editor,
+      body: { levelId: "THCS", date: d3, classCode: "7A01", errorCode: "L03", scope: "Tập thể", unnamedCount: 1 },
+    });
+    expect(app.status).toBe(201);
+
+    // The school changes L03 to 5 điểm/lần in its workbook ("Bảng điểm lỗi"). Row 20's sheet shows the new score,
+    // rows 21/22 still hold the recorded score (e.g. a system export).
+    const l03 = TEST_CATALOG.find((c) => c.code === "L03")!;
+    const next: WorkbookPayload = {
+      ...payload({
+        incidents: [
+          row(20, { errorCode: "L03", scope: "Tập thể", pointsInFile: 5 }),
+          row(21, { errorCode: "L03", scope: "Tập thể", pointsInFile: 0 }),
+          row(22, { errorCode: "L03", scope: "Tập thể", unnamedCount: 2, pointsInFile: 2 }),
+          { rowNumber: 30, code: app.body.code, date: d3, classCode: "7A01", errorCode: "L03", scope: "Tập thể", unnamedCount: 1 },
+        ],
+      }),
+      catalog: [{ code: "L03", category: l03.category, issue: "Không đeo thẻ học sinh", penalty: 5, unit: "/lần" }],
+    };
+    const kept = await preview(next);
+    expect(messages(kept, code(20)).join(" ")).toContain("giữ mức 1 điểm/HS lúc ghi nhận");
+
+    const body = { payload: next, rescoreExisting: true };
+    const pv = await callRoute<WorkbookPreview & ApiErrorBody>(previewPOST, { method: "POST", url: "/api/imports/workbook/preview", token: t.admin, body });
+    expect(pv.status).toBe(200);
+    expect(pv.body.previewHash).not.toBe(kept.previewHash);
+    expect(pv.body.sections.incidents.willUpdate).toBe(3);
+    expect(messages(pv.body, code(20)).join(" ")).toContain("Tính lại theo bảng điểm hiện tại 5 điểm/lần (lúc ghi nhận: 1 điểm/HS).");
+    expect(messages(pv.body, code(22)).join(" ")).toContain("Đổi đơn vị /HS → /lần: 2 HS chưa rõ tên không còn được tính.");
+    expect(messages(pv.body, "L03").join(" ")).toContain("tính lại các sự việc đã ghi có trong file");
+    // The app-recorded incident is not reverted without "Ghi đè" – and the admin is told why it was not re-scored.
+    expect(messages(pv.body, app.body.code).join(" ")).toContain("chỉ được tính lại khi chọn cả “Ghi đè thay đổi trong phần mềm”");
+
+    // The flag is part of the preview hash: committing without it is refused.
+    const mismatch = await callRoute<ApiErrorBody>(commitPOST, { method: "POST", url: "/api/imports/workbook/commit", token: t.admin, body: { payload: next, previewHash: pv.body.previewHash } });
+    expect(mismatch.status).toBe(409);
+    const res = await callRoute<WorkbookCommitResult & ApiErrorBody>(commitPOST, { method: "POST", url: "/api/imports/workbook/commit", token: t.admin, body: { ...body, previewHash: pv.body.previewHash } });
+    expect(res.status).toBe(200);
+    // Only penalty/unit are re-scored: the recorded error text stays ("Không đeo thẻ").
+    expect(await incident(20)).toMatchObject({ errorCode: "L03", issue: "Không đeo thẻ", penalty: 5, unit: "/lần", occurrenceCount: 1, points: 5, dataCheck: "OK" });
+    // A file holding the recorded score is not a points mismatch (no review queue for every re-scored incident).
+    const r21 = await incident(21);
+    expect(r21).toMatchObject({ points: 5, dataCheck: "OK" });
+    expect(r21.dataIssues.map((i) => i.code)).not.toContain("POINTS_MISMATCH_IMPORT");
+    expect(await incident(22)).toMatchObject({ unit: "/lần", unnamedCount: 0, points: 5 });
+    expect(await getDoc<Incident>("incidents", app.body.id)).toMatchObject({ penalty: 1, unit: "/HS", unnamedCount: 1 });
+
+    // Idempotent: the same request again changes nothing.
+    const again = await callRoute<WorkbookPreview & ApiErrorBody>(previewPOST, { method: "POST", url: "/api/imports/workbook/preview", token: t.admin, body });
+    expect(again.body.sections.incidents.willUpdate).toBe(0);
   });
 });

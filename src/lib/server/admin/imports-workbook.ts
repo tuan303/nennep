@@ -55,7 +55,11 @@ const SECTION_ORDER = Object.fromEntries(
 /** Pure: plan every section against the loaded state. */
 export function planWorkbook(input: WorkbookPreviewData, state: WorkbookState): WorkbookPlan {
   const { payload } = input;
-  const options: WorkbookOptions = { ...input.options, overwriteAppChanges: input.overwriteAppChanges === true };
+  const options: WorkbookOptions = {
+    ...input.options,
+    overwriteAppChanges: input.overwriteAppChanges === true,
+    rescoreExisting: input.rescoreExisting === true,
+  };
   const report = new ImportReport();
   const reference = planReference(payload, options, state.reference, report);
   const students = planStudents(payload, options, reference, state, report);
@@ -76,7 +80,7 @@ export function planWorkbook(input: WorkbookPreviewData, state: WorkbookState): 
   report.issues.sort((a, b) => SECTION_ORDER[a.sheet] - SECTION_ORDER[b.sheet] || a.rowNumber - b.rowNumber);
   const previewHash = hashOf({
     v: 1,
-    request: { payload, options: input.options, overwriteAppChanges: options.overwriteAppChanges },
+    request: { payload, options: input.options, overwriteAppChanges: options.overwriteAppChanges, rescoreExisting: options.rescoreExisting },
     writes: {
       reference: reference.patch,
       students: students.writes.map((s) => [s.action, s.draft, s.event ?? null]),
@@ -140,7 +144,7 @@ export async function commitWorkbook(ctx: ServiceCtx, input: WorkbookCommitData)
   const { user } = ctx;
   const { payload, options } = input;
   const levelId = payload.levelId;
-  const plan = await loadAndPlan(ctx, { payload, options, overwriteAppChanges: input.overwriteAppChanges });
+  const plan = await loadAndPlan(ctx, { payload, options, overwriteAppChanges: input.overwriteAppChanges, rescoreExisting: input.rescoreExisting });
   if (plan.previewHash !== input.previewHash) throw Errors.conflict(PREVIEW_CHANGED_MESSAGE);
   const unfinished = await unfinishedBatches(levelId);
 
@@ -163,6 +167,7 @@ export async function commitWorkbook(ctx: ServiceCtx, input: WorkbookCommitData)
     sourceFileName: payload.sourceFileName,
     options,
     ...(input.overwriteAppChanges ? { overwriteAppChanges: true } : {}),
+    ...(input.rescoreExisting ? { rescoreExisting: true } : {}),
     created: result.created,
     updated: result.updated,
     skipped: result.skipped,
@@ -182,6 +187,7 @@ export async function commitWorkbook(ctx: ServiceCtx, input: WorkbookCommitData)
         sourceFileName: payload.sourceFileName,
         options,
         ...(input.overwriteAppChanges ? { overwriteAppChanges: true } : {}),
+        ...(input.rescoreExisting ? { rescoreExisting: true } : {}),
         created: result.created,
         updated: result.updated,
         skipped: result.skipped,

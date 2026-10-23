@@ -7,8 +7,8 @@
  * An existing record is updated from the file only if it was not changed in the app since its last import
  * (`importHash`: GVCN feedback, review fixes, edits are never reverted silently) – otherwise the row is a WARNING
  * and skipped, unless `options.overwriteAppChanges`. Updates keep the catalog snapshot (penalty/unit at the time of
- * recording) while the error code is unchanged, the student snapshots of students already linked, the creator,
- * creation time, GVCN feedback and photos; a blank status cell keeps the stored status.
+ * recording) while the error code is unchanged (unless `options.rescoreExisting`), the student snapshots of students
+ * already linked, the creator, creation time, GVCN feedback and photos; a blank status cell keeps the stored status.
  */
 import type { WorkbookPayload, ImportedLink } from "../../contract";
 import { isIsoDate, mondayOf } from "../../engine/dates";
@@ -51,6 +51,8 @@ export const DELETED_SKIP_MESSAGE = "Sự việc này đã bị xóa trong hệ 
 export const APP_CHANGED_SKIP_MESSAGE =
   "Sự việc đã được cập nhật trong phần mềm sau lần nhập trước (phản hồi GVCN, rà soát, chỉnh sửa…) – giữ bản trong phần mềm, " +
   "không cập nhật theo file. Chọn “Ghi đè thay đổi trong phần mềm” nếu muốn cập nhật theo file.";
+export const RESCORE_NEEDS_OVERWRITE_MESSAGE =
+  "Chưa tính lại theo bảng điểm mới: sự việc nhập hoặc sửa trong phần mềm chỉ được tính lại khi chọn cả “Ghi đè thay đổi trong phần mềm”.";
 const OPTIONAL_KEYS = ["group", "reporter", "detail", "externalId", "gvcnNote", "gvcnNoteBy", "gvcnNoteAt"] as const satisfies ReadonlyArray<keyof IncidentDraft>;
 
 /** The existing record without the fields the import never compares (timestamps, actor, batch, revision, hash). */
@@ -103,6 +105,7 @@ export function planIncidents(input: IncidentPlanInput): { writes: Array<Planned
     return { writes: [], review: 0 };
   }
   const overwrite = options.overwriteAppChanges === true;
+  const rescore = options.rescoreExisting === true;
   const lookupClass = makeClassLookup(ref.classes);
   const catalog = new Map(ref.catalog.map((c) => [c.code.toUpperCase(), c]));
   const weekSet = calendarWeekSet(ref.weeks);
@@ -181,7 +184,11 @@ export function planIncidents(input: IncidentPlanInput): { writes: Array<Planned
       warnings.push(`${message} – ghi đè theo file (đã chọn ghi đè).`);
     }
     // Error code unchanged → the catalog snapshot of the stored record (penalty/unit at the time of recording).
-    const item = existing && sameError ? catalogFromSnapshot(existing) : p.item;
+    // `rescoreExisting` replaces only the scoring part (penalty/unit) with the current error table.
+    const scoreChanged = !!existing && sameError && (p.item.penalty !== existing.penalty || p.item.unit !== existing.unit);
+    const rescoring = rescore && scoreChanged;
+    const snapshot = existing && sameError ? catalogFromSnapshot(existing) : undefined;
+    const item = snapshot ? (rescoring ? { ...snapshot, penalty: p.item.penalty, unit: p.item.unit } : snapshot) : p.item;
     // No link rows for a stored incident: the file says nothing about its students → keep the stored snapshots.
     const resolved =
       existing && links.length === 0
@@ -209,7 +216,10 @@ export function planIncidents(input: IncidentPlanInput): { writes: Array<Planned
     const counts = normalizeCounts(item.unit, scope, p.row.occurrenceCount || 1, p.row.unnamedCount ?? existing?.unnamedCount ?? 0);
     const points = computePoints({ unit: item.unit, penalty: item.penalty, namedCount: resolved.students.length, ...counts });
     const pointsInFile = typeof p.row.pointsInFile === "number" ? round2(p.row.pointsInFile) : undefined;
-    if (pointsInFile !== undefined && pointsInFile !== points) {
+    // With `rescoreExisting` the current error table – not the file's points column – scores a stored incident (the
+    // file may still hold the recorded score, e.g. an export): no mismatch flag, now or on a later re-import.
+    const scoredByTable = rescore && !!existing && sameError;
+    if (pointsInFile !== undefined && pointsInFile !== points && !scoredByTable) {
       extra.push({ code: "POINTS_MISMATCH_IMPORT", message: `Điểm trong file (${pointsInFile}) khác điểm tính theo quy định (${points}).` });
     }
     const status = resolveImportedStatus(p.row.status, parseIncidentStatus, existing?.status, "Mới ghi nhận", "Đã đóng");
@@ -238,14 +248,26 @@ export function planIncidents(input: IncidentPlanInput): { writes: Array<Planned
     );
     const action: RowAction = !before ? "create" : canonicalJson(before) === canonicalJson(draft) ? "skip" : "update";
     if (action === "update" && existing && !overwrite && !unchangedSinceImport(existing)) {
-      report.row("incidents", { rowNumber: p.rowNumber, key: code, warnings: [APP_CHANGED_SKIP_MESSAGE], action: "skip" });
+      const skipWarnings = rescoring ? [APP_CHANGED_SKIP_MESSAGE, RESCORE_NEEDS_OVERWRITE_MESSAGE] : [APP_CHANGED_SKIP_MESSAGE];
+      report.row("incidents", { rowNumber: p.rowNumber, key: code, warnings: skipWarnings, action: "skip" });
       skipLinks(report, links);
       continue;
     }
     if (action !== "skip") {
       warnings.push(...status.warnings);
-      if (existing && sameError && (p.item.penalty !== existing.penalty || p.item.unit !== existing.unit)) {
-        warnings.push(`Bảng điểm hiện tại ${penaltyText(p.item.penalty, p.item.unit)}; giữ mức ${penaltyText(existing.penalty, existing.unit)} lúc ghi nhận.`);
+      if (existing && scoreChanged) {
+        warnings.push(
+          rescoring
+            ? `Tính lại theo bảng điểm hiện tại ${penaltyText(p.item.penalty, p.item.unit)} (lúc ghi nhận: ${penaltyText(existing.penalty, existing.unit)}).`
+            : `Bảng điểm hiện tại ${penaltyText(p.item.penalty, p.item.unit)}; giữ mức ${penaltyText(existing.penalty, existing.unit)} lúc ghi nhận.`,
+        );
+        // A unit change drops what the new unit does not count – say so (it cannot be recovered from a later export).
+        if (rescoring && existing.unit === "/HS" && item.unit === "/lần" && existing.unnamedCount > 0) {
+          warnings.push(`Đổi đơn vị /HS → /lần: ${existing.unnamedCount} HS chưa rõ tên không còn được tính.`);
+        }
+        if (rescoring && existing.unit === "/lần" && item.unit === "/HS" && existing.occurrenceCount > 1) {
+          warnings.push(`Đổi đơn vị /lần → /HS: số lần vi phạm ${existing.occurrenceCount} không còn được tính.`);
+        }
       }
     }
     report.row("incidents", {

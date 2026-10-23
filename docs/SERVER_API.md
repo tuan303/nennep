@@ -449,7 +449,11 @@ Student mutations update `__stu` + bump the version in the same transaction. Act
 ### Workbook import (`imports-workbook.ts` + `workbook-*.ts`)
 - `planWorkbook(input, state)` is pure; `loadWorkbookState(payload, today)` does every read (canonical reference, level students, other-level
   ids, existing incident/reward docs for the payload codes, counters, existing codes of days that need generated codes).
-- Request: `{ payload, options, overwriteAppChanges? }` (preview and commit; `overwriteAppChanges` is part of the hash).
+- Request: `{ payload, options, overwriteAppChanges?, rescoreExisting? }` (preview and commit; both flags are part of the hash).
+  `rescoreExisting` ("Tính lại sự việc đã ghi theo bảng điểm mới"): stored incidents in the file take penalty/unit from the current error
+  table (the file's "Bảng điểm lỗi" when imported; the recorded texts stay) – for a rule changed retroactively. Their points come from
+  the table, so the file's points column raises no POINTS_MISMATCH_IMPORT for them; a unit change that drops an unnamed count / an
+  occurrence count is warned. App-recorded / app-edited incidents are still skipped unless `overwriteAppChanges` (hint in the row).
 - Sections: classes/catalog **upsert** (existing keep active / order / is5S; only non-empty file fields overwrite; new catalog items get
   `is5S` from `DEFAULT_5S_CODES`); config only when `options.config` (base score, firstWeek → Monday, HK1/HK2 dates); weeks upsert
   (existing keep `counted`/`note`); students upsert (class must exist in the effective class list; a non-"Đang học" status goes to `note`;
@@ -469,7 +473,7 @@ Student mutations update `__stu` + bump the version in the same transaction. Act
   Evidence cell: http(s) links → `evidenceUrls`, other text → appended to `detail`. Links to codes missing from "Nhập liệu" are ERROR rows of
   the links section; rows without any student are WARNING and skipped.
 - Idempotent by doc id `{level}_{code}`: identical → skip; existing → update (keeps createdAt/createdBy/createdByName, GVCN feedback, photos,
-  `unnamedCount`, source, the **catalog snapshot** while the error code is unchanged – a different current penalty is only a WARNING –,
+  `unnamedCount`, source, the **catalog snapshot** while the error code is unchanged – a different current penalty is only a WARNING, unless `rescoreExisting` –,
   the stored students when the file has no link row for the code; reporter/detail/evidence kept when the file cell is empty); soft-deleted
   → WARNING + skip. Every written record stores `importHash` (hash of the content written) and the next `rev`; a record whose content no
   longer matches its `importHash` (changed in the app since: GVCN feedback, review fixes, edits – or never imported) is NOT updated:

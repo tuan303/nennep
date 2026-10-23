@@ -15,8 +15,8 @@ import { canonicalJson } from "./hash";
 import type { ImportReport, RowAction } from "./workbook-report";
 import { penaltyText } from "./workbook-text";
 
-/** Section options + the request-level `overwriteAppChanges` choice (see WorkbookPreviewSchema). */
-export type WorkbookOptions = z.output<typeof WorkbookImportOptionsSchema> & { overwriteAppChanges?: boolean };
+/** Section options + the request-level `overwriteAppChanges` / `rescoreExisting` choices (see WorkbookPreviewSchema). */
+export type WorkbookOptions = z.output<typeof WorkbookImportOptionsSchema> & { overwriteAppChanges?: boolean; rescoreExisting?: boolean };
 
 export interface ReferencePlan {
   /** Parts to persist (only sections that change something). */
@@ -79,7 +79,12 @@ function planClasses(levelId: LevelId, rows: WorkbookPayload["classes"], ref: Ca
   return { list: sortClasses([...merged.values()]), changed };
 }
 
-function planCatalog(rows: WorkbookPayload["catalog"], ref: CanonicalReference, report: ImportReport): { list: CatalogItem[]; changed: boolean } {
+function planCatalog(
+  rows: WorkbookPayload["catalog"],
+  ref: CanonicalReference,
+  report: ImportReport,
+  rescoreExisting: boolean,
+): { list: CatalogItem[]; changed: boolean } {
   const merged = new Map(ref.stored.catalog);
   const seen = new Set<string>();
   let changed = false;
@@ -94,7 +99,10 @@ function planCatalog(rows: WorkbookPayload["catalog"], ref: CanonicalReference, 
     const existing = merged.get(code);
     if (existing && (existing.penalty !== row.penalty || existing.unit !== row.unit)) {
       warnings.push(
-        `Điểm trừ thay đổi: ${penaltyText(existing.penalty, existing.unit)} → ${penaltyText(row.penalty, row.unit)} (chỉ áp dụng cho sự việc nhập mới hoặc nhập lại; sự việc đã ghi giữ nguyên điểm).`,
+        `Điểm trừ thay đổi: ${penaltyText(existing.penalty, existing.unit)} → ${penaltyText(row.penalty, row.unit)} ` +
+          (rescoreExisting
+            ? "(áp dụng cho sự việc nhập mới và tính lại các sự việc đã ghi có trong file; sự việc nhập hoặc sửa trong phần mềm cần chọn thêm “Ghi đè”)."
+            : "(chỉ áp dụng cho sự việc nhập mới hoặc nhập lại; sự việc đã ghi giữ nguyên điểm)."),
       );
     }
     const base: CatalogItem = existing ?? { code, category: row.category, issue: row.issue, penalty: row.penalty, unit: row.unit, is5S: DEFAULT_5S_CODES.includes(code), active: true };
@@ -171,7 +179,7 @@ export function planReference(payload: WorkbookPayload, options: WorkbookOptions
 
   let catalog = ref.catalog;
   if (options.catalog) {
-    const r = planCatalog(payload.catalog, ref, report);
+    const r = planCatalog(payload.catalog, ref, report, options.rescoreExisting === true);
     catalog = r.list;
     if (r.changed) patch.catalog = r.list;
   } else report.skipAll("catalog", payload.catalog.length);

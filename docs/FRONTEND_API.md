@@ -165,6 +165,7 @@ workbook
 - preview(WorkbookPreviewInput): WorkbookPreview
 - commit(WorkbookCommitInput): WorkbookCommitResult
 - "Ghi đè thay đổi trong phần mềm" = top-level `overwriteAppChanges: true` in BOTH bodies ({ payload, options, overwriteAppChanges, previewHash }), never inside `options`
+- "Tính lại sự việc đã ghi theo bảng điểm mới" = top-level `rescoreExisting: true` in BOTH bodies (same rules as `overwriteAppChanges`)
 
 Other endpoints
 - exportsLog(ExportLogInput): OkResponse

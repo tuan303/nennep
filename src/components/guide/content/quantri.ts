@@ -168,6 +168,11 @@ const nhapXuat: GuideSection = {
       text: "Mặc định, bản ghi đã được sửa trong phần mềm sau lần nhập trước (phản hồi GVCN, sửa khi rà soát, chuyển lớp…) được **giữ nguyên** và dòng tương ứng chỉ báo Cảnh báo; dòng có mã trùng nhưng khác lớp hoặc khác lỗi bị báo Lỗi. Chỉ tích [[Ghi đè thay đổi trong phần mềm]] khi file là bản đúng nhất – khi đó nội dung trong file thay thế cả phản hồi và trạng thái do GVCN đã cập nhật. Nhập phần **Cấu hình** sẽ ghi đè cấu hình đã phê duyệt.",
     },
     {
+      kind: "note",
+      title: "Nhà trường đổi cách tính một lỗi",
+      text: "Sự việc đã ghi giữ mức trừ và đơn vị (/HS, /lần) **lúc ghi nhận**, kể cả khi bảng điểm lỗi đổi sau đó. Nếu nhà trường muốn áp dụng cách tính mới cho cả các sự việc cũ, nhập file có bảng điểm lỗi mới và tích [[Tính lại sự việc đã ghi theo bảng điểm mới]]: các sự việc đã ghi có trong file được tính lại theo **mức trừ và đơn vị** mới, xếp hạng các tuần trước có thể thay đổi. Sự việc nhập hoặc sửa trực tiếp trong phần mềm chỉ được tính lại khi tích thêm [[Ghi đè thay đổi trong phần mềm]]. Khi đổi đơn vị /HS → /lần, số HS chưa rõ tên không còn được tính (và ngược lại số lần vi phạm) – phần xem trước sẽ báo rõ.",
+    },
+    {
       kind: "tip",
       title: "Mẹo: bắt đầu từ file xuất của hệ thống",
       text: "Bấm [[Xuất Excel]], chỉnh sửa trực tiếp trên file đó rồi nhập lại – cấu trúc luôn đúng và không tạo bản ghi trùng (dòng có Mã sự việc đã có được đối chiếu với bản ghi hiện có thay vì tạo mới). Khung **Mẫu file Excel** liệt kê các trang và cột hệ thống đọc.",

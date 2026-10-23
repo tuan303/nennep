@@ -36,6 +36,8 @@ interface PreviewState {
   options: ImportOptions;
   /** "Ghi đè thay đổi trong phần mềm" as previewed (part of the preview hash). */
   overwrite: boolean;
+  /** "Tính lại sự việc đã ghi theo bảng điểm mới" as previewed (part of the preview hash). */
+  rescore: boolean;
   /** Exact request of the preview – re-sent with the hash on commit. */
   input: WorkbookPreviewInput & { options: ImportOptions };
 }
@@ -69,6 +71,8 @@ export function ImportWizard() {
    * A top-level request field (not an import option), sent identically to preview and commit.
    */
   const [overwrite, setOverwrite] = useState(false);
+  /** Re-score stored incidents with the current error table (top-level `rescoreExisting`, like `overwrite`). */
+  const [rescore, setRescore] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
@@ -79,11 +83,22 @@ export function ImportWizard() {
 
   const counts = useMemo(() => (file ? payloadCounts(file.payload) : null), [file]);
   const request = useMemo(
-    () => (file && options ? { payload: requestPayload(file.payload, options), options, ...(overwrite ? { overwriteAppChanges: true } : {}) } : null),
-    [file, options, overwrite],
+    () =>
+      file && options
+        ? {
+            payload: requestPayload(file.payload, options),
+            options,
+            ...(overwrite ? { overwriteAppChanges: true } : {}),
+            ...(rescore && options.incidents ? { rescoreExisting: true } : {}),
+          }
+        : null,
+    [file, options, overwrite, rescore],
   );
   const bytes = useMemo(() => (request ? jsonBytes(request) : 0), [request]);
-  const stale = !!preview && !!options && (!optionsEqual(preview.options, options) || preview.overwrite !== overwrite);
+  const stale =
+    !!preview &&
+    !!options &&
+    (!optionsEqual(preview.options, options) || preview.overwrite !== overwrite || preview.rescore !== (rescore && options.incidents));
   const target = file?.payload.levelId;
   const targetAllowed = target !== undefined && accessibleLevels.includes(target);
 
@@ -93,6 +108,7 @@ export function ImportWizard() {
     setFile(null);
     setOptions(null);
     setOverwrite(false);
+    setRescore(false);
     setParseError(null);
     setPreview(null);
     setPreviewError(null);
@@ -134,7 +150,13 @@ export function ImportWizard() {
     setPreviewing(true);
     try {
       const res = await api.workbook.preview(request);
-      setPreview({ result: res, options: request.options, overwrite: request.overwriteAppChanges === true, input: request });
+      setPreview({
+        result: res,
+        options: request.options,
+        overwrite: request.overwriteAppChanges === true,
+        rescore: request.rescoreExisting === true,
+        input: request,
+      });
       setConflict(false);
       requestAnimationFrame(() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (err) {
@@ -198,6 +220,8 @@ export function ImportWizard() {
                   onChange={setOptions}
                   overwriteAppChanges={overwrite}
                   onOverwriteChange={setOverwrite}
+                  rescoreExisting={rescore}
+                  onRescoreChange={setRescore}
                   counts={counts}
                   requestBytes={bytes}
                   onPreview={() => void runPreview()}
@@ -245,6 +269,7 @@ export function ImportWizard() {
             ? `Sẽ tạo ${fmtNumber(totals.willCreate)} và cập nhật ${fmtNumber(totals.willUpdate)} bản ghi${totals.error > 0 ? `; ${fmtNumber(totals.error)} dòng lỗi được bỏ qua` : ""}. ` +
               `${preview?.options.config ? "Cấu hình đã phê duyệt sẽ bị ghi đè. " : ""}` +
               `${preview?.overwrite ? "Các thay đổi đã làm trong phần mềm (phản hồi GVCN, sửa khi rà soát…) sẽ bị thay bằng nội dung file. " : ""}` +
+              `${preview?.rescore ? `Các sự việc đã ghi có trong file sẽ được tính lại theo bảng điểm lỗi mới${preview.overwrite ? "" : " (trừ sự việc nhập hoặc sửa trong phần mềm)"}. ` : ""}` +
               "Thao tác được ghi vào nhật ký và có thể mất đến 1 phút."
             : undefined
         }
