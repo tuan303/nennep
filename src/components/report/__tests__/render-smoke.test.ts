@@ -133,6 +133,9 @@ describe("THCS score bands in the document", () => {
     const bgh = doc(ds, { kind: "bgh" }, false);
     for (const label of ["Top &gt;90%", "Top 51%–90%", "Top &lt;51%", "Xếp nhóm:"]) expect(bgh).toContain(label);
     expect(bgh).not.toContain("Ngoài Top");
+    // The column header already says "Khối": cells hold the number only.
+    expect(bgh).toContain('font-semibold">6</td>');
+    expect(bgh).not.toContain(">Khối 6</td>");
   });
 
   it("a period without a counted week is not grouped (and does not fall back to Top 90%)", () => {

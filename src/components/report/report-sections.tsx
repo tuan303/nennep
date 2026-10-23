@@ -122,7 +122,7 @@ function LevelBands({ grades }: { grades: ReportGradeRanking[] }) {
         <tbody>
           {grades.map((g) => (
             <tr key={g.grade}>
-              <td className={cn(TD, "font-semibold")}>Khối {g.grade}</td>
+              <td className={cn(TD, "num font-semibold")}>{g.grade}</td>
               <td className={cn(TD, "num text-right")}>{fmtNumber(g.classCount)}</td>
               <td className={cn(TD, "num text-right")}>{fmtNumber(g.avgScore)}</td>
               {SCORE_BAND_ORDER.map((b) => (
@@ -156,7 +156,7 @@ function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topL
         <tbody>
           {grades.map((g) => (
             <tr key={g.grade}>
-              <td className={cn(TD, "font-semibold")}>Khối {g.grade}</td>
+              <td className={cn(TD, "num font-semibold")}>{g.grade}</td>
               <td className={cn(TD, "num text-right")}>{fmtNumber(g.classCount)}</td>
               <td className={cn(TD, "num text-right")}>{fmtNumber(g.avgScore)}</td>
               <td className={cn(TD, "num")}>{g.leaders.map((r) => `${r.classCode} (${fmtNumber(r.score)})`).join(", ") || "–"}</td>
