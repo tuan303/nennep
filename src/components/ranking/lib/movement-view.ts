@@ -3,7 +3,7 @@
  * "Biến động xếp hạng" bump chart lines. Ranks / scores come from the engine (`rankHistory`). Unit-tested.
  */
 import type { BumpLine } from "@/components/charts/bump-option";
-import type { RankHistory } from "@/lib/engine";
+import type { RankHistory, RankingScope } from "@/lib/engine";
 
 export type RankingView = "bang" | "bien-dong" | "bao-phu";
 
@@ -14,6 +14,19 @@ export const RANKING_VIEWS: ReadonlyArray<{ value: RankingView; label: string; s
   { value: "bien-dong", label: "Biến động xếp hạng", short: "Biến động" },
   { value: "bao-phu", label: "Bao phủ kiểm tra", short: "Bao phủ" },
 ];
+
+/** Page description of a view; a level ranked as a whole (THPT) reads "toàn cấp" instead of "khối". */
+export function rankingViewDescription(view: RankingView, scope: RankingScope): string {
+  const level = scope === "level";
+  switch (view) {
+    case "bang":
+      return `Bảng xếp hạng ${level ? "toàn cấp" : "theo khối"}: điểm nền, điểm thưởng, điểm trừ, nhóm Top và mức cảnh báo của từng lớp.`;
+    case "bien-dong":
+      return `Thứ hạng của từng lớp ${level ? "toàn cấp" : "trong khối"} qua các tuần tính thi đua: lớp nào đang lên, lớp nào đang xuống.`;
+    case "bao-phu":
+      return "Số đợt, số buổi kiểm tra nền nếp của từng lớp so với trung bình khối – để so sánh điểm trừ được công bằng.";
+  }
+}
 
 /** Unknown / missing → "bang" (default view). */
 export function parseRankingView(raw: string | null | undefined): RankingView {
@@ -83,6 +96,16 @@ export function topMovers(history: RankHistory): { up?: RankMove; down?: RankMov
   const downs = moves.filter((m) => m.change < 0);
   const down = downs.length ? downs.reduce((a, b) => (b.change < a.change ? b : a)) : undefined;
   return { up, down };
+}
+
+/** Legend sentence under the basis hint: filtered class, coloured leaders, and whether the other lines are shown. */
+export function movementLegendText(opts: { highlight?: string; showOthers: boolean; top?: number }): string {
+  const top = opts.top ?? 5;
+  const own = opts.highlight ? `Đường đỏ đậm là lớp ${opts.highlight} đang lọc; ` : "";
+  const others = opts.showOthers
+    ? "các lớp khác được làm mờ (bấm tên lớp ở chú thích để ẩn/hiện)."
+    : "các lớp khác đang ẩn (bật “Hiện các lớp khác” hoặc bấm tên lớp ở chú thích để hiện).";
+  return `${own}${top} lớp dẫn đầu có màu riêng, ${others}`;
 }
 
 /** "Tuần 12/10" tooltip header of the cumulative / weekly basis. */

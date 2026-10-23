@@ -10,26 +10,33 @@ import {
   compareIncidentsNewestFirst,
   earlyWarnings,
   filterIncidents,
+  findRankingGroup,
+  findRankingRow,
   formatDateVN,
   groupBreakdown,
   groupByScoreBand,
   kpiComparison,
+  LEVEL_RANKING_GROUP,
   naturalCompare,
   periodLabel,
   previousPeriod,
+  rankingGroupLabel,
+  rankingRuleOf,
   round2,
   SCORE_BAND_RULES,
   topIssues,
+  namedTop,
   violationTurnsOf,
   type EarlyWarning,
   type GroupStat,
   type IssueStat,
   type Kpis,
   type PeriodOption,
+  type RankingRule,
   type ScoreBand,
   type ScoreBandRule,
 } from "@/lib/engine";
-import type { ClassInfo, GlobalFilters, Incident, IncidentStatus, LevelDataset, LevelId, Period, RankingRow, Scope, UserProfile } from "@/lib/types";
+import type { ClassInfo, GlobalFilters, GradeRanking, Incident, IncidentStatus, LevelDataset, LevelId, Period, RankingRow, Scope, UserProfile } from "@/lib/types";
 
 /* -------------------------------- Recipients ------------------------------ */
 
@@ -193,17 +200,36 @@ export function reportKpis(current: Kpis, previous?: Kpis): ReportKpi[] {
 }
 
 export interface ReportGradeRanking {
+  /** Grade of the rows; LEVEL_RANKING_GROUP (0) for the whole level ranked as one table (THPT, BGH / GVCN). */
   grade: number;
+  /** "Khối 6" | "Toàn cấp" (rankingGroupLabel of `grade`). */
+  label: string;
+  /** Ranking rule of the level (scope "level": ranks are level-wide even when `rows` are one khối). */
+  rule: RankingRule;
+  /** Classes of `rows`. */
   classCount: number;
+  /** Classes of the ranking group the ranks are out of (= classCount, or the whole level for a THPT khối). */
+  rankCount: number;
+  /** Mean score of `rows`. */
   avgScore: number;
-  /** Last rank inside Top 90%. */
+  /** Last rank inside Top 90% (of the ranking group). */
   cutoff: number;
   rows: RankingRow[];
-  /** Up to 3 best classes; with score bands (THCS): every class tied at the highest score. */
+  /**
+   * Heading of `leaders`: "Top 3" when the rule names the first N classes (THPT), else "Dẫn đầu". Leaders come from the
+   * whole ranking group (a THPT khối lists the Top 3 of the level).
+   */
+  leadersLabel: string;
+  /**
+   * rule.topCount (THPT): first N classes, ties at the cut included ([] when the period counts no week); score bands
+   * (THCS): every class at rank 1; else up to 3.
+   */
   leaders: RankingRow[];
-  /** Classes outside Top 90%. */
+  /** Top N (THPT): every class of the level shares the same rank – write "tất cả N lớp đồng hạng" instead of a list. */
+  leadersAllTied?: boolean;
+  /** Classes of `rows` outside Top 90%. */
   outside: RankingRow[];
-  /** Classes at RAG RED. */
+  /** Classes of `rows` at RAG RED. */
   red: RankingRow[];
   /**
    * Levels with SCORE_BAND_RULES (THCS): Dẫn đầu · Top >90% · Top 51%–90% · Top <51%. `groups` / `perWeek` (base points
@@ -215,29 +241,58 @@ export interface ReportGradeRanking {
 export interface ReportClassStanding {
   row: RankingRow;
   previousRank?: number;
+  /** The ranking group of the class (its khối, or the whole level for THPT). */
   grade: ReportGradeRanking;
 }
 
-export type ReportRanking =
-  | { kind: "level"; countedWeeks: number; grades: ReportGradeRanking[] }
-  | { kind: "grade"; countedWeeks: number; grade?: ReportGradeRanking }
-  | { kind: "class"; countedWeeks: number; standing?: ReportClassStanding };
+export type ReportRanking = { countedWeeks: number; rule: RankingRule } & (
+  | { kind: "level"; grades: ReportGradeRanking[] }
+  | { kind: "grade"; grade?: ReportGradeRanking }
+  | { kind: "class"; standing?: ReportClassStanding }
+);
 
-function gradeRanking(grade: number, rows: RankingRow[], rule?: ScoreBandRule): ReportGradeRanking {
+/**
+ * Report view of one engine ranking group. `onlyGrade` keeps the classes of one khối of a level-wide group (THPT tổ
+ * khối) with their level ranks; leaders / cutoff stay those of the whole group.
+ */
+function gradeRanking(group: GradeRanking, rule: RankingRule, bandRule?: ScoreBandRule, onlyGrade?: number): ReportGradeRanking {
+  const all = group.rows;
+  const sub = onlyGrade !== undefined && group.grade === LEVEL_RANKING_GROUP;
+  const rows = sub ? all.filter((r) => r.grade === onlyGrade) : all;
+  const grade = sub ? onlyGrade : group.grade;
   const count = rows.length;
   const counted = rows.find((r) => r.base > 0 && r.countedWeeks > 0);
-  const groups = rule && counted ? groupByScoreBand(rows, rule) : undefined;
+  const groups = bandRule && counted ? groupByScoreBand(rows, bandRule) : undefined;
+  const top = bandRule ? undefined : rule.topCount;
+  // Top N (THPT): the shared engine rule – nothing without a counted week, "all tied" when the tie covers the level.
+  const named = top !== undefined ? namedTop(all, top) : undefined;
   return {
     grade,
+    label: rankingGroupLabel(grade),
+    rule,
     classCount: count,
+    rankCount: all.length,
     avgScore: count ? round2(rows.reduce((a, r) => a + r.score, 0) / count) : 0,
-    cutoff: rows[0]?.top90Cutoff ?? 0,
+    cutoff: all[0]?.top90Cutoff ?? 0,
     rows,
-    leaders: rule ? rows.filter((r) => r.rank === 1) : rows.slice(0, 3),
+    leadersLabel: top !== undefined ? `Top ${top}` : "Dẫn đầu",
+    leaders: bandRule ? all.filter((r) => r.rank === 1) : named ? named.rows : all.slice(0, 3),
+    ...(named?.allTied ? { leadersAllTied: true } : {}),
     outside: rows.filter((r) => !r.inTop90),
     red: rows.filter((r) => r.rag === "RED"),
-    ...(rule ? { bands: { rule, groups, perWeek: counted ? round2(counted.base / counted.countedWeeks) : undefined } } : {}),
+    ...(bandRule ? { bands: { rule: bandRule, groups, perWeek: counted ? round2(counted.base / counted.countedWeeks) : undefined } } : {}),
   };
+}
+
+/**
+ * How ranks are computed, for the note under "Xếp hạng thi đua": "thứ hạng tính trên toàn bộ lớp của khối" | THPT:
+ * "… của cấp; bằng điểm: ít lượt vi phạm xếp trên, …; Top 3 gồm cả các lớp đồng hạng".
+ */
+export function rankingRuleNote(rule: RankingRule): string {
+  const parts = [`thứ hạng tính trên toàn bộ lớp của ${rule.scope === "level" ? "cấp" : "khối"}`];
+  if (rule.tieBreak === "violationTurns") parts.push("bằng điểm: ít lượt vi phạm xếp trên, bằng cả số lượt: đồng hạng");
+  if (rule.topCount !== undefined) parts.push(`Top ${rule.topCount} gồm cả các lớp đồng hạng`);
+  return parts.join("; ");
 }
 
 export interface ReportDetailRow {
@@ -339,19 +394,23 @@ export function buildPeriodReport(
   const incidents = filterIncidents(ds, filters);
 
   const ranking = buildRanking(ds, period, today);
+  const rule = rankingRuleOf(ds.levelId);
   const bandRule = SCORE_BAND_RULES[ds.levelId];
-  const byGrade = ranking.grades.map((g) => gradeRanking(g.grade, g.rows, bandRule));
+  const common = { countedWeeks: ranking.countedWeeks, rule };
   let reportRanking: ReportRanking;
   if (recipient.kind === "bgh") {
-    reportRanking = { kind: "level", countedWeeks: ranking.countedWeeks, grades: byGrade };
+    reportRanking = { ...common, kind: "level", grades: ranking.grades.map((g) => gradeRanking(g, rule, bandRule)) };
   } else if (recipient.kind === "grade") {
-    reportRanking = { kind: "grade", countedWeeks: ranking.countedWeeks, grade: byGrade.find((g) => g.grade === recipient.grade) };
+    // THPT: the khối's classes inside the single level table, with their level ranks.
+    const group = ranking.grades.find((g) => g.grade === (rule.scope === "level" ? LEVEL_RANKING_GROUP : recipient.grade));
+    const view = group ? gradeRanking(group, rule, bandRule, recipient.grade) : undefined;
+    reportRanking = { ...common, kind: "grade", grade: view?.rows.length ? view : undefined };
   } else {
-    const grade = cls ? byGrade.find((g) => g.grade === cls.grade) : undefined;
-    const row = grade?.rows.find((r) => r.classCode === recipient.classCode);
+    const group = findRankingGroup(ranking, recipient.classCode);
+    const row = group?.rows.find((r) => r.classCode === recipient.classCode);
     const prev = previousPeriod(period, ds.weeks, ds.config.semesters);
-    const previousRank = prev && row ? buildRanking(ds, prev, today, { grade: row.grade }).grades[0]?.rows.find((r) => r.classCode === row.classCode)?.rank : undefined;
-    reportRanking = { kind: "class", countedWeeks: ranking.countedWeeks, standing: row && grade ? { row, previousRank, grade } : undefined };
+    const previousRank = prev && row ? findRankingRow(buildRanking(ds, prev, today), row.classCode)?.rank : undefined;
+    reportRanking = { ...common, kind: "class", standing: row && group ? { row, previousRank, grade: gradeRanking(group, rule, bandRule) } : undefined };
   }
 
   const warnings = scopeWarningsForViewer(earlyWarnings(ds, filters, today), args.viewer, ds.levelId);

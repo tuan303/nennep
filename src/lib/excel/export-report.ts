@@ -2,12 +2,13 @@
  * Small report exports (one styled sheet each) + the HTML snapshot re-export.
  * All return raw .xlsx bytes (browser: `downloadBlob(bytes, name, MIME.xlsx)`; Node: `Buffer.from(bytes)`).
  */
-import { SCHOOL_NAME } from "../constants";
+import { LEVELS, SCHOOL_NAME } from "../constants";
 import { formatDateVN, isIsoDate, todayVN } from "../engine/dates";
-import type { Incident } from "../types";
+import { rankingRuleOf } from "../engine/ranking";
+import type { Incident, LevelId } from "../types";
 import { catalogChoiceText } from "./format";
 import { createWorkbook, workbookToBytes } from "./loader";
-import { rankingColumns, sortRanking, STUDENT_REPORT_COLUMNS, type RankingExportRow, type StudentExportRow } from "./report-columns";
+import { addRankingSheet, STUDENT_REPORT_COLUMNS, type RankingExportRow, type StudentExportRow } from "./report-columns";
 import { addTableSheet, XL_COLORS, type ColumnKind, type TableColumn } from "./sheet-writer";
 
 export { buildHtmlSnapshot, type HtmlSnapshotInput } from "./html-snapshot";
@@ -71,23 +72,31 @@ export interface ReportContext {
   today: string; // yyyy-mm-dd
   /** config.top90Ratio of the level (default 0.9) – names the Top column. */
   topRatio?: number;
+  /**
+   * Level of the report – picks its ranking rule (THPT: one table for the whole level, Lượt vi phạm column, top 3).
+   * Default: the level whose LEVELS name is `levelName`.
+   */
+  levelId?: LevelId;
 }
 
 function reportSubtitle(ctx: ReportContext): string {
   return `${SCHOOL_NAME} · ${ctx.levelName} · ${ctx.periodLabel} · Xuất ngày ${formatDateVN(ctx.today)}`;
 }
 
-/** Ranking of every class (flatten `GradeRanking[]` with `grades.flatMap(g => g.rows)`). */
+function levelOf(ctx: ReportContext): LevelId | undefined {
+  return ctx.levelId ?? Object.values(LEVELS).find((l) => l.name === ctx.levelName)?.id;
+}
+
+/** Ranking of every class (flatten `GradeRanking[]` with `grades.flatMap(g => g.rows)`), laid out by the level's rule. */
 export async function exportRankingSheet(rows: RankingExportRow[], ctx: ReportContext): Promise<Uint8Array> {
   const wb = await createWorkbook();
-  addTableSheet(wb, {
-    name: "Xếp hạng",
+  const levelId = levelOf(ctx);
+  addRankingSheet(wb, {
     title: `XẾP HẠNG THI ĐUA – ${ctx.levelName.toLocaleUpperCase("vi-VN")}`,
-    subtitle: `${reportSubtitle(ctx)} · Xếp hạng trong từng khối.`,
-    columns: rankingColumns(ctx.topRatio),
-    items: sortRanking(rows),
-    freezeColumns: 2,
-    tabColor: XL_COLORS.gold,
+    subtitle: reportSubtitle(ctx),
+    rows,
+    ratio: ctx.topRatio,
+    layout: levelId ? rankingRuleOf(levelId) : undefined,
   });
   return workbookToBytes(wb);
 }

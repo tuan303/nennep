@@ -102,8 +102,13 @@ export const FAQ: GuideContent["faq"] = [
   },
   {
     q: "Tôi lọc theo một lỗi nhưng bảng xếp hạng không đổi?",
-    a: "Đúng như thiết kế: điểm thi đua luôn tính mọi lỗi nên bộ lọc mảng, nhóm lỗi, lỗi và học sinh không áp dụng cho xếp hạng. Bộ lọc lớp chỉ làm nổi bật lớp đó; thứ hạng vẫn tính trên toàn bộ lớp của khối.",
+    a: "Đúng như thiết kế: điểm thi đua luôn tính mọi lỗi nên bộ lọc mảng, nhóm lỗi, lỗi và học sinh không áp dụng cho xếp hạng. Bộ lọc lớp chỉ làm nổi bật lớp đó; thứ hạng vẫn tính trên toàn bộ lớp của khối (THPT: của cả cấp, nên lọc khối cũng không thu hẹp bảng).",
     sectionId: "xep-hang",
+  },
+  {
+    q: "Ở THPT, vì sao hai lớp cùng điểm thi đua lại khác hạng?",
+    a: "Cấp THPT xếp hạng chung toàn cấp (không chia khối). Khi bằng điểm, lớp có **ít lượt vi phạm hơn** xếp trên; chỉ khi bằng cả điểm và lượt vi phạm (ví dụ các lớp giữ nguyên điểm nền, không bị trừ lỗi nào) mới đồng hạng. Cột **Lượt vi phạm** trên bảng xếp hạng cho biết lý do.",
+    sectionId: "quy-tac-thi-dua",
   },
   {
     q: "Phần mềm báo “Có thể trùng sự việc đã ghi” khi lưu?",
@@ -153,9 +158,10 @@ export const GLOSSARY: GuideContent["glossary"] = [
   { term: "Điểm nền", definition: "Điểm mỗi lớp được cộng cho mỗi tuần tính thi đua (mặc định 100 điểm/tuần)." },
   { term: "Tuần tính thi đua", definition: "Tuần được bật “Tính thi đua” trong Lịch tuần và đã bắt đầu; tuần nghỉ lễ, tuần thi có thể được tắt." },
   { term: "Điểm thưởng", definition: "Điểm cộng cho tập thể lớp (+1 đến +5, kèm lý do), mã dạng `KT-…`; chỉ cộng vào thi đua khi ở trạng thái được tính." },
-  { term: "Điểm thi đua", definition: "Điểm nền + Điểm thưởng được tính − Điểm trừ; dùng để xếp hạng các lớp trong khối." },
-  { term: "Xếp hạng 1-2-2-4", definition: "Cách xếp hạng đồng điểm đồng hạng: hai lớp cùng hạng 2 thì lớp kế tiếp hạng 4." },
-  { term: "Top 90%", definition: "Nhóm lớp có hạng không vượt quá ngưỡng = làm tròn lên 90% số lớp của khối; tỷ lệ do Quản trị cấu hình." },
+  { term: "Điểm thi đua", definition: "Điểm nền + Điểm thưởng được tính − Điểm trừ; dùng để xếp hạng các lớp trong khối (THPT: trong toàn cấp)." },
+  { term: "Xếp hạng 1-2-2-4", definition: "Cách xếp hạng đồng điểm đồng hạng: hai lớp cùng hạng 2 thì lớp kế tiếp hạng 4. THPT chỉ đồng hạng khi bằng cả điểm và lượt vi phạm." },
+  { term: "Xếp hạng toàn cấp", definition: "Quy định riêng của THPT: mọi lớp khối 10–12 xếp chung một bảng; bằng điểm thì lớp ít lượt vi phạm hơn xếp trên; báo cáo nêu Top 3 toàn cấp (gồm cả lớp đồng hạng)." },
+  { term: "Top 90%", definition: "Nhóm lớp có hạng không vượt quá ngưỡng = làm tròn lên 90% số lớp của khối (THPT: số lớp toàn cấp); tỷ lệ do Quản trị cấu hình." },
   { term: "RAG", definition: "Mức cảnh báo của lớp theo điểm trừ trung bình mỗi tuần: Xanh – Ổn định, Vàng – Cần chú ý, Đỏ – Cần can thiệp, Xám – Chưa đủ dữ liệu." },
   { term: "Phê duyệt ngưỡng", definition: "Bước Quản trị xác nhận ngưỡng Vàng/Đỏ đã được BGH thông qua; trước khi phê duyệt mọi lớp hiển thị Xám." },
   { term: "Độ tin cậy dữ liệu", definition: "(Số sự việc Hợp lệ + Thiếu tên HS) ÷ tổng số sự việc; thấp hơn mức tối thiểu thì lớp hiển thị Xám." },

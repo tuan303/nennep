@@ -1,19 +1,24 @@
 "use client";
-/** "Biến động xếp hạng" (REQ_V2 §6.3): one bump chart per grade (engine rankHistory), cumulative or week by week. */
+/**
+ * "Biến động xếp hạng" (REQ_V2 §6.3): one bump chart per ranking group (engine rankHistory) – per khối, or one chart of
+ * the whole level (THPT "Toàn cấp") – cumulative or week by week.
+ */
 import { useCallback, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, ChartSpline, Waypoints } from "lucide-react";
 import { Card, SegmentedControl, Switch, cn } from "@/components/ui";
 import { BumpChart } from "@/components/charts";
 import { fmtNumber } from "@/lib/client/format";
-import { rankHistory } from "@/lib/engine";
+import { LEVELS } from "@/lib/constants";
+import { rankHistory, rankingGroupLabel, rankingRuleOf } from "@/lib/engine";
 import type { GlobalFilters, LevelDataset } from "@/lib/types";
-import { RANK_BASIS_OPTIONS, bumpHeader, bumpLines, topMovers, type RankBasis, type RankMove } from "./lib/movement-view";
+import { RANK_BASIS_OPTIONS, bumpHeader, bumpLines, movementLegendText, topMovers, type RankBasis, type RankMove } from "./lib/movement-view";
+import { rankingGroupAnchor, rankingRuleNote } from "./lib/ranking-view";
 
 export interface RankMovementViewProps {
   ds: LevelDataset;
   filters: GlobalFilters;
   today: string;
-  /** Grades to show (ranking population of the grade filter). */
+  /** Ranking groups to show (buildRanking grades: khối of the grade filter, or [LEVEL_RANKING_GROUP] for THPT). */
   grades: number[];
   /** Click on a class line → class detail. */
   onOpenClass?: (classCode: string) => void;
@@ -25,8 +30,13 @@ const BASIS_HINT: Record<RankBasis, string> = {
 };
 
 export function RankMovementView({ ds, filters, today, grades, onOpenClass }: RankMovementViewProps) {
+  const rule = rankingRuleOf(ds.levelId);
+  const levelWide = rule.scope === "level";
   const [basis, setBasis] = useState<RankBasis>("cumulative");
-  const [showOthers, setShowOthers] = useState(true);
+  // A level-wide chart has every class of the level (~20 lines): start with the leaders only, the rest one click away.
+  const [showOthers, setShowOthers] = useState(!levelWide);
+  // The tie-break explains equal scores on the chart; the "Top N" of the reports is the table's business.
+  const ruleNote = rankingRuleNote({ ...rule, topCount: undefined }, LEVELS[ds.levelId].short);
 
   return (
     <div className="flex flex-col gap-5">
@@ -38,8 +48,9 @@ export function RankMovementView({ ds, filters, today, grades, onOpenClass }: Ra
         </div>
       </div>
       <p className="text-[13px] leading-5 text-slate-600">
-        {BASIS_HINT[basis]} {filters.classCode ? `Đường đỏ đậm là lớp ${filters.classCode} đang lọc; ` : ""}5 lớp dẫn đầu có màu riêng, các lớp khác được làm mờ
-        (bấm tên lớp ở chú thích để ẩn/hiện).
+        {BASIS_HINT[basis]} {movementLegendText({ highlight: filters.classCode, showOthers })}
+        {ruleNote ? ` ${ruleNote}` : ""}
+        {levelWide && typeof filters.grade === "number" ? ` Bộ lọc Khối ${filters.grade} không thu hẹp xếp hạng toàn cấp.` : ""}
       </p>
       {grades.map((g) => (
         <GradeMovementCard
@@ -57,16 +68,17 @@ export function RankMovementView({ ds, filters, today, grades, onOpenClass }: Ra
   );
 }
 
+/** Quick-jump between the charts (only rendered with several groups; a level-wide ranking has a single "Toàn cấp"). */
 export function GradeNav({ grades }: { grades: number[] }) {
   return (
     <nav aria-label="Chuyển nhanh đến khối" className="no-scrollbar -mx-1 flex max-w-full items-center gap-1.5 overflow-x-auto px-1">
       {grades.map((g) => (
         <a
           key={g}
-          href={`#khoi-${g}`}
+          href={`#${rankingGroupAnchor(g)}`}
           className="inline-flex h-9 shrink-0 items-center rounded-full bg-surface px-3.5 text-[13px] font-semibold text-brand-800 ring-1 ring-inset ring-border-strong transition-colors hover:bg-brand-50 hover:ring-brand-300 focus-visible:outline-2 focus-visible:outline-brand-500 pointer-coarse:h-11"
         >
-          Khối {g}
+          {rankingGroupLabel(g)}
         </a>
       ))}
     </nav>
@@ -75,6 +87,7 @@ export function GradeNav({ grades }: { grades: number[] }) {
 
 interface GradeMovementCardProps {
   ds: LevelDataset;
+  /** Ranking group (khối, or LEVEL_RANKING_GROUP – rankHistory then returns every class of the level). */
   grade: number;
   basis: RankBasis;
   filters: GlobalFilters;
@@ -89,13 +102,15 @@ export function GradeMovementCard({ ds, grade, basis, filters, today, showOthers
   const movers = useMemo(() => topMovers(history), [history]);
   const headerOf = useCallback((i: number) => bumpHeader(basis, history.labels[i] ?? ""), [basis, history.labels]);
   const n = history.classes.length;
+  const label = rankingGroupLabel(history.grade);
+  const scopeText = label.toLowerCase();
 
   return (
-    <section id={`khoi-${grade}`} aria-label={`Biến động xếp hạng khối ${grade}`} className="scroll-mt-24">
+    <section id={rankingGroupAnchor(history.grade)} aria-label={`Biến động xếp hạng ${scopeText}`} className="scroll-mt-24">
       <Card
         icon={ChartSpline}
         headingLevel={2}
-        title={`Khối ${grade}`}
+        title={label}
         subtitle={<span className="num">{`${fmtNumber(n)} lớp · ${fmtNumber(history.weeks.length)} tuần tính thi đua`}</span>}
         footer={history.weeks.length > 1 && (movers.up || movers.down) ? <MoversLine up={movers.up} down={movers.down} /> : undefined}
       >
@@ -106,7 +121,7 @@ export function GradeMovementCard({ ds, grade, basis, filters, today, showOthers
           showFaded={showOthers}
           headerOf={headerOf}
           onLineClick={onOpenClass}
-          ariaLabel={`Biến động thứ hạng ${n} lớp khối ${grade} qua ${history.weeks.length} tuần. ${lines
+          ariaLabel={`Biến động thứ hạng ${n} lớp ${scopeText} qua ${history.weeks.length} tuần. ${lines
             .filter((l) => l.emphasis !== "faded")
             .map((l) => `Lớp ${l.name}: hạng ${l.ranks[l.ranks.length - 1] ?? "–"}`)
             .join(", ")}`}

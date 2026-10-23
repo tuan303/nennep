@@ -1,6 +1,7 @@
 /** Findings, evidence and impact sections of the Decision Brief (rules-based, deterministic). */
 import { weekdayDistribution } from "./analytics";
 import { changeText, listText, num, q, type BriefContext } from "./brief-context";
+import { rankingGroupLabel, rankingRuleOf } from "./ranking";
 import { formatPercentVN } from "./text";
 
 export type Severity = "high" | "medium" | "low";
@@ -161,9 +162,11 @@ export function buildEvidence(ctx: BriefContext): string[] {
   for (const g of ctx.grades) {
     if (g.rows.length < 2) continue;
     const best = g.rows[0];
+    const firsts = g.rows.filter((r) => r.rank === 1);
     const last = g.rows[g.rows.length - 1];
+    const bestText = firsts.length > 1 ? `${listText(firsts.map((r) => r.classCode), 4, "lớp")} (đồng hạng 1, ${num(best.score)} điểm thi đua)` : `${best.classCode} (${num(best.score)} điểm thi đua)`;
     out.push(
-      `Khối ${g.grade}: cao nhất ${best.classCode} (${num(best.score)} điểm thi đua), thấp nhất ${last.classCode} ` +
+      `${rankingGroupLabel(g.grade)}: cao nhất ${bestText}, thấp nhất ${last.classCode} ` +
         `(${num(last.score)} điểm, hạng ${last.rank}/${last.gradeClassCount}).`,
     );
   }
@@ -185,7 +188,8 @@ export function buildImpact(ctx: BriefContext): string {
   const yellow = ctx.rows.filter((r) => r.rag === "YELLOW").length;
   if (red || yellow) parts.push(`${red} lớp mức Đỏ và ${yellow} lớp mức Vàng`);
   const outside = ctx.rows.filter((r) => !r.inTop90).length;
-  if (outside) parts.push(`${outside} lớp đang ngoài Top ${formatPercentVN(ctx.ds.config.top90Ratio)} của khối`);
+  const scope = rankingRuleOf(ctx.ds.levelId).scope === "level" ? "toàn cấp" : "của khối";
+  if (outside) parts.push(`${outside} lớp đang ngoài Top ${formatPercentVN(ctx.ds.config.top90Ratio)} ${scope}`);
   if (ctx.students.length) parts.push(`${ctx.students.length} học sinh có dấu hiệu tái phạm`);
   const p = ctx.previous;
   if (p && p.penaltyPoints > 0 && ctx.current.penaltyPoints > p.penaltyPoints) {
@@ -198,6 +202,6 @@ export function buildImpact(ctx: BriefContext): string {
   return (
     sentence.charAt(0).toUpperCase() +
     sentence.slice(1) +
-    ". Nếu không can thiệp kịp thời, kết quả thi đua của các lớp liên quan và nền nếp chung của khối sẽ tiếp tục bị ảnh hưởng."
+    `. Nếu không can thiệp kịp thời, kết quả thi đua của các lớp liên quan và nền nếp chung ${scope === "toàn cấp" ? "của cấp" : "của khối"} sẽ tiếp tục bị ảnh hưởng.`
   );
 }

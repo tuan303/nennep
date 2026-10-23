@@ -1,9 +1,11 @@
 "use client";
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { RagBadge, Top90Badge, cn, toneHex } from "@/components/ui";
+import { RagBadge, Top90Badge, Tooltip, cn, toneHex } from "@/components/ui";
 import { Sparkline } from "@/components/charts";
 import { fmtNumber, fmtTopLabel } from "@/lib/client/format";
+import { KPI_TERMS } from "@/lib/constants";
+import { rankingGroupLabel, rankingRuleOf } from "@/lib/engine";
 import type { LevelDataset, Period, RankingRow } from "@/lib/types";
 import { ClassBreakdown } from "./class-breakdown";
 import { RankDelta, RankMedal } from "./rank-medal";
@@ -12,7 +14,7 @@ import { ClassCell, PenaltyText, RewardText, Top90Divider, scoreTone } from "./r
 /**
  * Column visibility by content width (the sidebar takes 76–264px):
  * phones use cards; < xl merges Thưởng/Trừ and Top 90%/RAG; Điểm nền (same for every class) and Xu hướng from xl;
- * separate Top 90% and RAG columns from 2xl.
+ * separate Top 90% and RAG columns from 2xl. Lượt vi phạm (always, only when the level breaks score ties with it – THPT).
  */
 type Show = "all" | "xl" | "2xl" | "ltXl" | "lt2xl";
 const SHOW: Record<Show, string> = { all: "", xl: "max-xl:hidden", "2xl": "max-2xl:hidden", ltXl: "xl:hidden", lt2xl: "2xl:hidden" };
@@ -30,6 +32,7 @@ interface Col {
 
 export interface RankingTableProps {
   ds: LevelDataset;
+  /** Ranking group: the khối, or LEVEL_RANKING_GROUP for a level-wide table. */
   grade: number;
   rows: RankingRow[];
   period: Period;
@@ -45,8 +48,24 @@ export interface RankingTableProps {
   highlightRef?: (el: HTMLElement | null) => void;
 }
 
+/** Lượt vi phạm: breaks equal scores (fewer first), so a table with the tie-break shows why 100 / 100 rank 1 and 3. */
+const TURNS_COL: Col = {
+  key: "turns",
+  header: (
+    <Tooltip content={`${KPI_TERMS.violationTurns.hint} Bằng điểm: lớp ít lượt vi phạm hơn xếp trên.`}>
+      <span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-4 focus-visible:outline-2 focus-visible:outline-brand-500">
+        {KPI_TERMS.violationTurns.label}
+      </span>
+    </Tooltip>
+  ),
+  show: "all",
+  align: "right",
+  cell: (r) => <span className={cn("font-semibold", r.violationTurns > 0 ? "text-slate-700" : "text-slate-400")}>{fmtNumber(r.violationTurns)}</span>,
+};
+
 export function RankingTable(props: RankingTableProps) {
   const { ds, grade, rows, period, dividerIndex, trends, deltas, previousNoun, expanded, onToggle, detailHref, highlightRef } = props;
+  const showTurns = rankingRuleOf(ds.levelId).tieBreak === "violationTurns";
 
   const cols: Col[] = [
     {
@@ -84,6 +103,7 @@ export function RankingTable(props: RankingTableProps) {
       align: "right",
       cell: (r) => <span className={cn("text-[17px] font-bold tracking-tight", scoreTone(r.score))}>{fmtNumber(r.score)}</span>,
     },
+    ...(showTurns ? [TURNS_COL] : []),
     { key: "top90", header: fmtTopLabel(ds.config.top90Ratio), show: "2xl", cell: (r) => <Top90Badge inTop90={r.inTop90} ratio={ds.config.top90Ratio} size="sm" /> },
     { key: "rag", header: "Mức cảnh báo", show: "2xl", cell: (r) => <RagBadge rag={r.rag} reason={r.ragReason} compact size="sm" /> },
     {
@@ -125,7 +145,7 @@ export function RankingTable(props: RankingTableProps) {
   return (
     <div className="relative w-full overflow-x-auto">
       <table className="w-full border-separate border-spacing-0 text-sm">
-        <caption className="sr-only">Bảng xếp hạng thi đua khối {grade}</caption>
+        <caption className="sr-only">Bảng xếp hạng thi đua {rankingGroupLabel(grade).toLowerCase()}</caption>
         <thead>
           <tr>
             {cols.map((c, ci) => (

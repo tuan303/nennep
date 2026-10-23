@@ -7,26 +7,23 @@ import { useFilters } from "@/lib/client/filters";
 import { useToday } from "@/lib/client/hooks";
 import { useSession } from "@/lib/client/session";
 import { LEVELS } from "@/lib/constants";
-import { buildRanking, classScoreSeries, findRankingRow, periodLabel, previousPeriod } from "@/lib/engine";
+import { buildRanking, classScoreSeries, findRankingRow, periodLabel, previousPeriod, rankingGroupLabel, rankingRuleOf } from "@/lib/engine";
 import type { LevelDataset } from "@/lib/types";
 import { ClassBreakdown } from "./class-breakdown";
 import { CoverageView } from "./coverage-view";
 import { GradeSection } from "./grade-section";
-import { RANKING_VIEWS, parseRankingView, rankingViewHref, type RankingView } from "./lib/movement-view";
-import { classDetailHref, periodIncludesCurrentWeek, previousPeriodNoun, rankDeltas, trendWindow } from "./lib/ranking-view";
+import { RANKING_VIEWS, parseRankingView, rankingViewDescription, rankingViewHref, type RankingView } from "./lib/movement-view";
+import { classDetailHref, periodIncludesCurrentWeek, previousPeriodNoun, rankDeltas, rankingGroupAnchor, trendWindow } from "./lib/ranking-view";
 import { RankMovementView } from "./rank-movement-view";
 import { RankingExplainer } from "./ranking-explainer";
 import { useRankingExport } from "./use-ranking-export";
 
 const VIEW_ICON: Record<RankingView, LucideIcon> = { bang: Trophy, "bien-dong": ChartSpline, "bao-phu": ClipboardCheck };
 
-const VIEW_DESCRIPTION: Record<RankingView, string> = {
-  bang: "Bảng xếp hạng theo khối: điểm nền, điểm thưởng, điểm trừ, nhóm Top và mức cảnh báo của từng lớp.",
-  "bien-dong": "Thứ hạng của từng lớp trong khối qua các tuần tính thi đua: lớp nào đang lên, lớp nào đang xuống.",
-  "bao-phu": "Số đợt, số buổi kiểm tra nền nếp của từng lớp so với trung bình khối – để so sánh điểm trừ được công bằng.",
-};
-
-/** SCR-03 Xếp hạng: per-grade competition ranking of the selected level and period (+ REQ_V2 views). */
+/**
+ * SCR-03 Xếp hạng: competition ranking of the selected level and period (+ REQ_V2 views) – one table per khối, or one
+ * table for the whole level when its RankingRule says so (THPT).
+ */
 export function RankingScreen({ ds }: { ds: LevelDataset }) {
   const { filters } = useFilters();
   const today = useToday();
@@ -39,6 +36,8 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
   const view = parseRankingView(searchParams.get("view"));
   const setView = useCallback((v: RankingView) => router.replace(rankingViewHref(pathname, search, v), { scroll: false }), [router, pathname, search]);
   const { period, grade, classCode } = filters;
+  const rule = rankingRuleOf(ds.levelId);
+  const levelWide = rule.scope === "level";
 
   const ranking = useMemo(() => buildRanking(ds, period, today, { highlightClass: classCode, grade }), [ds, period, today, classCode, grade]);
 
@@ -81,7 +80,8 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
     return () => cancelAnimationFrame(frame);
   }, [classCode, cards]);
 
-  const { exporting, exportExcel } = useRankingExport({ ds, grades: ranking.grades, period, today, grade });
+  // A level-wide ranking ignores the grade filter: the whole level is exported (and the file name does not say "Khối").
+  const { exporting, exportExcel } = useRankingExport({ ds, grades: ranking.grades, period, today, grade: levelWide ? undefined : grade });
   const label = periodLabel(period, ds.config.semesters);
   const totalClasses = ranking.grades.reduce((n, g) => n + g.rows.length, 0);
   const quiet = ranking.grades.every((g) => g.rows.every((r) => r.incidentCount === 0 && r.rewardPoints === 0));
@@ -92,7 +92,7 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
         icon={Trophy}
         eyebrow={`${LEVELS[ds.levelId].short} · ${label}`}
         title="Xếp hạng thi đua"
-        description={VIEW_DESCRIPTION[view]}
+        description={rankingViewDescription(view, rule.scope)}
         actions={
           <>
             <Button variant="secondary" icon={Printer} onClick={() => window.print()}>
@@ -134,6 +134,7 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
           <NoClasses />
         ) : (
           <RankMovementView
+            key={ds.levelId}
             ds={ds}
             filters={filters}
             today={today}
@@ -145,6 +146,8 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
         <>
           <RankingExplainer
             config={ds.config}
+            levelId={ds.levelId}
+            gradeFilter={grade}
             period={period}
             countedWeeks={ranking.countedWeeks}
             inProgress={periodIncludesCurrentWeek(period, ds.weeks, today)}
@@ -189,7 +192,9 @@ export function RankingScreen({ ds }: { ds: LevelDataset }) {
       <Sheet
         open={!!sheetRow}
         onOpenChange={(open) => !open && setSheetCode(null)}
-        title={sheetRow ? `Lớp ${sheetRow.classCode} · Hạng ${sheetRow.rank}/${sheetRow.gradeClassCount}` : "Phân tích lớp"}
+        title={
+          sheetRow ? `Lớp ${sheetRow.classCode} · Hạng ${sheetRow.rank}/${sheetRow.gradeClassCount}${levelWide ? " toàn cấp" : ""}` : "Phân tích lớp"
+        }
         description={sheetRow?.homeroomTeacher ? `GVCN ${sheetRow.homeroomTeacher}` : undefined}
         icon={Trophy}
       >
@@ -211,6 +216,7 @@ function NoClasses() {
   );
 }
 
+/** Quick-jump between the ranking tables (hidden with a single table, e.g. THPT "Toàn cấp") + compare switch. */
 function Toolbar({
   grades,
   compare,
@@ -231,10 +237,10 @@ function Toolbar({
           {grades.map((g) => (
             <a
               key={g}
-              href={`#khoi-${g}`}
+              href={`#${rankingGroupAnchor(g)}`}
               className="inline-flex h-9 shrink-0 items-center rounded-full bg-surface px-3.5 text-[13px] font-semibold text-brand-800 ring-1 ring-inset ring-border-strong transition-colors hover:bg-brand-50 hover:ring-brand-300 focus-visible:outline-2 focus-visible:outline-brand-500 pointer-coarse:h-11"
             >
-              Khối {g}
+              {rankingGroupLabel(g)}
             </a>
           ))}
         </nav>

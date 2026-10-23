@@ -11,12 +11,14 @@ import {
   kpiComparison,
   matchesSearch,
   naturalCompare,
+  rankingRuleOf,
   studentStats,
   weekdayIndex,
   type Kpis,
   type StudentStat,
 } from "@/lib/engine";
 import { rosterNames, studentDisplayName, withRosterNames, type RosterNames } from "@/components/entry/lib/student-names";
+import { rankRuleHint } from "@/components/class-detail/lib/class-view";
 import type { FeedbackRights } from "@/components/app/widgets/lib/incident-access";
 import { feedbackChanges } from "@/components/app/widgets/lib/remediation";
 import type { GvcnFeedbackInput } from "@/lib/contract";
@@ -89,7 +91,12 @@ export interface GvcnReport {
   incidents: Incident[];
   kpis: Kpis;
   previous?: Kpis;
+  /** Row of the class in its ranking table: the grade, or the whole level for THPT (rank n/21, RankingRule). */
   ranking?: RankingRow;
+  /** "Hạng khối 6" | "Hạng toàn cấp" (THPT) – label of the rank in the KPIs and the copied text. */
+  rankLabel: string;
+  /** How the level ranks its classes (population + tie-break), for the rank tooltip. */
+  rankHint: string;
   /** Students named in the class incidents: alerts first, then incidents desc, points desc. */
   students: StudentConcern[];
   /** All rewards of the class in the period, newest first. */
@@ -107,6 +114,7 @@ export function buildGvcnReport(ds: LevelDataset, classCode: string, period: Per
   const roster = rosterNames(ds.students);
   const incidents = [...filterIncidents(ds, scope)].sort((a, b) => compareIncidentsNewestFirst(b, a)).map((i) => withRosterNames(i, roster));
   const { current, previous } = kpiComparison(ds, scope);
+  // `grade` only trims the per-khối tables (ignored for a level-wide ranking: THPT ranks every class together).
   const ranking = classInfo
     ? findRankingRow(buildRanking(ds, period, today, { highlightClass: classCode, grade: classInfo.grade }), classCode)
     : undefined;
@@ -119,6 +127,8 @@ export function buildGvcnReport(ds: LevelDataset, classCode: string, period: Per
     scope,
     incidents,
     kpis: current,
+    rankLabel: reportRankLabel(ds.levelId, classInfo?.grade),
+    rankHint: rankRuleHint(ds.levelId),
     students,
     rewards,
     countedStatuses: ds.config.rewardCountedStatuses,
@@ -128,6 +138,12 @@ export function buildGvcnReport(ds: LevelDataset, classCode: string, period: Per
   if (previous) report.previous = previous;
   if (ranking) report.ranking = ranking;
   return report;
+}
+
+/** "Hạng khối 6" (one ranking per khối) | "Hạng toàn cấp" (THPT: one ranking for the level) | "Hạng khối" (unknown class). */
+export function reportRankLabel(levelId: LevelId, grade?: number): string {
+  if (rankingRuleOf(levelId).scope === "level") return "Hạng toàn cấp";
+  return grade ? `Hạng khối ${grade}` : "Hạng khối";
 }
 
 /**

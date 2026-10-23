@@ -35,7 +35,13 @@ export function useRankingExport(input: RankingExportInput): { exporting: boolea
       const label = periodLabel(period, ds.config.semesters);
       const rows = grades.flatMap((g) => g.rows);
       const { exportRankingSheet } = await import("@/lib/excel");
-      const bytes = await exportRankingSheet(rows, { levelName: LEVELS[ds.levelId].name, periodLabel: label, today, topRatio: ds.config.top90Ratio });
+      const bytes = await exportRankingSheet(rows, {
+        levelName: LEVELS[ds.levelId].name,
+        levelId: ds.levelId,
+        periodLabel: label,
+        today,
+        topRatio: ds.config.top90Ratio,
+      });
       const fileName = rankingFileName(ds.levelId, label, grade);
       downloadBlob(bytes, fileName, MIME.xlsx);
       toast.success("Đã xuất bảng xếp hạng", { description: fileName });

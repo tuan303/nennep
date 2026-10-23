@@ -29,6 +29,15 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Lượt vi phạm of one incident (KPI_TERMS.violationTurns): "/HS" → relatedStudentCount (named + unnamed);
+ * "/lần" → occurrenceCount (≥ 1, as computePoints).
+ */
+export function violationTurnsOf(i: Pick<Incident, "unit" | "relatedStudentCount" | "occurrenceCount">): number {
+  if (i.unit === "/HS") return Math.max(0, i.relatedStudentCount || 0);
+  return Math.max(1, Math.floor(i.occurrenceCount || 1));
+}
+
 export interface PointsInput {
   unit: Unit;
   penalty: number;

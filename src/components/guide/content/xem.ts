@@ -93,25 +93,26 @@ const xepHang: GuideSection = {
   group: "xem",
   roles: "all",
   route: "/xep-hang",
-  summary: "Bảng xếp hạng theo khối, Top 90%, mức cảnh báo RAG, biến động xếp hạng qua các tuần và bao phủ kiểm tra.",
+  summary: "Bảng xếp hạng theo khối (THPT: một bảng toàn cấp), Top 90%, mức cảnh báo RAG, biến động xếp hạng qua các tuần và bao phủ kiểm tra.",
   blocks: [
     {
       kind: "p",
-      text: "Trang [Xếp hạng](/xep-hang) có 3 chế độ xem: [[Bảng xếp hạng]], [[Biến động xếp hạng]] và [[Bao phủ kiểm tra]] (trên điện thoại: Bảng · Biến động · Bao phủ). Kỳ xếp hạng theo bộ lọc kỳ; bấm các nút **Khối …** phía trên bảng để nhảy nhanh tới khối cần xem.",
+      text: "Trang [Xếp hạng](/xep-hang) có 3 chế độ xem: [[Bảng xếp hạng]], [[Biến động xếp hạng]] và [[Bao phủ kiểm tra]] (trên điện thoại: Bảng · Biến động · Bao phủ). Kỳ xếp hạng theo bộ lọc kỳ; bấm các nút **Khối …** phía trên bảng để nhảy nhanh tới khối cần xem. Cấp THPT chỉ có **một bảng Toàn cấp** gồm mọi lớp khối 10, 11, 12, đầu bảng nêu **Top 3 toàn cấp**.",
     },
     {
       kind: "p",
-      text: "Dải giải thích đầu trang cho biết số **tuần tính điểm** và **Điểm nền** của kỳ (ví dụ 100 × 4 tuần = 400). Trên điện thoại bấm [[Cách tính]] để xem công thức, quy tắc Top và các mức cảnh báo đang áp dụng.",
+      text: "Dải giải thích đầu trang cho biết số **tuần tính điểm** và **Điểm nền** của kỳ (ví dụ 100 × 4 tuần = 400). Trên điện thoại bấm [[Cách tính]] để xem công thức, cách xếp hạng (trong khối hoặc toàn cấp), quy tắc Top và các mức cảnh báo đang áp dụng.",
     },
     {
       kind: "table",
       caption: "Các cột của Bảng xếp hạng",
       head: ["Cột", "Ý nghĩa"],
       rows: [
-        ["Hạng", "Thứ hạng trong khối (hạng 1, 2, 3 có huy chương vàng, bạc, đồng). Khi bật công tắc **So sánh tuần trước** (tháng trước, học kỳ trước – tùy kỳ đang xem), cạnh hạng có mũi tên tăng/giảm bao nhiêu bậc."],
+        ["Hạng", "Thứ hạng trong khối – THPT: thứ hạng toàn cấp (hạng 1, 2, 3 có huy chương vàng, bạc, đồng). Khi bật công tắc **So sánh tuần trước** (tháng trước, học kỳ trước – tùy kỳ đang xem), cạnh hạng có mũi tên tăng/giảm bao nhiêu bậc."],
         ["Lớp", "Mã lớp và GVCN."],
         ["Điểm nền · Thưởng · Trừ", "Ba thành phần của điểm thi đua."],
         ["Điểm thi đua", "Điểm nền + Thưởng − Trừ."],
+        ["Lượt vi phạm", "Chỉ có ở THPT: các lớp bằng điểm thì lớp ít lượt vi phạm hơn xếp trên; bằng cả hai thì đồng hạng."],
         ["Đánh giá", "Nhãn Top 90% / Ngoài Top 90% và mức cảnh báo RAG (màn hình rất rộng tách thành hai cột Top 90% và Mức cảnh báo)."],
         ["Xu hướng", "Điểm thi đua các tuần gần nhất của lớp."],
         ["Mũi tên cuối dòng", "Mở phần phân tích lớp ngay dưới dòng (trên điện thoại: chạm vào thẻ lớp để mở **Phân tích lớp**): sự việc, HS liên quan, điểm trừ TB/tuần, độ tin cậy dữ liệu, điểm trừ theo lỗi và điểm thưởng."],
@@ -122,13 +123,13 @@ const xepHang: GuideSection = {
     {
       kind: "note",
       title: "Bộ lọc trên trang Xếp hạng",
-      text: "Lọc **lớp** chỉ làm nổi bật lớp đó – thứ hạng vẫn tính trên toàn bộ lớp của khối. Lọc **mảng, nhóm lỗi, lỗi, học sinh** không áp dụng cho xếp hạng: điểm thi đua luôn tính mọi lỗi.",
+      text: "Lọc **lớp** chỉ làm nổi bật lớp đó – thứ hạng vẫn tính trên toàn bộ lớp của khối (THPT: của cả cấp). Ở THPT, lọc **khối** không thu hẹp bảng xếp hạng vì thứ hạng tính chung toàn cấp. Lọc **mảng, nhóm lỗi, lỗi, học sinh** không áp dụng cho xếp hạng: điểm thi đua luôn tính mọi lỗi.",
     },
     {
       kind: "list",
       title: "Biến động xếp hạng",
       items: [
-        "Mỗi khối một biểu đồ thứ hạng qua các tuần tính thi đua: 5 lớp đứng đầu tuần cuối và lớp đang lọc được tô đậm; bật [[Hiện các lớp khác]] để xem tất cả.",
+        "Mỗi khối một biểu đồ thứ hạng qua các tuần tính thi đua (THPT: một biểu đồ toàn cấp): 5 lớp đứng đầu tuần cuối và lớp đang lọc được tô đậm; bật [[Hiện các lớp khác]] để xem tất cả.",
         "[[Cộng dồn]]: hạng theo điểm thi đua cộng dồn từ đầu kỳ đến từng tuần (tuần cuối = bảng xếp hạng của kỳ). [[Từng tuần]]: hạng theo điểm của riêng từng tuần.",
         "Bên dưới có danh sách **Tăng hạng nhiều nhất** và **Giảm hạng nhiều nhất**.",
       ],
@@ -157,18 +158,18 @@ const khoiLop: GuideSection = {
   group: "xem",
   roles: "all",
   route: "/lop",
-  summary: "Chi tiết từng lớp: chỉ số, thứ hạng trong khối, điểm thi đua theo tuần, điểm trừ cộng dồn và dòng thời gian sự việc.",
+  summary: "Chi tiết từng lớp: chỉ số, thứ hạng (trong khối; THPT: toàn cấp), điểm thi đua theo tuần, điểm trừ cộng dồn và dòng thời gian sự việc.",
   blocks: [
     {
       kind: "p",
-      text: "Khi chưa chọn lớp, trang [Khối & lớp](/lop) liệt kê các lớp theo khối, sắp theo hạng thi đua. Bấm một lớp hoặc dùng ô chọn lớp (gõ mã lớp hoặc tên GVCN). GVCN thấy dòng **Lớp chủ nhiệm:** với nút vàng mang mã lớp của mình để mở nhanh.",
+      text: "Khi chưa chọn lớp, trang [Khối & lớp](/lop) liệt kê các lớp theo khối, sắp theo hạng thi đua (THPT: một nhóm Toàn cấp, sắp theo hạng toàn cấp). Bấm một lớp hoặc dùng ô chọn lớp (gõ mã lớp hoặc tên GVCN). GVCN thấy dòng **Lớp chủ nhiệm:** với nút vàng mang mã lớp của mình để mở nhanh.",
     },
     {
       kind: "list",
       title: "Chi tiết một lớp",
       items: [
         "**Thông tin lớp**: GVCN, phó chủ nhiệm, sĩ số; nút gọi điện hoặc gửi thư cho GVCN khi có thông tin liên hệ.",
-        "**Chỉ số** của lớp trong kỳ: Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ, Điểm thưởng, **Điểm thi đua** (kèm Hạng X/N trong khối) và Độ tin cậy dữ liệu.",
+        "**Chỉ số** của lớp trong kỳ: Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ, Điểm thưởng, **Điểm thi đua** (kèm Hạng X/N trong khối – THPT: toàn cấp) và Độ tin cậy dữ liệu.",
         "**Điểm thi đua theo tuần** từ đầu năm học và **Điểm trừ cộng dồn** của lớp so với trung bình khối.",
         "**Phân bổ theo mảng** và **Lỗi thường gặp** của lớp.",
         "**Học sinh có vi phạm trong lớp** – bấm tên để xem lịch sử của em.",
@@ -177,7 +178,7 @@ const khoiLop: GuideSection = {
     },
     {
       kind: "p",
-      text: "Nút [[Bảng xếp hạng]] mở khối của lớp trên trang Xếp hạng; [[In]] để in trang chi tiết lớp.",
+      text: "Nút [[Bảng xếp hạng]] mở khối của lớp trên trang Xếp hạng (THPT: bảng toàn cấp); [[In]] để in trang chi tiết lớp.",
     },
     {
       kind: "note",
@@ -203,7 +204,7 @@ const baoGvcn: GuideSection = {
       kind: "list",
       title: "Nội dung báo cáo",
       items: [
-        "Thông tin lớp (GVCN, Phó CN, Khối, Sĩ số) và các chỉ số: Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ, Điểm thưởng, **Điểm thi đua** và **Hạng khối** (kèm ngưỡng Top).",
+        "Thông tin lớp (GVCN, Phó CN, Khối, Sĩ số) và các chỉ số: Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ, Điểm thưởng, **Điểm thi đua** và **Hạng khối** – THPT: **Hạng toàn cấp** (kèm ngưỡng Top).",
         "**Học sinh cần quan tâm** – học sinh có tên trong sự việc của lớp, kèm cảnh báo.",
         "**Điểm thưởng của lớp** trong kỳ, ghi rõ khoản nào chưa tính vào điểm thi đua.",
         "**Chi tiết sự việc**: Ngày, Đối tượng (tên học sinh hoặc “Tập thể lớp”), Lỗi, Điểm, Chi tiết, Trạng thái, Phản hồi GVCN, Khắc phục. Có ô tìm kiếm và lọc theo trạng thái.",
@@ -309,6 +310,7 @@ const baoCao: GuideSection = {
         "Tiêu đề “BÁO CÁO NỀN NẾP TUẦN …/THÁNG …”, cấp học, dòng **Kính gửi** và ngày lập.",
         "**Chỉ số chính** của phạm vi (so với kỳ trước).",
         "**Xếp hạng thi đua**: BGH – tóm tắt mọi khối; tổ khối – bảng của khối; GVCN – thứ hạng của lớp trong khối và nhóm Top (THCS: nhóm Dẫn đầu / Top >90% / Top 51%–90% / Top <51%, xem bảng dưới).",
+        "**THPT**: thứ hạng tính chung toàn cấp (tổ khối thấy các lớp của khối với **hạng toàn cấp**), có cột **Lượt vi phạm** – bằng điểm thì lớp ít lượt vi phạm hơn xếp trên – và báo cáo nêu **Top 3 toàn cấp** (gồm cả lớp đồng hạng). Xem [Điểm thi đua, xếp hạng và Top 90%](#quy-tac-thi-dua).",
         "**Vấn đề nổi bật** (5 lỗi nhiều nhất, theo nhóm lỗi) và **Cảnh báo sớm** của phạm vi.",
         "**Chi tiết sự việc** (khi bật): Ngày, Mã sự việc, Lớp, Mã lỗi – Nội dung, Nhóm, Phạm vi, Đối tượng, Mã HS, Lượt, Điểm, Trạng thái, Khắc phục.",
         "Ô ký **Người lập báo cáo** và **Xác nhận của BGH**.",
@@ -323,7 +325,7 @@ const baoCao: GuideSection = {
         ["Top 51%–90%", "Từ 51% đến 90% điểm nền (báo cáo tuần: từ 51 đến 90 điểm)."],
         ["Top <51%", "Dưới 51% điểm nền (báo cáo tuần: dưới 51 điểm)."],
       ],
-      caption: "THCS – xếp nhóm lớp trong báo cáo. Điểm nền = điểm cơ sở mỗi tuần (mặc định 100) × số tuần tính thi đua trong kỳ (tháng 4 tuần: 400). Kỳ không có tuần tính thi đua thì chưa xếp nhóm. Báo cáo BGH liệt kê lớp của từng nhóm theo khối; báo cáo tổ khối có thêm cột Tỉ lệ và Xếp nhóm; báo cáo GVCN ghi nhóm của lớp. Cấp Tiểu học và THPT vẫn dùng Top 90% theo thứ hạng.",
+      caption: "THCS – xếp nhóm lớp trong báo cáo. Điểm nền = điểm cơ sở mỗi tuần (mặc định 100) × số tuần tính thi đua trong kỳ (tháng 4 tuần: 400). Kỳ không có tuần tính thi đua thì chưa xếp nhóm. Báo cáo BGH liệt kê lớp của từng nhóm theo khối; báo cáo tổ khối có thêm cột Tỉ lệ và Xếp nhóm; báo cáo GVCN ghi nhóm của lớp. Cấp Tiểu học (theo khối) và THPT (toàn cấp) vẫn dùng Top 90% theo thứ hạng.",
     },
     {
       kind: "tip",

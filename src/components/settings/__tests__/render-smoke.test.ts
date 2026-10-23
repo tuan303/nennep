@@ -38,7 +38,7 @@ describe("settings components (SSR smoke)", () => {
         h(GeneralCard, props),
         h(SemestersCard, props),
         h(RagCard, props),
-        h(RankingRulesCard, { ...props, classes: ds.classes }),
+        h(RankingRulesCard, { ...props, classes: ds.classes, levelId: ds.levelId }),
         h(StudentAlertCard, props),
         h(SlaCard, props),
       ),
@@ -48,7 +48,21 @@ describe("settings components (SSR smoke)", () => {
     expect(html).toContain("Mở Lịch tuần");
     expect(html).toContain("Phê duyệt ngưỡng cảnh báo");
     expect(html).toContain("VD: Khối 6 có 5 lớp → 5 lớp thuộc Top 90%.");
+    expect(html).not.toContain("Xếp hạng chung toàn cấp");
     expect(html).toContain("Cảnh báo đỏ");
+  });
+
+  it("THPT: the Top example counts every active class of the level and explains the level-wide ranking", () => {
+    const ds = makeFixtureDataset(); // 8 active classes (khối 6: 5, khối 7: 3)
+    const base = draftFromConfig(ds.config);
+    const props = { draft: base, base, errors: {}, set: noop };
+    const html = renderToStaticMarkup(h(RankingRulesCard, { ...props, classes: ds.classes, levelId: "THPT" }));
+    const active = ds.classes.filter((c) => c.active).length;
+    expect(html).toContain(`VD: Toàn cấp có ${active} lớp → ${Math.ceil(0.9 * active)} lớp thuộc Top 90%.`);
+    expect(html).not.toContain("VD: Khối");
+    expect(html).toContain("Xếp hạng chung toàn cấp");
+    expect(html).toContain("lớp ít lượt vi phạm hơn xếp trên");
+    expect(html).toContain("Báo cáo nêu 3 lớp dẫn đầu toàn cấp");
   });
 
   it("renders the catalog table and phone card", () => {

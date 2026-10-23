@@ -6,6 +6,7 @@
  */
 import { SCHOOL_NAME } from "../constants";
 import { formatDateVN } from "../engine/dates";
+import { rankingRuleOf } from "../engine/ranking";
 import type { ClassInfo, LevelDataset } from "../types";
 import {
   CATALOG_COLUMNS,
@@ -21,8 +22,7 @@ import {
   type LinkRow,
 } from "./level-sheets";
 import { createWorkbook, workbookToBytes } from "./loader";
-import { rankingColumns, sortRanking, STUDENT_REPORT_COLUMNS, type RankingExportRow, type StudentExportRow } from "./report-columns";
-import { topGroupLabel } from "./format";
+import { addRankingSheet, STUDENT_REPORT_COLUMNS, type RankingExportRow, type StudentExportRow } from "./report-columns";
 import { addTableSheet, XL_COLORS } from "./sheet-writer";
 
 export interface ExportWorkbookOptions {
@@ -30,7 +30,10 @@ export interface ExportWorkbookOptions {
   today: string;
   /** e.g. "Trung học cơ sở" (LEVELS[levelId].name) */
   levelName: string;
-  /** adds the "Xếp hạng" sheet (e.g. `buildRanking(...).grades.flatMap(g => g.rows)`) */
+  /**
+   * adds the "Xếp hạng" sheet (e.g. `buildRanking(...).grades.flatMap(g => g.rows)`), laid out by the level's ranking
+   * rule: per khối, or one table for the whole level with a Lượt vi phạm column and the top 3 named (THPT).
+   */
   rankingRows?: RankingExportRow[];
   /** adds the "BC Học sinh" sheet */
   studentRows?: StudentExportRow[];
@@ -142,14 +145,12 @@ export async function exportLevelWorkbook(ds: LevelDataset, opts: ExportWorkbook
   });
 
   if (opts.rankingRows) {
-    addTableSheet(wb, {
-      name: "Xếp hạng",
+    addRankingSheet(wb, {
       title: `XẾP HẠNG THI ĐUA – ${LEVEL}`,
-      subtitle: `${base}${period} · Xếp hạng trong từng khối; ${topGroupLabel(ds.config.top90Ratio)} tính theo số lớp của khối.`,
-      columns: rankingColumns(ds.config.top90Ratio),
-      items: sortRanking(opts.rankingRows),
-      freezeColumns: 2,
-      tabColor: XL_COLORS.gold,
+      subtitle: `${base}${period}`,
+      rows: opts.rankingRows,
+      ratio: ds.config.top90Ratio,
+      layout: rankingRuleOf(ds.levelId),
     });
   }
 

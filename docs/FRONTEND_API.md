@@ -470,13 +470,19 @@ rag.ts
 - Low-confidence reason format: "Độ tin cậy dữ liệu thấp (50%)".
 
 ranking.ts
-- spec: competitionRanks(scores), top90Cutoff(n, ratio), buildRanking(ds, period, today, opts?).
+- spec: competitionRanks(scores, tieKeys?), top90Cutoff(n, ratio), buildRanking(ds, period, today, opts?).
+- Ranking rule per level (NSHM decision): rankingRuleOf(levelId) → RankingRule { scope: "grade" | "level"; tieBreak: "none" | "violationTurns"; topCount? }
+  (RANKING_RULES, DEFAULT_RANKING_RULE). TH / THCS: one table per khối, equal scores share a rank. THPT: { scope: "level", tieBreak: "violationTurns", topCount: 3 }
+  – every active class in ONE table, equal scores → fewer lượt vi phạm (RankingRow.violationTurns) first, equal on both → same rank (1,1,3); reports name the top 3.
+- buildRanking for THPT returns one GradeRanking with grade = LEVEL_RANKING_GROUP (0); rows keep their real grade, gradeClassCount / top90Cutoff are those of
+  the level, and opts.grade is ignored. Never look a class's table up with `grades.find(g => g.grade === cls.grade)` – use findRankingGroup(ranking, code) /
+  findRankingRow(ranking, code); label a table with rankingGroupLabel(group) ("Khối 6" | "Toàn cấp"); topRows(rows, n) = first n incl. ties at the cut.
 - classScoreSeries(ds, classCode, today) → Array<{ week; score; penalty; reward; rank }>:
   - covers elapsed COUNTED weeks only;
   - score = baseScorePerWeek + counted rewards − penalties of that week;
-  - rank is within the active classes of the class's grade;
+  - rank is within the class's ranking group (active classes of its grade; THPT: of the level, with the lượt vi phạm tie-break);
   - returns [] for an unknown class.
-- Extra: findRankingRow(ranking, classCode): RankingRow | undefined.
+- Extra: findRankingRow(ranking, classCode): RankingRow | undefined; findRankingGroup(ranking, classCode): GradeRanking | undefined.
 
 analytics.ts — spec types and functions: Kpis, computeKpis, kpiComparison, IssueStat, topIssues, ClassStat, classStats, StudentStat, studentStats, studentHistory, GradeStat, gradeStats, categoryBreakdown, TrendPoint, weeklyTrend, classWeekHeatmap, TimelineDay, classTimeline, recidivism, fiveS, weekdayDistribution. Choices I made where §5.1 was silent:
 - computeKpis: relatedStudents = Σ relatedStudentCount; uniqueStudents = distinct named students; rewardPoints = counted rewards (ignores category/error filters).
@@ -498,7 +504,7 @@ analytics.ts — spec types and functions: Kpis, computeKpis, kpiComparison, Iss
     - "grade": key `grade:N`, label `Khối N`, one per grade in scope (class filter → its grade).
     - "class": key `class:CODE`, label `Lớp CODE`, for `classCodes` (given order, deduplicated) or every active class of the grade scope (display order); the class filter never restricts these series (pick top N + the filtered class in the UI).
     - gradeAverage: appends `avg:N` / `TB khối N` (ascending grade) = cumulative penalty of the grade's ACTIVE classes ÷ their number, same filters except class / student. "total" → every grade in scope; "class" → grades of the listed classes (unknown classes add none).
-  - rankHistory(ds, grade, today, opts?: { basis?: "cumulative" | "week"; period?: Period }) → { grade, basis, weeks, labels, classes: Array<{ classCode, homeroomTeacher?, ranks, scores }> }. Population = active classes of the grade (display order); one point per counted elapsed week of the scope (default whole year; a week period is widened to its semester and cut at that week). "cumulative": score_k = baseScorePerWeek × (k + 1) + counted rewards − penalties of the scope up to weeks[k] (holiday-week records included) → the last point equals buildRanking(scope) score/rank. "week": as classScoreSeries (score and rank per week). ranks = competitionRanks (1 = best, ties share). Unknown grade → classes []; no counted week → weeks [] and empty arrays per class.
+  - rankHistory(ds, grade, today, opts?: { basis?: "cumulative" | "week"; period?: Period }) → { grade, basis, weeks, labels, classes: Array<{ classCode, homeroomTeacher?, ranks, scores }> }. Population = active classes of the grade (display order) – THPT: every active class of the level with the lượt vi phạm tie-break, returned grade = LEVEL_RANKING_GROUP (0) whatever `grade` is passed; one point per counted elapsed week of the scope (default whole year; a week period is widened to its semester and cut at that week). "cumulative": score_k = baseScorePerWeek × (k + 1) + counted rewards − penalties of the scope up to weeks[k] (holiday-week records included) → the last point equals buildRanking(scope) score/rank. "week": as classScoreSeries (score and rank per week). ranks = competitionRanks (1 = best, ties share). Unknown grade → classes []; no counted week → weeks [] and empty arrays per class.
 - Extras:
   - compareIncidentsNewestFirst(a, b)
   - studentStatsFromIncidents(ds, incidents): StudentStat[]
@@ -587,29 +593,36 @@ In the browser, download with downloadBlob(bytes, name, MIME.xlsx) from @/lib/cl
 
 - exportLevelWorkbook(ds: LevelDataset, opts: ExportWorkbookOptions)
   - ExportWorkbookOptions = { today: string; levelName: string; rankingRows?: RankingExportRow[]; studentRows?: StudentExportRow[]; periodLabel?: string }
+  - The Xếp hạng sheet follows rankingRuleOf(ds.levelId): per khối (sorted khối → hạng; subtitle "Xếp hạng trong từng khối; Top 90% tính theo số lớp của khối."),
+    or THPT: one level-wide table sorted by hạng (Khối column = the class's own grade), a "Lượt vi phạm" column before "Hạng", the level rule in the
+    subtitle and "★ Top 3 toàn cấp: 10A1 (hạng 1), …" in row 3 (omitted when the tie swallows the whole table).
 - exportSimpleSheet(title: string, columns: SimpleColumn[], rows: SimpleRow[], opts?: SimpleSheetOptions)
   - SimpleColumn = { header: string; key: string; width?: number }
   - SimpleRow = Record<string, string | number | null>
   - SimpleSheetOptions = { subtitle?: string; sheetName?: string }
-- exportRankingSheet(rows: RankingExportRow[], ctx: ReportContext)
+- exportRankingSheet(rows: RankingExportRow[], ctx: ReportContext) – same layout as the workbook's Xếp hạng sheet; the rule comes from ctx.levelId
+  (default: the level whose LEVELS name is ctx.levelName).
 - exportStudentList(rows: StudentExportRow[], ctx: ReportContext)
 - exportGvcnReport(input: ReportContext & { classCode: string; homeroomTeacher?: string; incidents: Incident[] })
-- ReportContext = { levelName: string; periodLabel: string; today: string }
+- ReportContext = { levelName: string; periodLabel: string; today: string; topRatio?: number (config.top90Ratio); levelId?: LevelId (ranking rule) }
 
 Row types:
-- RankingExportRow = { grade: number; classCode: string; homeroomTeacher?: string; base: number; rewardPoints: number; penaltyPoints: number; score: number; rank: number; inTop90: boolean; rag: string }
+- RankingExportRow = { grade: number; classCode: string; homeroomTeacher?: string; base: number; rewardPoints: number; penaltyPoints: number; score: number; rank: number; inTop90: boolean; rag: string; violationTurns?: number }
   - Engine RankingRow is assignable, so you can pass grades.flatMap(g => g.rows).
 - StudentExportRow = { id: string; name: string; classCode: string; incidents: number; points: number; errors: string; alert: string }
   - alert may be "NONE" | "REPEAT" | "WEEKLY_RED"; these are mapped to Vietnamese text.
 
 HTML snapshot (sync; can also be imported from "@/lib/excel/html-snapshot" without loading ExcelJS)
 - buildHtmlSnapshot(input: HtmlSnapshotInput): string
-  - HtmlSnapshotInput = { schoolName; levelName; periodLabel; generatedAt (ISO timestamp or yyyy-mm-dd); kpis: {label, value}[]; rankingByGrade: { grade; rows: { rank; classCode; score; penalty; reward; inTop90; rag }[] }[]; topIssues: { issue; incidents; points }[]; topClasses: { classCode; incidents; points }[] }
+  - HtmlSnapshotInput = { schoolName; levelName; periodLabel; generatedAt (ISO timestamp or yyyy-mm-dd); kpis: {label, value}[]; topRatio?; rankingLayout?: RankingLayout (engine rankingRuleOf); rankingByGrade: { grade (0 = LEVEL_RANKING_GROUP → card "Toàn cấp"); rows: { rank; classCode; score; penalty; reward; inTop90; rag; violationTurns? }[] }[]; topIssues: { issue; incidents; points }[]; topClasses: { classCode; incidents; points }[] }
+  - THPT layout: heading "Xếp hạng thi đua toàn cấp", the rule line, a "Lượt vi phạm" column and "Top 3 toàn cấp: …" in the card.
 - escapeHtml(s: string): string
 - formatGeneratedAt(v: string): string
 
 HELPERS (sync)
 - Text and labels: catalogChoiceText(item) → "issue | category | 2 điểm/HS | L04"; penaltyUnitText(penalty, unit); formatPenalty(n); ragLabel(rag); top90Label(b); studentAlertLabel(a); RAG_SHORT
+- Ranking layout texts (RankingLayout = Pick<RankingRule, "scope" | "tieBreak" | "topCount">): rankingRuleNote(layout, ratio?) → one-line rule of the table;
+  leadingClassesNote(rows, layout) → "Top 3 toàn cấp: 10A1 (hạng 1), 11A1 (hạng 1), 12A1 (hạng 3)." | undefined
 - incidentSubjects(inc) → "Tên A, Tên B + 2 HS chưa rõ tên" or "Tập thể lớp"
 - Parsing pieces: extractErrorCode(choice); splitStudentChoice(choice)
 - Level detection: levelFromTitle(text); levelFromGrades(classes); levelFromFileName(name)

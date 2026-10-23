@@ -10,6 +10,7 @@ import { buildPeriodReport, recipientOptions, type Recipient } from "../lib/repo
 import { ReportDocument } from "../report-document";
 import { ReportPrintStyles, REPORT_DOC_ATTR } from "../report-print";
 import { ReportToolbar } from "../report-toolbar";
+import { THPT_TODAY, THPT_WEEK, makeThptDataset } from "./thpt-dataset";
 
 const WEEK: Period = { mode: "week", key: "2026-10-19" };
 const noop = () => undefined;
@@ -60,6 +61,8 @@ describe("ReportDocument", () => {
   it("lớp: class standing; empty level shows the empty texts", () => {
     const html = doc(makeFixtureDataset(), { kind: "class", classCode: "6A03" }, true);
     expect(html).toContain("Thứ hạng trong khối");
+    expect(html).toContain("thứ hạng tính trên toàn bộ lớp của khối.");
+    expect(html).not.toContain("lượt vi phạm xếp trên");
     expect(html).toContain("GVCN lớp 6A03");
     const empty = doc({ ...makeFixtureDataset(), incidents: [], rewards: [] }, { kind: "bgh" }, true);
     expect(empty).toContain("Không có sự việc trong kỳ.");
@@ -145,5 +148,50 @@ describe("THCS score bands in the document", () => {
     const html = doc(makeFixtureDataset(), { kind: "bgh" }, false, { mode: "week", key: "2026-08-31" });
     expect(html).toContain("chưa xếp nhóm lớp");
     expect(html).not.toContain("Ngoài Top");
+  });
+});
+
+describe("THPT: level-wide ranking in the document", () => {
+  const thpt = (recipient: Recipient) => {
+    const ds = makeThptDataset();
+    const report = buildPeriodReport(ds, { period: THPT_WEEK, recipient }, THPT_TODAY);
+    return renderToStaticMarkup(createElement(ReportDocument, { report, detail: false, topRatio: ds.config.top90Ratio, today: THPT_TODAY }));
+  };
+
+  it("BGH: one 'Toàn cấp' row with the Top 3 chips (ties included), the rule in the note", () => {
+    const html = thpt({ kind: "bgh" });
+    expect(html).toContain("thứ hạng tính trên toàn bộ lớp của cấp; bằng điểm: ít lượt vi phạm xếp trên, bằng cả số lượt: đồng hạng; Top 3 gồm cả các lớp đồng hạng.");
+    expect(html).toMatch(/<th class="[^"]*whitespace-nowrap[^"]*">Phạm vi<\/th>/);
+    expect(html).toMatch(/<td class="[^"]*whitespace-nowrap[^"]*">Toàn cấp<\/td>/);
+    expect(html).toMatch(/<th class="[^"]*whitespace-nowrap[^"]*">Top 3<\/th>/);
+    expect(html).toContain("Ngoài Top 90%");
+    expect(html).not.toContain(">Dẫn đầu</th>");
+    expect(html).not.toContain(">Khối</th>");
+    for (const c of ["10A1", "11A1", "11A2", "12A1"]) expect(html).toMatch(new RegExp(`<li class="[^"]*whitespace-nowrap[^"]*">${c}<span[^>]*>100</span></li>`));
+    expect(html).not.toMatch(/<li class="[^"]*">12A2<span/);
+  });
+
+  it("tổ khối: rows of the khối with level ranks n/N, caption says the ranks are toàn cấp, lượt vi phạm column", () => {
+    const html = thpt({ kind: "grade", grade: 12 });
+    expect(html).toContain("Khối 12: 2 lớp · điểm TB 98 · thứ hạng toàn cấp (n/6) · Top 90% toàn cấp: hạng ≤ 6 · Top 3 toàn cấp: 10A1 (100), 11A1 (100), 11A2 (100), 12A1 (100)");
+    expect(html).toContain(">Hạng toàn cấp</th>");
+    expect(html).toContain(">Lượt vi phạm</th>");
+    expect(html).toMatch(/>3<span class="[^"]*">\/6<\/span><\/td>/);
+    expect(html).toMatch(/>5<span class="[^"]*">\/6<\/span><\/td>/);
+    expect(html).not.toContain(">10A1</td>");
+  });
+
+  it("GVCN: 'Thứ hạng toàn cấp', level average + lượt vi phạm, Top 3 line (or membership)", () => {
+    const html = thpt({ kind: "class", classCode: "12A2" });
+    expect(html).toContain("Thứ hạng toàn cấp");
+    expect(html).not.toContain("Thứ hạng trong khối");
+    expect(html).toContain("5/6");
+    expect(html).toContain("tuần trước: 1");
+    expect(html).toContain("TB toàn cấp 98,67 · 1 lượt vi phạm");
+    expect(html).toContain("Top 3 toàn cấp: 10A1 (100), 11A1 (100), 11A2 (100), 12A1 (100)");
+    expect(html).not.toContain("Dẫn đầu khối");
+    const top = thpt({ kind: "class", classCode: "12A1" });
+    expect(top).toContain("Thuộc Top 3 toàn cấp");
+    expect(top).not.toContain("Top 3 toàn cấp:");
   });
 });

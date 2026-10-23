@@ -76,7 +76,7 @@ describe.each(CASES)("overview cards (%s)", (_name, ds, filters) => {
       render(HeatmapCard, { ds, filters, today, context, onPickCell: noop }),
       render(FiveSCard, { ds, filters, today, totalPenalty: 10, context, onOpenClass: noop }),
       render(RecidivismCard, { ds, filters, today, context, onOpenClass: noop, onOpenStudent: noop }),
-      render(MyClassCard, { rows: ranking.grades.flatMap((g) => g.rows).filter((r) => r.classCode === "6A03"), periodText: "Tháng 10/2026", onOpenClass: noop }),
+      render(MyClassCard, { levelId: ds.levelId, rows: ranking.grades.flatMap((g) => g.rows).filter((r) => r.classCode === "6A03"), periodText: "Tháng 10/2026", onOpenClass: noop }),
     ].join("");
     expect(html.length).toBeGreaterThan(1000);
     if (ds.incidents.length === 0) expect(html).toContain("Chưa có dữ liệu nền nếp");
@@ -127,6 +127,42 @@ describe("school cards", () => {
     ].join("");
     expect(html).toContain("Trung học cơ sở");
     expect(html).toContain("Cảnh báo theo cấp học");
+  });
+});
+
+describe("THPT cards (one level-wide ranking)", () => {
+  it("name the rank toàn cấp, the lượt vi phạm and the Top 3; per-khối filters still apply", () => {
+    const ds: LevelDataset = { ...makeFixtureDataset(), levelId: "THPT" };
+    const filters: GlobalFilters = { period: { mode: "month", key: "2026-10" }, grade: 7 };
+    const ranking = buildRanking(ds, filters.period, FIXTURE_TODAY);
+    const mine = ranking.grades.flatMap((g) => g.rows).filter((r) => r.classCode === "6A03");
+    const html = [
+      render(MyClassCard, { levelId: ds.levelId, rows: mine, periodText: "Tháng 10/2026", onOpenClass: noop }),
+      render(PriorityClassesCard, { ds, classes: classStats(ds, { ...filters, grade: undefined }), ranking, onOpenClass: noop }),
+      render(RagCard, { ds, ranking, grade: filters.grade, onOpenClass: noop }),
+      render(GradeCard, { ds, filters: { period: filters.period }, today: FIXTURE_TODAY, onPickGrade: noop }),
+      render(LevelCard, { summary: levelSummary(ds, "month", FIXTURE_TODAY), minConfidence: 0.8, onOpen: noop }),
+    ].join("");
+    expect(html).toContain("Hạng " + mine[0].rank + "/8 toàn cấp");
+    expect(html).not.toMatch(/Hạng \d+\/\d+ khối/);
+    expect(html).toContain("Lượt vi phạm");
+    expect(html).toContain("Khối 7 · 3 lớp");
+    expect(html).toContain("Số lớp thuộc Top 90% toàn cấp");
+    expect(html).toContain("Top 3 toàn cấp:");
+    expect(html).not.toContain("Dẫn đầu:");
+  });
+
+  it("TH/THCS keep the khối wording", () => {
+    const ds = makeFixtureDataset();
+    const ranking = buildRanking(ds, { mode: "month", key: "2026-10" }, FIXTURE_TODAY);
+    const rows = ranking.grades.flatMap((g) => g.rows).filter((r) => r.classCode === "6A03");
+    const html = [
+      render(MyClassCard, { levelId: ds.levelId, rows, periodText: "Tháng 10/2026", onOpenClass: noop }),
+      render(LevelCard, { summary: levelSummary(ds, "month", FIXTURE_TODAY), minConfidence: 0.8, onOpen: noop }),
+    ].join("");
+    expect(html).toMatch(/Hạng \d+\/5 khối 6/);
+    expect(html).not.toContain("Lượt vi phạm");
+    expect(html).toContain("Dẫn đầu:");
   });
 });
 

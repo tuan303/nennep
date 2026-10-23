@@ -13,7 +13,7 @@ import { periodLabel } from "@/lib/engine";
 import type { LevelDataset } from "@/lib/types";
 import { ClassDetail } from "./class-detail";
 import { ClassOverview } from "./class-overview";
-import { gradeFromCode } from "./lib/class-view";
+import { gradeFromCode, rankScopeText } from "./lib/class-view";
 
 /**
  * SCR-04 Khối & lớp. The selected class is the global filter `?class=CODE` (FilterBar, the picker below, deep links
@@ -41,6 +41,8 @@ export function ClassScreen({ ds }: { ds: LevelDataset }) {
   const rankingHref = `/xep-hang?${searchParams.toString()}`;
 
   const label = periodLabel(filters.period, ds.config.semesters);
+  // "thứ hạng trong khối" | "thứ hạng toàn cấp" (THPT ranks the whole level – RankingRule).
+  const rankScope = rankScopeText(ds.levelId);
   const pick = (code: string | undefined) => setFilters({ classCode: code });
 
   return (
@@ -52,8 +54,8 @@ export function ClassScreen({ ds }: { ds: LevelDataset }) {
         breadcrumbs={cls ? [{ label: "Khối & lớp", href: overviewHref }, { label: `Lớp ${cls.code}` }] : undefined}
         description={
           cls
-            ? `Khối ${cls.grade} · chỉ số, thứ hạng trong khối, xu hướng điểm thi đua và diễn biến theo ngày.`
-            : "Chọn lớp để xem chỉ số, thứ hạng trong khối, xu hướng điểm thi đua và dòng thời gian sự việc."
+            ? `Khối ${cls.grade} · chỉ số, thứ hạng ${rankScope}, xu hướng điểm thi đua và diễn biến theo ngày.`
+            : `Chọn lớp để xem chỉ số, thứ hạng ${rankScope}, xu hướng điểm thi đua và dòng thời gian sự việc.`
         }
         actions={
           <>

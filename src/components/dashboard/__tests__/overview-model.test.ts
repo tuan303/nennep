@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
 import { buildRanking, classStats, computeKpis, kpiComparison, weekdayDistribution, weeklyTrend } from "@/lib/engine";
 import { KPI_TERMS } from "@/lib/constants";
-import type { GlobalFilters, UserProfile } from "@/lib/types";
+import type { GlobalFilters, LevelDataset, UserProfile } from "@/lib/types";
 import {
   buildKpiViews,
   confidenceTone,
@@ -12,6 +12,8 @@ import {
   pendingRewards,
   priorityClasses,
   ragSummary,
+  rankingGroupText,
+  rankText,
   sparkWeeks,
   trendHighlight,
   type KpiId,
@@ -193,6 +195,38 @@ describe("ragSummary / priorityClasses / myClassRows", () => {
     expect(myClassRows(gvcn, "THCS", ranking).map((r) => r.classCode)).toEqual(["6A03"]);
     expect(myClassRows({ role: "VIEWER", gvcnClasses: [] }, "THCS", ranking)).toEqual([]);
     expect(myClassRows(undefined, "THCS", ranking)).toEqual([]);
+  });
+});
+
+describe("THPT: one level-wide ranking table (fewer lượt vi phạm first)", () => {
+  const thpt = (): LevelDataset => ({ ...makeFixtureDataset(), levelId: "THPT" });
+
+  it("ragSummary filters the single level table on the rows' own khối", () => {
+    const ranking = buildRanking(thpt(), OCT.period, FIXTURE_TODAY, { highlightClass: "6A03" });
+    expect(ranking.grades).toHaveLength(1);
+    expect(ragSummary(ranking.grades).total).toBe(8);
+    const g7 = ragSummary(ranking.grades, 7);
+    expect(g7.total).toBe(3);
+    expect(g7.rows.every((r) => r.grade === 7)).toBe(true);
+    expect(g7.highlighted).toBeUndefined();
+    expect(ragSummary(ranking.grades, 6).highlighted?.classCode).toBe("6A03");
+  });
+
+  it("rank wording: toàn cấp for THPT, the khối for TH/THCS", () => {
+    expect(rankText({ rank: 3, gradeClassCount: 15, grade: 11 }, "THPT")).toBe("Hạng 3/15 toàn cấp");
+    expect(rankText({ rank: 2, gradeClassCount: 5, grade: 6 }, "THCS")).toBe("Hạng 2/5 khối 6");
+    expect(rankingGroupText("TH", 2)).toBe("khối 2");
+    expect(rankingGroupText("THPT", 12)).toBe("toàn cấp");
+  });
+
+  it("priority classes and the GVCN's rows carry the level-wide rank", () => {
+    const ds = thpt();
+    const ranking = buildRanking(ds, OCT.period, FIXTURE_TODAY);
+    const top = priorityClasses(classStats(ds, OCT), ranking, 3);
+    expect(top[0].classCode).toBe("6A03");
+    expect(top.every((c) => c.row?.gradeClassCount === 8)).toBe(true);
+    const mine = myClassRows({ role: "GVCN", gvcnClasses: [{ levelId: "THPT", classCode: "7A01" }] }, "THPT", ranking);
+    expect(mine.map((r) => [r.classCode, r.grade, r.gradeClassCount])).toEqual([["7A01", 7, 8]]);
   });
 });
 

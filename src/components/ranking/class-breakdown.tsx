@@ -6,7 +6,7 @@ import { Badge, RagBadge, StatusBadge, buttonClasses, cn } from "@/components/ui
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { KPI_TERMS } from "@/lib/constants";
 import { uncountedRewardNote } from "@/components/rewards/lib/reward-list";
-import { formatDayMonthVN } from "@/lib/engine";
+import { formatDayMonthVN, rankingRuleOf } from "@/lib/engine";
 import type { LevelDataset, Period, RankingRow } from "@/lib/types";
 import { IssueBars } from "./issue-bars";
 import { classBreakdown } from "./lib/ranking-view";
@@ -23,6 +23,7 @@ export interface ClassBreakdownProps {
 /** Why a class has its score: equation, key figures, penalties by error and rewards of the period. */
 export function ClassBreakdown({ ds, row, period, detailHref, className }: ClassBreakdownProps) {
   const data = useMemo(() => classBreakdown(ds, row.classCode, period), [ds, row.classCode, period]);
+  const rule = rankingRuleOf(ds.levelId);
 
   return (
     <div className={cn("@container", className)}>
@@ -34,6 +35,16 @@ export function ClassBreakdown({ ds, row, period, detailHref, className }: Class
             <Stat label={KPI_TERMS.relatedStudents.label} value={fmtNumber(row.relatedStudentCount)} hint={KPI_TERMS.relatedStudents.hint} />
             <Stat label="Điểm trừ TB/tuần" value={fmtNumber(row.avgWeeklyPenalty)} />
             <Stat label="Độ tin cậy dữ liệu" value={fmtPercent(row.confidence)} warn={row.confidence < ds.config.rag.minConfidence} />
+            {rule.tieBreak === "violationTurns" ? (
+              <>
+                <Stat
+                  label={KPI_TERMS.violationTurns.label}
+                  value={fmtNumber(row.violationTurns)}
+                  hint={`${KPI_TERMS.violationTurns.hint} Bằng điểm: lớp ít lượt vi phạm hơn xếp trên.`}
+                />
+                <Stat label={rule.scope === "level" ? "Hạng toàn cấp" : "Hạng trong khối"} value={`${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)}`} />
+              </>
+            ) : null}
           </dl>
           <div className="flex flex-col gap-1.5 text-[13px] text-slate-600">
             <span className="flex flex-wrap items-center gap-2">

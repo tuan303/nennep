@@ -420,12 +420,13 @@ export interface RankingRow {
   rewardPoints: number; // only counted statuses
   penaltyPoints: number;
   score: number; // base + reward - penalty (BR-RANK-01), may be negative
-  rank: number; // competition rank inside the grade (1,2,2,4)
-  gradeClassCount: number;
+  rank: number; // competition rank inside its ranking group – the grade, or the whole level (RankingRule.scope) – (1,2,2,4)
+  gradeClassCount: number; // classes of the ranking group (the grade, or the whole level)
   top90Cutoff: number; // ceil(top90Ratio * gradeClassCount)
   inTop90: boolean; // rank <= top90Cutoff (ties at cutoff are inside)
   incidentCount: number;
   relatedStudentCount: number;
+  violationTurns: number; // lượt vi phạm (tie-break of RankingRule "violationTurns")
   avgWeeklyPenalty: number;
   confidence: number; // 0..1
   rag: RagStatus;
@@ -434,6 +435,7 @@ export interface RankingRow {
 }
 
 export interface GradeRanking {
+  /** The grade; LEVEL_RANKING_GROUP (0) for a level-wide ranking (RankingRule.scope "level", e.g. THPT). */
   grade: number;
   rows: RankingRow[]; // sorted by rank then classCode
 }

@@ -153,6 +153,42 @@ describe("report exports", () => {
     expect(String(gws?.getCell("A2").value)).toContain("GVCN: Cô Giáo Mẫu Một");
   });
 
+  it("THPT ranking: one table for the level sorted by rank, Lượt vi phạm column and the top 3 in row 3", async () => {
+    const rows = [
+      { grade: 12, classCode: "12A1", base: 100, rewardPoints: 0, penaltyPoints: 4, score: 96, rank: 3, inTop90: true, rag: "GREEN", violationTurns: 1 },
+      { grade: 11, classCode: "11A1", base: 100, rewardPoints: 0, penaltyPoints: 0, score: 100, rank: 1, inTop90: true, rag: "GREEN", violationTurns: 0 },
+      { grade: 10, classCode: "10A2", base: 100, rewardPoints: 0, penaltyPoints: 4, score: 96, rank: 4, inTop90: true, rag: "GREEN", violationTurns: 2 },
+      { grade: 10, classCode: "10A1", base: 100, rewardPoints: 0, penaltyPoints: 0, score: 100, rank: 1, inTop90: true, rag: "GREEN", violationTurns: 0 },
+    ];
+    const thpt = { levelName: "Trung học phổ thông", periodLabel: "Tuần 19/10/2026", today: "2026-10-21" };
+    for (const context of [thpt, { ...thpt, levelId: "THPT" as const }]) {
+      const ws = (await open(await exportRankingSheet(rows, context))).getWorksheet("Xếp hạng");
+      expect((ws?.getRow(4).values as unknown[]).slice(1)).toEqual([
+        "Khối",
+        "Lớp",
+        "GVCN",
+        "Điểm nền",
+        "Điểm thưởng",
+        "Điểm trừ",
+        "Điểm thi đua",
+        "Lượt vi phạm",
+        "Hạng",
+        "Top 90%",
+        "Đánh giá (RAG)",
+      ]);
+      expect([5, 6, 7, 8].map((r) => ws?.getCell(r, 2).value)).toEqual(["10A1", "11A1", "12A1", "10A2"]);
+      expect([5, 6, 7, 8].map((r) => ws?.getCell(r, 8).value)).toEqual([0, 0, 1, 2]);
+      expect(String(ws?.getCell("A2").value)).toContain("Xếp hạng chung toàn cấp (không chia khối)");
+      expect(ws?.getCell("A3").value).toBe("★ Top 3 toàn cấp: 10A1 (hạng 1), 11A1 (hạng 1), 12A1 (hạng 3).");
+    }
+    // THCS keeps the per-khối layout.
+    const thcs = (await open(await exportRankingSheet(rows, ctx))).getWorksheet("Xếp hạng");
+    expect((thcs?.getRow(4).values as unknown[]).includes("Lượt vi phạm")).toBe(false);
+    expect([5, 6, 7, 8].map((r) => thcs?.getCell(r, 2).value)).toEqual(["10A1", "10A2", "11A1", "12A1"]);
+    expect(String(thcs?.getCell("A2").value)).toContain("Xếp hạng trong từng khối");
+    expect(thcs?.getCell("A3").value).toBeNull();
+  });
+
   it("describes incident subjects and their Mã HS", () => {
     expect(incidentSubjects({ students: [], unnamedCount: 3 })).toBe("3 HS chưa rõ tên");
     expect(incidentStudentIds({ students: [] })).toBe("");
@@ -225,6 +261,32 @@ describe("buildHtmlSnapshot", () => {
   it("orders grades and ranks", () => {
     expect(html.indexOf("Khối 6")).toBeLessThan(html.indexOf("Khối 7"));
     expect(html.indexOf(">6A01<")).toBeLessThan(html.indexOf("&lt;script&gt;"));
+  });
+
+  it("THPT: one Toàn cấp card (grade 0) with Lượt vi phạm and the top 3", () => {
+    const thpt = buildHtmlSnapshot({
+      ...snapshotInput,
+      levelName: "Trung học phổ thông",
+      rankingLayout: { scope: "level", tieBreak: "violationTurns", topCount: 3 },
+      rankingByGrade: [
+        {
+          grade: 0,
+          rows: [
+            { rank: 3, classCode: "12A1", score: 96, penalty: 4, reward: 0, inTop90: true, rag: "GREEN", violationTurns: 1 },
+            { rank: 1, classCode: "10A1", score: 100, penalty: 0, reward: 0, inTop90: true, rag: "GREEN", violationTurns: 0 },
+            { rank: 1, classCode: "11A1", score: 100, penalty: 0, reward: 0, inTop90: true, rag: "GREEN", violationTurns: 0 },
+            { rank: 4, classCode: "11A2", score: 96, penalty: 4, reward: 0, inTop90: true, rag: "GREEN", violationTurns: 2 },
+          ],
+        },
+      ],
+    });
+    expect(thpt).toContain("Xếp hạng thi đua toàn cấp");
+    expect(thpt).toContain("<h3>Toàn cấp<small>4 lớp</small></h3>");
+    expect(thpt).not.toContain("Khối 0");
+    expect(thpt).toContain("lớp ít lượt vi phạm hơn xếp trên");
+    expect(thpt).toContain("Top 3 toàn cấp: 10A1 (hạng 1), 11A1 (hạng 1), 12A1 (hạng 3).");
+    expect(thpt).toContain('<td class="num score">96</td><td class="num">1</td>');
+    expect(html).not.toContain("Lượt vi phạm");
   });
 
   it("handles empty input gracefully", () => {

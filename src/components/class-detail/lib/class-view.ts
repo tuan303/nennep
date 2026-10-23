@@ -2,8 +2,16 @@
  * Pure view-model helpers of the "Khối & lớp" screen. Scores, ranks, RAG and KPIs come from the engine; these helpers
  * only shape engine output (and redacted datasets) for display.
  */
-import { formatDayMonthVN, round2, type CumulativePenalty, type TimelineDay } from "@/lib/engine";
-import type { ClassInfo, GlobalFilters, Incident, LevelDataset, StudentRef } from "@/lib/types";
+import {
+  formatDayMonthVN,
+  LEVEL_RANKING_GROUP,
+  rankingGroupLabel,
+  rankingRuleOf,
+  round2,
+  type CumulativePenalty,
+  type TimelineDay,
+} from "@/lib/engine";
+import type { ClassInfo, GlobalFilters, GradeRanking, Incident, LevelDataset, LevelId, RankingRow, StudentRef } from "@/lib/types";
 
 export interface ClassSize {
   /** Number shown as "Sĩ số"; undefined when unknown. */
@@ -185,4 +193,60 @@ export function classVsGradeText(v: ClassVsGrade, fmt: (n: number) => string): s
   if (v.diff === undefined) return undefined;
   if (v.diff === 0) return "Bằng trung bình khối";
   return `${v.diff > 0 ? "Cao hơn" : "Thấp hơn"} trung bình khối ${fmt(Math.abs(v.diff))} điểm`;
+}
+
+/* ------------------------------ ranking wording ----------------------------- */
+
+/**
+ * Where a class is ranked (RankingRule of the level): "trong khối 6" (one table per khối) | "toàn cấp" (THPT: one table
+ * for the whole level). Without `grade`: "trong khối".
+ */
+export function rankScopeText(levelId: LevelId, grade?: number): string {
+  if (rankingRuleOf(levelId).scope === "level") return "toàn cấp";
+  return typeof grade === "number" ? `trong khối ${grade}` : "trong khối";
+}
+
+/** Tooltip: how the classes of the level are ranked (population + tie-break). */
+export function rankRuleHint(levelId: LevelId): string {
+  const rule = rankingRuleOf(levelId);
+  const scope = rule.scope === "level" ? "Xếp hạng chung toàn cấp theo điểm thi đua" : "Xếp hạng theo điểm thi đua trong các lớp cùng khối";
+  const ties =
+    rule.tieBreak === "violationTurns"
+      ? "bằng điểm thì lớp ít lượt vi phạm hơn xếp trên, bằng cả điểm và lượt vi phạm thì đồng hạng"
+      : "bằng điểm thì đồng hạng";
+  return `${scope}; ${ties}.`;
+}
+
+export interface OverviewSection {
+  key: string;
+  title: string;
+  description: string;
+  rows: RankingRow[];
+}
+
+/**
+ * Tile sections of the overview, one per ranking table, rows in rank order. A level-wide table (THPT) is one "Toàn cấp"
+ * section; a khối filter keeps only that khối's classes there, with their level-wide ranks (BR-RANK-06: the filter never
+ * changes the population). Sections without classes are dropped.
+ */
+export function overviewSections(grades: readonly GradeRanking[], grade?: number): OverviewSection[] {
+  const out: OverviewSection[] = [];
+  for (const g of grades) {
+    const levelWide = g.grade === LEVEL_RANKING_GROUP;
+    const rows = levelWide && typeof grade === "number" ? g.rows.filter((r) => r.grade === grade) : g.rows;
+    if (rows.length === 0) continue;
+    const partial = rows.length < g.rows.length;
+    const order = !levelWide
+      ? "sắp xếp theo hạng thi đua"
+      : partial
+        ? `sắp xếp theo hạng thi đua toàn cấp (${g.rows.length} lớp)`
+        : "sắp xếp theo hạng thi đua toàn cấp";
+    out.push({
+      key: String(g.grade),
+      title: levelWide && partial ? `Khối ${grade}` : rankingGroupLabel(g.grade),
+      description: `${rows.length} lớp · ${order}`,
+      rows,
+    });
+  }
+  return out;
 }

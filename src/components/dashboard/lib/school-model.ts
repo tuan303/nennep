@@ -7,10 +7,18 @@ import { kpiComparison, studentStats, topIssues, weeklyTrend, type IssueStat, ty
 import { formatDayMonthVN } from "@/lib/engine/dates";
 import { filterIncidents } from "@/lib/engine/filters";
 import { ALL_PERIOD, defaultPeriod, periodLabel, periodOptions, type PeriodOption } from "@/lib/engine/period";
-import { buildRanking } from "@/lib/engine/ranking";
+import {
+  buildRanking,
+  DEFAULT_RANKING_RULE,
+  LEVEL_RANKING_GROUP,
+  rankingGroupLabel,
+  rankingRuleOf,
+  namedTop,
+  type RankingRule,
+} from "@/lib/engine/ranking";
 import { round2 } from "@/lib/engine/scoring";
 import { naturalCompare } from "@/lib/engine/text";
-import type { LevelDataset, LevelId, Period, PeriodMode, RagStatus, RankingRow, Unit } from "@/lib/types";
+import type { GradeRanking, LevelDataset, LevelId, Period, PeriodMode, RagStatus, RankingRow, Unit } from "@/lib/types";
 
 export type SchoolPeriodMode = PeriodMode;
 
@@ -64,8 +72,16 @@ export interface LevelSummary {
   previous?: Kpis;
   countedWeeks: number;
   rag: Record<RagStatus, number>;
-  /** Highest competition score of the level (ties: fewer penalty points, then class code). */
+  /**
+   * Highest competition score of the level. Ties: fewer lượt vi phạm when the level ranks with that tie-break (THPT – the
+   * rank 1 of its level-wide table), else fewer penalty points; then class code.
+   */
   best?: RankingRow;
+  /**
+   * Level ranked as a whole with a named top (RankingRule.topCount, THPT): label "Top 3 toàn cấp" and the first classes
+   * of the level table, every class tied at the cut included. Undefined for levels ranked per khối (TH, THCS).
+   */
+  leaders?: LevelLeaders;
   /** Most worrying class: RED first, then YELLOW, by average weekly penalty; else the highest penalty (> 0). */
   attention?: RankingRow;
   redClasses: RankingRow[];
@@ -78,10 +94,54 @@ export interface LevelSummary {
   rewardPerClass: number;
 }
 
+export interface LevelLeaders {
+  count: number;
+  label: string;
+  /** Sorted by rank then class code; more than `count` rows when classes tie at the cut; [] when `allTied`. */
+  rows: RankingRow[];
+  /** Every class of the level shares the same rank (shared engine rule namedTop). */
+  allTied: boolean;
+  /** Classes of the level (for "tất cả N lớp đồng hạng"). */
+  classCount: number;
+}
+
 const SEVERITY: Record<RagStatus, number> = { RED: 0, YELLOW: 1, GREEN: 2, GRAY: 3 };
 
-export function bestClass(rows: readonly RankingRow[]): RankingRow | undefined {
-  return [...rows].sort((a, b) => b.score - a.score || a.penaltyPoints - b.penaltyPoints || naturalCompare(a.classCode, b.classCode))[0];
+/** Highest score; equal scores: the level's tie-break (fewer lượt vi phạm – THPT) or fewer penalty points; then class code. */
+export function bestClass(rows: readonly RankingRow[], rule: Pick<RankingRule, "tieBreak"> = DEFAULT_RANKING_RULE): RankingRow | undefined {
+  const tie = rule.tieBreak === "violationTurns" ? (r: RankingRow) => r.violationTurns : (r: RankingRow) => r.penaltyPoints;
+  return [...rows].sort((a, b) => b.score - a.score || tie(a) - tie(b) || naturalCompare(a.classCode, b.classCode))[0];
+}
+
+/** The named top of a level ranked as a whole (RankingRule scope "level" + topCount); undefined otherwise. */
+export function levelLeaders(ranking: { grades: GradeRanking[] }, rule: RankingRule): LevelLeaders | undefined {
+  if (rule.scope !== "level" || !rule.topCount) return undefined;
+  const group = ranking.grades.find((g) => g.grade === LEVEL_RANKING_GROUP);
+  return {
+    count: rule.topCount,
+    label: `Top ${rule.topCount} ${rankingGroupLabel(LEVEL_RANKING_GROUP).toLocaleLowerCase("vi")}`,
+    ...(() => {
+      const named = namedTop(group?.rows ?? [], rule.topCount);
+      return { rows: named.rows, allTied: named.allTied, classCount: group?.rows.length ?? 0 };
+    })(),
+  };
+}
+
+/**
+ * "Đồng hạng 1: 10A1, 11A1 · Hạng 3: 12A1" – rows (sorted by rank) grouped by rank, "Đồng hạng" when several classes
+ * share it; at most `max` class codes, then "và N lớp khác".
+ */
+export function leadersText(rows: readonly RankingRow[], max = 6): string {
+  const groups: Array<{ rank: number; codes: string[] }> = [];
+  for (const r of rows.slice(0, Math.max(0, max))) {
+    const last = groups[groups.length - 1];
+    if (last && last.rank === r.rank) last.codes.push(r.classCode);
+    else groups.push({ rank: r.rank, codes: [r.classCode] });
+  }
+  const text = groups
+    .map((g) => `${rows.filter((r) => r.rank === g.rank).length > 1 ? "Đồng hạng" : "Hạng"} ${g.rank}: ${g.codes.join(", ")}`)
+    .join(" · ");
+  return rows.length > max ? `${text} và ${rows.length - max} lớp khác` : text;
 }
 
 export function attentionClass(rows: readonly RankingRow[]): RankingRow | undefined {
@@ -98,6 +158,7 @@ export function levelSummary(ds: LevelDataset, mode: SchoolPeriodMode, today: st
   const period = levelPeriod(ds, mode, today);
   const { current: kpis, previous } = kpiComparison(ds, { period });
   const ranking = buildRanking(ds, period, today);
+  const rule = rankingRuleOf(ds.levelId);
   const rows = ranking.grades.flatMap((g) => g.rows);
   const rag: Record<RagStatus, number> = { GREEN: 0, YELLOW: 0, RED: 0, GRAY: 0 };
   for (const r of rows) rag[r.rag]++;
@@ -115,7 +176,8 @@ export function levelSummary(ds: LevelDataset, mode: SchoolPeriodMode, today: st
     previous,
     countedWeeks: ranking.countedWeeks,
     rag,
-    best: bestClass(rows),
+    best: bestClass(rows, rule),
+    leaders: levelLeaders(ranking, rule),
     attention: attentionClass(rows),
     redClasses: rows.filter((r) => r.rag === "RED").sort((a, b) => b.avgWeeklyPenalty - a.avgWeeklyPenalty),
     yellowCount: rag.YELLOW,

@@ -1,5 +1,7 @@
 /**
  * GET /api/rankings: server-side ranking with the same engine the browser uses (BR-RANK-01…06).
+ * Ranking tables follow the level's rule (engine rankingRuleOf): one per khối, or – THPT – one table for the whole
+ * level (grade = LEVEL_RANKING_GROUP, rows keep their own grade; equal scores → fewer lượt vi phạm first).
  * The response only carries class aggregates, so no GVCN redaction is needed.
  */
 import { z } from "zod";
@@ -40,6 +42,7 @@ export function resolvePeriod(q: Pick<RankingsQuery, "mode" | "key">, weeks: Sch
   return { mode: "semester", key: q.key };
 }
 
+/** `q.grade` only limits the per-khối tables; a level-wide ranking (THPT) always returns its single table. */
 export async function getRankings(user: SessionUser, q: RankingsQuery, today: string = todayVN()): Promise<RankingsResponse> {
   requireLevel(user, q.level);
   const ds = await buildLevelDataset(q.level);

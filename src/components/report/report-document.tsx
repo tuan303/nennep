@@ -7,7 +7,7 @@ import { fmtNumber } from "@/lib/client/format";
 import { SCHOOL_NAME } from "@/lib/constants";
 import { formatDateVN } from "@/lib/engine/dates";
 import { previousPeriodNoun } from "../ranking/lib/ranking-view";
-import type { PeriodReport } from "./lib/report-model";
+import { rankingRuleNote, type PeriodReport } from "./lib/report-model";
 import { REPORT_DOC_ATTR, ReportSignatures } from "./report-print";
 import { DetailBlock, IssuesBlock, KpiBlock, RankingBlock, ReportSection, ScoreBandLegend, WarningsBlock } from "./report-sections";
 
@@ -72,7 +72,7 @@ export function ReportDocument({ report, detail, topRatio, today, preparedBy }: 
       <ReportSection
         index={next()}
         title="Xếp hạng thi đua"
-        note={`${fmtNumber(report.ranking.countedWeeks)} tuần tính thi đua trong kỳ · thứ hạng tính trên toàn bộ lớp của khối.`}
+        note={`${fmtNumber(report.ranking.countedWeeks)} tuần tính thi đua trong kỳ · ${rankingRuleNote(report.ranking.rule)}.`}
       >
         <RankingBlock ranking={report.ranking} topRatio={topRatio} previousNoun={previousNoun} />
         <ScoreBandLegend ranking={report.ranking} />

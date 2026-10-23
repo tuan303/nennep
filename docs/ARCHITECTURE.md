@@ -66,9 +66,10 @@ Browser ──(Firebase Auth ID token)──► /api/* route handlers ──fire
 | Catalog snapshot | incident stores category/issue/group/penalty/unit at time of recording (never edited by hand) |
 | BR-RANK-01 | score = base + counted rewards − penalties (may be negative; no floor) |
 | BR-RANK-02/03 | base = `baseScorePerWeek` × countedWeeks. countedWeeks = weeks of the period with `counted=true` **and `weekStart ≤ Monday(today)`** (current month/semester only counts elapsed weeks). Week mode: 1 if that week is counted, else 0 |
-| BR-RANK-04 | competition ranking 1,2,2,4 (higher score = better) |
-| BR-RANK-05 | per grade: cutoff = `ceil(top90Ratio × classCount)`; `inTop90 = rank ≤ cutoff` (ties at cutoff are inside) |
-| BR-RANK-06 | class filter never changes the ranking population (all ACTIVE classes of the grade); it only highlights |
+| BR-RANK-04 | competition ranking 1,2,2,4 (higher score = better). THPT (`RANKING_RULES`, tieBreak `violationTurns`): equal scores → fewer lượt vi phạm ranks higher; equal score and lượt → same rank (1,1,3) |
+| BR-RANK-05 | per ranking group (the grade; THPT: the whole level): cutoff = `ceil(top90Ratio × classCount)`; `inTop90 = rank ≤ cutoff` (ties at cutoff are inside) |
+| BR-RANK-06 | class filter never changes the ranking population (all ACTIVE classes of the ranking group); it only highlights |
+| Ranking group (NSHM decision) | `rankingRuleOf(levelId)`: TH/THCS `{ scope: "grade", tieBreak: "none" }` → one `GradeRanking` per khối; THPT `{ scope: "level", tieBreak: "violationTurns", topCount: 3 }` → ONE `GradeRanking` with `grade = LEVEL_RANKING_GROUP` (0, label "Toàn cấp" via `rankingGroupLabel`), rows keep their real `grade`, `gradeClassCount` = classes of the level; reports name the top 3 (`topRows`, ties at the cut included). Every ranking consumer (screens, reports, Excel / HTML exports) follows the rule |
 | Rewards counted | only statuses in `config.rewardCountedStatuses` (default `["Đã xác nhận"]`) |
 | BR-RAG-01/02 | avgWeeklyPenalty = penalties / max(1,countedWeeks). `!rag.approved` → GRAY ("Ngưỡng chưa được phê duyệt"); confidence < `minConfidence` → GRAY; ≥ red → RED; ≥ yellow → YELLOW; else GREEN. Always show text+icon with colour (NFR-ACC-01) |
 | Data Confidence | (#OK + #THIEU_TEN_HS) / #incidents in scope; 100% when no incidents |
@@ -133,9 +134,15 @@ export function countedRewards(rewards: Reward[], config: LevelConfig): Reward[]
 export function dataConfidence(incidents: Incident[]): number
 export function ragFor(a: { avgWeeklyPenalty: number; confidence: number; config: LevelConfig }): { rag: RagStatus; reason: string }
 // ranking.ts
-export function competitionRanks(scores: number[]): number[]                          // aligned with input order
+export function competitionRanks(scores: number[], tieKeys?: number[]): number[]      // aligned with input order; tieKeys (lower = better) order equal scores
 export function top90Cutoff(classCount: number, ratio: number): number
+export function rankingRuleOf(levelId: LevelId): RankingRule                          // { scope: "grade" | "level"; tieBreak: "none" | "violationTurns"; topCount? }
 export function buildRanking(ds: LevelDataset, period: Period, today: string, opts?: { highlightClass?: string; grade?: number }): { countedWeeks: number; grades: GradeRanking[] }
+                                                                                      // THPT: one table, grade = LEVEL_RANKING_GROUP (0); opts.grade ignored
+export function findRankingGroup(ranking, classCode): GradeRanking | undefined        // never ranking.grades.find(g => g.grade === cls.grade)
+export function findRankingRow(ranking, classCode): RankingRow | undefined
+export function topRows(rows: RankingRow[], n: number): RankingRow[]                   // first n incl. ties at the cut
+export function rankingGroupLabel(group: number): string                              // "Khối 6" | "Toàn cấp"
 export function classScoreSeries(ds: LevelDataset, classCode: string, today: string): Array<{ week: string; score: number; penalty: number; reward: number; rank: number }>
 // analytics.ts
 export interface Kpis { incidents: number; relatedStudents: number; uniqueStudents: number; penaltyPoints: number; rewardPoints: number; classesWithIncidents: number; confidence: number; reviewCount: number; unnamedStudentCount: number }
@@ -222,6 +229,8 @@ REQ_V2 engine additions (signatures in `docs/FRONTEND_API.md` → ENGINE): `Glob
   (Mã HS / Mã học sinh, Họ và tên / Họ tên, Ngày sinh, Lớp, Giới tính, Trạng thái), first sheet with such headers.
 - `export-workbook.ts`: `exportLevelWorkbook(ds: LevelDataset, opts: { today: string; period?: Period }): Promise<Blob | Buffer>` – sheets
   Nhập liệu (24 legacy columns A–X), HS liên quan, DS Học sinh, Danh mục, Bảng điểm lỗi, Cấu hình, Lịch tuần, Điểm thưởng, Xếp hạng, BC Học sinh; styled headers, frozen panes, autofilter, VN date format.
+  Xếp hạng follows `rankingRuleOf(ds.levelId)` (`addRankingSheet` in `report-columns.ts`): per khối (sorted khối → hạng), or – THPT – one level-wide
+  table sorted by hạng with a "Lượt vi phạm" column before "Hạng", the rule in the subtitle and "★ Top 3 toàn cấp: …" in row 3.
 - `export-report.ts`: `exportRankingSheet(...)`, `exportGvcnReport(...)`, `exportStudentList(...)` small helpers; `buildHtmlSnapshot(ds, period, today): string` (FR-SNP-001, self-contained, no session data).
 
 ## 6. UI / Design system
@@ -265,8 +274,8 @@ ClassPicker, ErrorPicker (grouped by Mảng, shows "2 điểm/HS"), StudentPicke
 |---|---|---|
 | `/` | Tổng quan (SCR-02): 6 KPIs w/ delta vs previous period (Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ, Điểm thưởng, Độ tin cậy dữ liệu – labels/tooltips from `KPI_TERMS`), weekly trend, theo nhóm lỗi, điểm trừ cộng dồn, cảnh báo sớm, Top 5 vấn đề, Top 5 lớp cần ưu tiên (drill → /lop), Top HS vi phạm (drill → history), thống kê khối, phân bổ theo mảng, heatmap lớp×tuần, RAG summary, 5S widget, tái phạm | Viewer+ |
 | `/toan-truong` | Toàn trường: compare the 3 levels side by side (KPIs, trends, ranking leaders, alerts) | users with >1 level |
-| `/xep-hang` | Xếp hạng (SCR-03), `?view=` bang / bien-dong / bao-phu: per-grade ranking tables (rank, lớp, GVCN, điểm nền, thưởng, trừ, thi đua, Top 90%, RAG, xu hướng), highlight filtered class, expand row → breakdown; export; Biến động xếp hạng (bump chart per grade); Bao phủ kiểm tra | Viewer+ |
-| `/lop` | Khối & lớp (SCR-04): class picker, class KPIs, rank in grade, score trend, điểm trừ cộng dồn vs trung bình khối, timeline by day (date → lỗi → điểm → HS → chi tiết), top issues of class | Viewer+ (GVCN own class detail) |
+| `/xep-hang` | Xếp hạng (SCR-03), `?view=` bang / bien-dong / bao-phu: per-grade ranking tables – THPT: one "Toàn cấp" table with a Lượt vi phạm column and its Top 3 – (rank, lớp, GVCN, điểm nền, thưởng, trừ, thi đua, Top 90%, RAG, xu hướng), highlight filtered class, expand row → breakdown; export; Biến động xếp hạng (bump chart per ranking group); Bao phủ kiểm tra | Viewer+ |
+| `/lop` | Khối & lớp (SCR-04): class picker, class KPIs, rank in grade (THPT: in the level), score trend, điểm trừ cộng dồn vs trung bình khối, timeline by day (date → lỗi → điểm → HS → chi tiết), top issues of class | Viewer+ (GVCN own class detail) |
 | `/bao-gvcn` | Báo GVCN (SCR-05): pick class (GVCN: own), KPIs, detail table (Ngày, Đối tượng = HS names or "Tập thể lớp", Lỗi, Điểm, Chi tiết, Trạng thái, Phản hồi GVCN, Khắc phục), search, copy text (Zalo-friendly), print/PDF, GVCN feedback + biện pháp khắc phục | Viewer+ |
 | `/hoc-sinh` | Học sinh (SCR-06): students with incidents (Mã, Họ tên, Lớp, Số lượt, Điểm, loại lỗi + số lần, cảnh báo), search, filters, drill → history sheet | Viewer+ |
 | `/nhap-lieu` | Nhập liệu (SCR-07): mobile-first form; live points preview; possible-duplicate warning; "Lưu" and "Lưu & nhập tiếp"; recent entries list (edit own ≤24h); tab Đợt kiểm tra `?tab=kiem-tra` | Editor+ (`incident.create` or `inspection.manage`) |

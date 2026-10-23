@@ -6,7 +6,7 @@ import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { classStats, computeKpis, studentStats, topIssues } from "@/lib/engine/analytics";
 import { filterIncidents } from "@/lib/engine/filters";
 import { periodLabel, type PeriodOption } from "@/lib/engine/period";
-import { buildRanking } from "@/lib/engine/ranking";
+import { buildRanking, rankingRuleOf } from "@/lib/engine/ranking";
 import { LEVELS, SCHOOL_NAME } from "@/lib/constants";
 import type { HtmlSnapshotInput } from "@/lib/excel/html-snapshot";
 import type { RankingExportRow, StudentExportRow } from "@/lib/excel/report-columns";
@@ -20,7 +20,10 @@ export function snapshotFileName(levelId: LevelId, today: string): string {
   return `NSHM_NenNep_${levelId}_BanChup_${today}.html`;
 }
 
-/** "Xếp hạng" sheet rows: every grade of the engine ranking (RAG kept as status → rendered as label text + colour). */
+/**
+ * "Xếp hạng" sheet rows: every ranking table of the engine (per khối, or the single level-wide table of THPT – rows keep
+ * the class's own grade), RAG kept as status → rendered as label text + colour, lượt vi phạm for the THPT tie-break.
+ */
 export function rankingExportRows(ds: LevelDataset, period: Period, today: string): RankingExportRow[] {
   return buildRanking(ds, period, today).grades.flatMap((g) =>
     g.rows.map((r) => {
@@ -34,6 +37,7 @@ export function rankingExportRows(ds: LevelDataset, period: Period, today: strin
         rank: r.rank,
         inTop90: r.inTop90,
         rag: r.rag,
+        violationTurns: r.violationTurns,
       };
       if (r.homeroomTeacher) row.homeroomTeacher = r.homeroomTeacher;
       return row;
@@ -54,7 +58,10 @@ export function studentExportRows(ds: LevelDataset, period: Period, today: strin
   }));
 }
 
-/** Input of buildHtmlSnapshot: formatted KPIs, ranking per grade, top issues and top classes of the period. */
+/**
+ * Input of buildHtmlSnapshot: formatted KPIs, the ranking tables (per khối, or one "Toàn cấp" table for THPT – grade
+ * LEVEL_RANKING_GROUP), top issues and top classes of the period.
+ */
 export function snapshotInput(ds: LevelDataset, period: Period, today: string, generatedAt: string): HtmlSnapshotInput {
   const k = computeKpis(ds, { period });
   const activeClasses = ds.classes.filter((c) => c.active).length;
@@ -65,6 +72,7 @@ export function snapshotInput(ds: LevelDataset, period: Period, today: string, g
     periodLabel: periodLabel(period, ds.config.semesters),
     generatedAt,
     topRatio: ds.config.top90Ratio,
+    rankingLayout: rankingRuleOf(ds.levelId),
     kpis: [
       { label: "Sự việc", value: fmtNumber(k.incidents) },
       { label: "Học sinh liên quan", value: fmtNumber(k.relatedStudents) },
@@ -83,6 +91,7 @@ export function snapshotInput(ds: LevelDataset, period: Period, today: string, g
         reward: r.rewardPoints,
         inTop90: r.inTop90,
         rag: r.rag,
+        violationTurns: r.violationTurns,
       })),
     })),
     topIssues: topIssues(filterIncidents(ds, { period }), 10).map((t) => ({ issue: `${t.errorCode} · ${t.issue}`, incidents: t.incidents, points: t.points })),

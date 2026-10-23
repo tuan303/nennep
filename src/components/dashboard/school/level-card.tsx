@@ -4,8 +4,8 @@ import { Badge, Card, ErrorState, RagBadge, Skeleton, cn } from "@/components/ui
 import { fmtNumber, fmtPercent, fmtPoints } from "@/lib/client/format";
 import { KPI_TERMS, LEVELS } from "@/lib/constants";
 import type { LevelId } from "@/lib/types";
-import type { LevelSummary } from "../lib/school-model";
-import { LEVEL_COLOR } from "../lib/school-model";
+import type { LevelLeaders, LevelSummary } from "../lib/school-model";
+import { LEVEL_COLOR, leadersText } from "../lib/school-model";
 import { MiniStat, RagStrip } from "../shared/parts";
 
 export interface LevelCardProps {
@@ -14,7 +14,10 @@ export interface LevelCardProps {
   onOpen: (levelId: LevelId) => void;
 }
 
-/** One level of the school: KPIs (normalised), RAG distribution, best class and the class needing attention. Click → that level's Tổng quan. */
+/**
+ * One level of the school: KPIs (normalised), RAG distribution, best class (THPT: its "Top 3 toàn cấp") and the class
+ * needing attention. Click → that level's Tổng quan.
+ */
 export function LevelCard({ summary: s, minConfidence, onOpen }: LevelCardProps) {
   const lowConfidence = s.kpis.confidence < minConfidence;
   return (
@@ -77,17 +80,21 @@ export function LevelCard({ summary: s, minConfidence, onOpen }: LevelCardProps)
       </span>
 
       <span className="mt-auto grid gap-2 border-t border-border pt-3 text-[13px]">
-        <span className="flex items-center gap-2">
-          <Crown aria-hidden className="size-4 shrink-0 text-star-600" />
-          <span className="text-slate-500">Dẫn đầu:</span>
-          {s.best ? (
-            <span className="num min-w-0 truncate font-semibold text-brand-900">
-              {s.best.classCode} · {fmtNumber(s.best.score)} điểm
-            </span>
-          ) : (
-            <span className="text-slate-500">–</span>
-          )}
-        </span>
+        {s.leaders ? (
+          <LeadersLine leaders={s.leaders} />
+        ) : (
+          <span className="flex items-center gap-2">
+            <Crown aria-hidden className="size-4 shrink-0 text-star-600" />
+            <span className="text-slate-500">Dẫn đầu:</span>
+            {s.best ? (
+              <span className="num min-w-0 truncate font-semibold text-brand-900">
+                {s.best.classCode} · {fmtNumber(s.best.score)} điểm
+              </span>
+            ) : (
+              <span className="text-slate-500">–</span>
+            )}
+          </span>
+        )}
         <span className="flex items-center gap-2">
           <Target aria-hidden className="size-4 shrink-0 text-bad" />
           <span className="text-slate-500">Cần chú ý:</span>
@@ -102,6 +109,28 @@ export function LevelCard({ summary: s, minConfidence, onOpen }: LevelCardProps)
         </span>
       </span>
     </button>
+  );
+}
+
+/** "Top 3 toàn cấp: Đồng hạng 1: 10A1, 11A1 · Hạng 3: 12A1" (level ranked as a whole); score & lượt vi phạm in the tooltip. */
+function LeadersLine({ leaders }: { leaders: LevelLeaders }) {
+  const detail = leaders.rows
+    .map((r) => `${r.classCode}: hạng ${fmtNumber(r.rank)}, ${fmtNumber(r.score)} điểm, ${fmtNumber(r.violationTurns)} ${KPI_TERMS.violationTurns.label.toLowerCase()}`)
+    .join("\n");
+  return (
+    <span className="flex items-start gap-2">
+      <Crown aria-hidden className="mt-0.5 size-4 shrink-0 text-star-600" />
+      <span className="shrink-0 text-slate-500">{leaders.label}:</span>
+      {leaders.rows.length ? (
+        <span className="num line-clamp-2 min-w-0 font-semibold text-brand-900" title={detail}>
+          {leadersText(leaders.rows)}
+        </span>
+      ) : leaders.allTied ? (
+        <span className="text-slate-600">tất cả {fmtNumber(leaders.classCount)} lớp đồng hạng 1</span>
+      ) : (
+        <span className="text-slate-500">–</span>
+      )}
+    </span>
   );
 }
 

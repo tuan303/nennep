@@ -15,7 +15,7 @@ import { ClassOverview } from "../class-overview";
 import { ClassStudents } from "../class-students";
 import { ClassTimeline } from "../class-timeline";
 import { ClassTopIssues } from "../class-top-issues";
-import { classSize } from "../lib/class-view";
+import { classSize, rankRuleHint, rankScopeText } from "../lib/class-view";
 
 // vitest's esbuild compiles TSX with the classic runtime (tsconfig keeps `jsx: preserve` for Next): expose React globally.
 (globalThis as { React?: typeof React }).React = React;
@@ -48,6 +48,7 @@ describe("class-detail components (SSR smoke)", () => {
         row,
         previousRank: 2,
         previousNoun: "tháng trước",
+        rankScope: "trong khối 6",
         size: classSize(ds, cls, true),
         period: OCTOBER,
         config: ds.config,
@@ -59,6 +60,7 @@ describe("class-detail components (SSR smoke)", () => {
     expect(html).toContain("Phó CN");
     expect(html).toContain("tel:0912345678");
     expect(html).toContain(`/${row!.gradeClassCount}`);
+    expect(html).toContain("Hạng trong khối 6");
     expect(html).toContain("Tháng trước: hạng 2");
     expect(html).toContain("Lớp chủ nhiệm");
   });
@@ -180,5 +182,69 @@ describe("class-detail components (SSR smoke)", () => {
     expect(overview).toContain("Khối 7");
     expect(overview).toContain("Lớp của tôi");
     expect(overview).not.toContain("7A04"); // inactive class is not ranked
+    expect(overview).toContain("5 lớp · sắp xếp theo hạng thi đua</");
+    expect(overview).not.toContain("lượt vi phạm</span>");
+  });
+
+  it("THPT: one level-wide ranking (rank n/N toàn cấp, lượt vi phạm on the tiles, khối filter keeps level ranks)", () => {
+    const ds: LevelDataset = { ...makeFixtureDataset(), levelId: "THPT" };
+    const ranking = buildRanking(ds, OCTOBER, FIXTURE_TODAY, { grade: 6 });
+    const row = findRankingRow(ranking, "6A03")!;
+    expect(row.gradeClassCount).toBe(8); // 6A01–6A05 + 7A01–7A03 (7A04 inactive)
+
+    const cls = ds.classes.find((c) => c.code === "6A03")!;
+    const header = renderToStaticMarkup(
+      createElement(ClassHeaderCard, {
+        cls,
+        row,
+        previousNoun: "",
+        rankScope: rankScopeText(ds.levelId, cls.grade),
+        rankHint: rankRuleHint(ds.levelId),
+        size: classSize(ds, cls, true),
+        period: OCTOBER,
+        config: ds.config,
+        hidden: false,
+        own: false,
+      }),
+    );
+    expect(header).toContain("Hạng toàn cấp");
+    expect(header).not.toContain("Hạng trong khối");
+    expect(header).toContain("/8</span>");
+    expect(header).toContain("ít lượt vi phạm hơn xếp trên");
+
+    const kpis = renderToStaticMarkup(
+      createElement(ClassKpis, {
+        current: computeKpis(ds, { period: OCTOBER, classCode: "6A03" }),
+        previousNoun: "",
+        row,
+        rankScope: "toàn cấp",
+        trend: [],
+        scores: [],
+        config: ds.config,
+        hidden: false,
+      }),
+    );
+    expect(kpis).toContain(`Hạng ${row.rank}/8 toàn cấp`);
+
+    const overview = renderToStaticMarkup(
+      createElement(ClassOverview, { ds, period: OCTOBER, today: FIXTURE_TODAY, ownCodes: new Set<string>(), onPick: noop }),
+    );
+    // Section headings (the cumulative-penalty card above keeps its per-khối series – not a ranking).
+    const headings = [...overview.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1]);
+    expect(headings).toContain("Toàn cấp");
+    expect(headings).not.toContain("Khối 6");
+    expect(overview).not.toContain("Khối 0");
+    expect(overview).toContain("8 lớp · sắp xếp theo hạng thi đua toàn cấp</");
+    expect(overview).toContain("lượt vi phạm</span>");
+    expect(overview).toContain("hạng " + row.rank + "/8 toàn cấp");
+
+    const grade7 = renderToStaticMarkup(
+      createElement(ClassOverview, { ds, period: OCTOBER, grade: 7, today: FIXTURE_TODAY, ownCodes: new Set<string>(), onPick: noop }),
+    );
+    expect([...grade7.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1])).toContain("Khối 7");
+    expect(grade7).toContain("3 lớp · sắp xếp theo hạng thi đua toàn cấp (8 lớp)");
+    expect(grade7).not.toContain("6A03");
+    const r7 = findRankingRow(ranking, "7A02")!;
+    expect(grade7).toContain(`Lớp 7A02, hạng ${r7.rank}/8 toàn cấp`);
   });
 });

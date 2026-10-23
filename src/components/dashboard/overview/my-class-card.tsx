@@ -2,9 +2,14 @@
 import { ArrowUpRight, Star } from "lucide-react";
 import { RagBadge, StarPoint, Top90Badge, cn } from "@/components/ui";
 import { fmtNumber, fmtPoints } from "@/lib/client/format";
-import type { RankingRow } from "@/lib/types";
+import { KPI_TERMS } from "@/lib/constants";
+import { rankingRuleOf } from "@/lib/engine/ranking";
+import type { LevelId, RankingRow } from "@/lib/types";
+import { rankText } from "../lib/overview-model";
 
 export interface MyClassCardProps {
+  /** Level of the rows: rank wording ("khối 6" / "toàn cấp") and the lượt vi phạm tie-break column (THPT). */
+  levelId: LevelId;
   rows: RankingRow[];
   periodText: string;
   /** config.top90Ratio of the level (Top badge label). */
@@ -13,9 +18,13 @@ export interface MyClassCardProps {
   className?: string;
 }
 
-/** GVCN only: own class(es) with rank, RAG and points for the selected period (navy brand band). */
-export function MyClassCard({ rows, periodText, topRatio, onOpenClass, className }: MyClassCardProps) {
+/**
+ * GVCN only: own class(es) with rank, RAG and points for the selected period (navy brand band). A level ranked with the
+ * lượt vi phạm tie-break (THPT) also shows that number, which decides between equal scores.
+ */
+export function MyClassCard({ levelId, rows, periodText, topRatio, onOpenClass, className }: MyClassCardProps) {
   if (rows.length === 0) return null;
+  const showTurns = rankingRuleOf(levelId).tieBreak === "violationTurns";
   return (
     <section
       aria-label="Lớp của tôi"
@@ -34,7 +43,7 @@ export function MyClassCard({ rows, periodText, topRatio, onOpenClass, className
               <button
                 type="button"
                 onClick={() => onOpenClass(r.classCode)}
-                aria-label={`Xem chi tiết lớp ${r.classCode}: hạng ${r.rank}/${r.gradeClassCount} khối ${r.grade}, điểm thi đua ${r.score}`}
+                aria-label={`Xem chi tiết lớp ${r.classCode}: ${rankText(r, levelId).toLocaleLowerCase("vi")}, điểm thi đua ${r.score}${showTurns ? `, ${r.violationTurns} lượt vi phạm` : ""}`}
                 className="group flex w-full flex-col gap-3 rounded-xl bg-white/[0.07] p-3.5 text-left ring-1 ring-inset ring-white/15 transition-colors hover:bg-white/[0.12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-star-400 sm:flex-row sm:items-center"
               >
                 <span className="flex items-center gap-3">
@@ -42,19 +51,18 @@ export function MyClassCard({ rows, periodText, topRatio, onOpenClass, className
                     {r.classCode}
                   </span>
                   <span className="flex flex-col">
-                    <span className="num text-sm font-semibold">
-                      Hạng {fmtNumber(r.rank)}/{fmtNumber(r.gradeClassCount)} khối {r.grade}
-                    </span>
+                    <span className="num text-sm font-semibold">{rankText(r, levelId)}</span>
                     <span className="mt-1 flex flex-wrap gap-1.5">
                       <RagBadge rag={r.rag} compact size="sm" />
                       <Top90Badge inTop90={r.inTop90} ratio={topRatio} size="sm" />
                     </span>
                   </span>
                 </span>
-                <span className="num grid flex-1 grid-cols-3 gap-2 sm:ml-auto sm:max-w-sm">
+                <span className={cn("num grid flex-1 gap-2 sm:ml-auto", showTurns ? "grid-cols-4 sm:max-w-md" : "grid-cols-3 sm:max-w-sm")}>
                   <Metric label="Thi đua" value={fmtNumber(r.score)} strong />
                   <Metric label="Điểm trừ" value={fmtPoints(-r.penaltyPoints)} />
                   <Metric label="Điểm thưởng" value={fmtPoints(r.rewardPoints)} />
+                  {showTurns ? <Metric label={KPI_TERMS.violationTurns.label} value={fmtNumber(r.violationTurns)} /> : null}
                 </span>
                 <ArrowUpRight aria-hidden className="hidden size-5 shrink-0 text-white/70 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 sm:block" />
               </button>

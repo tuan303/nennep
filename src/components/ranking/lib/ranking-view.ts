@@ -2,8 +2,56 @@
  * Pure view-model helpers of the "Xếp hạng" screen. Every business number (score, rank, Top 90%, RAG, confidence)
  * comes from the engine; this file only groups, counts and formats engine output for display.
  */
-import { countedRewards, filterIncidents, filterRewards, mondayOf, round2, topIssues, weeksInPeriod, type IssueStat } from "@/lib/engine";
+import {
+  LEVEL_RANKING_GROUP,
+  countedRewards,
+  filterIncidents,
+  filterRewards,
+  mondayOf,
+  round2,
+  topIssues,
+  namedTop,
+  weeksInPeriod,
+  type IssueStat,
+  type RankingRule,
+} from "@/lib/engine";
 import type { GradeRanking, Incident, LevelDataset, Period, PeriodMode, RagStatus, RankingRow, Reward, SchoolWeek } from "@/lib/types";
+
+/** In-page anchor of a ranking table / movement card: "khoi-6", or "toan-cap" for a level-wide ranking (THPT). */
+export function rankingGroupAnchor(group: number): string {
+  return group === LEVEL_RANKING_GROUP ? "toan-cap" : `khoi-${group}`;
+}
+
+/** Who a class is ranked against, inside a sentence: "các lớp của khối" / "các lớp của cấp học" (RankingRule.scope). */
+export function rankingPopulationText(rule: Pick<RankingRule, "scope">): string {
+  return rule.scope === "level" ? "các lớp của cấp học" : "các lớp của khối";
+}
+
+/**
+ * Short note of a level with its own ranking rule (THPT), shown above the tables; undefined for the default rule
+ * (one table per khối, equal scores share a rank) so TH / THCS screens stay as they were.
+ */
+export function rankingRuleNote(rule: RankingRule, levelShort: string): string | undefined {
+  if (rule.scope === "grade" && rule.tieBreak === "none" && !rule.topCount) return undefined;
+  const parts = [
+    rule.scope === "level" ? `Cấp ${levelShort} xếp hạng chung tất cả các lớp, không chia theo khối.` : `Cấp ${levelShort} xếp hạng trong từng khối.`,
+  ];
+  if (rule.tieBreak === "violationTurns") {
+    parts.push("Bằng điểm: lớp có ít lượt vi phạm hơn xếp trên; bằng cả điểm và lượt vi phạm (ví dụ các lớp không bị trừ lỗi nào) thì đồng hạng.");
+  }
+  if (rule.topCount) {
+    parts.push(`Báo cáo nêu ${rule.topCount} lớp dẫn đầu${rule.scope === "level" ? " toàn cấp" : ""} (gồm cả các lớp đồng hạng ở vị trí cuối).`);
+  }
+  return parts.join(" ");
+}
+
+/**
+ * Classes named by the reports (RankingRule.topCount – THPT: first 3, every class tied at the cut included), by the
+ * shared engine rule (namedTop): [] without a counted week, or when the tie covers the whole table (`allTied`).
+ */
+export function rankingLeaders(rows: readonly RankingRow[], rule: Pick<RankingRule, "topCount">): RankingRow[] {
+  return namedTop(rows, rule.topCount).rows;
+}
 
 export interface GradeSummary {
   grade: number;
@@ -122,7 +170,10 @@ export function previousPeriodNoun(mode: PeriodMode): string {
   return { week: "tuần trước", month: "tháng trước", semester: "học kỳ trước", all: "" }[mode];
 }
 
-/** File name of the ranking export, e.g. "NSHM_Xep-hang_THCS_Khoi-6_Thang 10-2026.xlsx" (no path separators). */
+/**
+ * File name of the ranking export, e.g. "NSHM_Xep-hang_THCS_Khoi-6_Thang 10-2026.xlsx" (no path separators).
+ * `grade` only for a grade-filtered export of a per-khối ranking (a level-wide ranking is always exported whole).
+ */
 export function rankingFileName(levelShort: string, periodText: string, grade?: number): string {
   const safePeriod = periodText
     .replace(/[\\/:*?"<>|]+/g, "-")

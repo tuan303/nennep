@@ -20,7 +20,7 @@ import {
   type DataTableColumn,
 } from "@/components/ui";
 import { Sparkline } from "@/components/charts";
-import { RANKING, WEEKS, type DemoRankingRow } from "./demo-data";
+import { LEVEL_RANKING, RANKING, WEEKS, type DemoRankingRow } from "./demo-data";
 
 const HIGHLIGHT = "6A03";
 
@@ -88,6 +88,15 @@ const COLUMNS: DataTableColumn<DemoRankingRow>[] = [
   },
 ];
 
+/** THPT (one table for the level): Lượt VP after Thi đua explains the order of equal scores. */
+const LEVEL_COLUMNS: DataTableColumn<DemoRankingRow>[] = COLUMNS.flatMap((c) =>
+  c.key === "score"
+    ? [c, { key: "turns", header: "Lượt VP", align: "right" as const, sortValue: (r: DemoRankingRow) => r.turns ?? 0, cell: (r: DemoRankingRow) => formatNumberVN(r.turns ?? 0) }]
+    : [c],
+);
+
+const LEVEL_TAB = "thpt";
+
 function MobileRow({ r }: { r: DemoRankingRow }) {
   return (
     <div className="flex items-center gap-3">
@@ -113,15 +122,19 @@ function MobileRow({ r }: { r: DemoRankingRow }) {
   );
 }
 
-/** Ranking table per grade with RAG/Top 90 badges, highlight row, sorting, mobile cards and "Xem thêm". */
+/**
+ * Ranking table per grade with RAG/Top 90 badges, highlight row, sorting, mobile cards and "Xem thêm" – plus the THPT
+ * variant: one "Toàn cấp" table with a Lượt VP column (equal scores → fewer lượt vi phạm first).
+ */
 export function SectionRanking() {
   const [grade, setGrade] = useState("6");
+  const tableSize = grade === LEVEL_TAB ? LEVEL_RANKING.length : RANKING[Number(grade)].length;
   return (
     <Section
       id="xep-hang"
       icon={Trophy}
       title="Xếp hạng thi đua"
-      description="Điểm thi đua = điểm nền + thưởng − trừ. Top 90% theo từng khối; bộ lọc lớp chỉ làm nổi bật, không đổi thứ hạng."
+      description="Điểm thi đua = điểm nền + thưởng − trừ. Top 90% theo từng khối (THPT: một bảng toàn cấp, bằng điểm thì lớp ít lượt vi phạm hơn xếp trên); bộ lọc lớp chỉ làm nổi bật, không đổi thứ hạng."
       actions={
         <Button variant="secondary" size="sm" icon={Printer} onClick={() => toast("Đang chuẩn bị bản in")}>
           In bảng
@@ -138,9 +151,12 @@ export function SectionRanking() {
                   Khối {g}
                 </TabsTrigger>
               ))}
+              <TabsTrigger value={LEVEL_TAB} count={LEVEL_RANKING.length}>
+                Toàn cấp (THPT)
+              </TabsTrigger>
             </TabsList>
             <p className="flex items-center gap-1.5 text-[13px] text-slate-500">
-              <Medal aria-hidden className="size-4 text-star-600" />9 tuần tính điểm · ngưỡng Top 90%: hạng {Math.ceil(0.9 * RANKING[Number(grade)].length)}
+              <Medal aria-hidden className="size-4 text-star-600" />9 tuần tính điểm · ngưỡng Top 90%: hạng {Math.ceil(0.9 * tableSize)}
             </p>
           </div>
           {[6, 7, 8, 9].map((g) => (
@@ -159,6 +175,19 @@ export function SectionRanking() {
               />
             </TabsContent>
           ))}
+          <TabsContent value={LEVEL_TAB}>
+            <DataTable
+              caption="Bảng xếp hạng thi đua toàn cấp THPT"
+              columns={LEVEL_COLUMNS}
+              rows={LEVEL_RANKING}
+              rowKey={(r) => r.classCode}
+              initialSort={{ key: "rank", dir: "asc" }}
+              onRowClick={(r) => toast(`Mở chi tiết lớp ${r.classCode}`)}
+              rowLabel={(r) => `Xem chi tiết lớp ${r.classCode}, hạng ${r.rank} toàn cấp`}
+              mobileCard={(r) => <MobileRow r={r} />}
+              pageSize={8}
+            />
+          </TabsContent>
         </Tabs>
       </Card>
     </Section>

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { asIsoDate, asMonth, asNumber, asText, cellScalar, serialToIso } from "../cells";
-import { catalogChoiceText, top90Label, topGroupLabel } from "../format";
+import { catalogChoiceText, leadingClassesNote, rankingRuleNote, top90Label, topGroupLabel } from "../format";
 import { levelFromFileName, levelFromGrades, levelFromTitle } from "../level-detect";
 import { headerKey } from "../normalize";
 import { buildCatalogIndex, extractErrorCode, resolveErrorCode } from "../parse-incidents";
 import { splitStudentChoice } from "../parse-links";
 import { parseUnit } from "../parse-reference";
 import { makeClassResolver } from "../roster-rows";
-import { rankingColumns, RANKING_COLUMNS } from "../report-columns";
+import { rankingColumns, RANKING_COLUMNS, sortRanking } from "../report-columns";
 import { matchColumns } from "../sheet-reader";
 
 describe("cell values", () => {
@@ -136,5 +136,46 @@ describe("UX-3: Top group label follows config.top90Ratio", () => {
     const top = rankingColumns(0.8).find((c) => c.header.startsWith("Top"));
     expect(top?.header).toBe("Top 80%");
     expect(RANKING_COLUMNS.some((c) => c.header === "Top 90%")).toBe(true);
+  });
+});
+
+describe("ranking layout: per khối or – THPT – the whole level", () => {
+  const THPT = { scope: "level", tieBreak: "violationTurns", topCount: 3 } as const;
+  const rows = [
+    { grade: 11, classCode: "11A2", rank: 3 },
+    { grade: 10, classCode: "10A1", rank: 1 },
+    { grade: 12, classCode: "12A1", rank: 1 },
+    { grade: 10, classCode: "10A2", rank: 4 },
+    { grade: 11, classCode: "11A1", rank: 5 },
+  ];
+
+  it("explains the rule of the table", () => {
+    expect(rankingRuleNote(undefined)).toBe("Xếp hạng trong từng khối; Top 90% tính theo số lớp của khối.");
+    expect(rankingRuleNote({ scope: "grade", tieBreak: "none" }, 0.8)).toBe("Xếp hạng trong từng khối; Top 80% tính theo số lớp của khối.");
+    expect(rankingRuleNote(THPT)).toBe(
+      "Xếp hạng chung toàn cấp (không chia khối); bằng điểm thì lớp ít lượt vi phạm hơn xếp trên, bằng cả điểm và lượt vi phạm thì đồng hạng; Top 90% tính theo số lớp toàn cấp.",
+    );
+  });
+
+  it("names the top classes with every class tied at the cut", () => {
+    expect(leadingClassesNote(rows, THPT)).toBe("Top 3 toàn cấp: 10A1 (hạng 1), 12A1 (hạng 1), 11A2 (hạng 3).");
+    const tiedAtCut = rows.map((r) => (r.classCode === "10A2" ? { ...r, rank: 3 } : r));
+    expect(leadingClassesNote(tiedAtCut, THPT)).toBe("Top 3 toàn cấp: 10A1 (hạng 1), 12A1 (hạng 1), 10A2 (hạng 3), 11A2 (hạng 3).");
+    // A small table covered by the Top 3 is still listed; every class sharing one rank is said so (engine namedTop).
+    expect(leadingClassesNote(rows.slice(0, 3), THPT)).toBe("Top 3 toàn cấp: 10A1 (hạng 1), 12A1 (hạng 1), 11A2 (hạng 3).");
+    expect(leadingClassesNote(rows.map((r) => ({ ...r, rank: 1 })), THPT)).toBe(`Top 3 toàn cấp: tất cả ${rows.length} lớp đồng hạng 1.`);
+    expect(leadingClassesNote(rows, { scope: "grade", tieBreak: "none" })).toBeUndefined();
+    expect(leadingClassesNote([], THPT)).toBeUndefined();
+  });
+
+  it("sorts by khối then rank, or by rank across khối", () => {
+    expect(sortRanking(rows).map((r) => r.classCode)).toEqual(["10A1", "10A2", "11A2", "11A1", "12A1"]);
+    expect(sortRanking(rows, THPT).map((r) => r.classCode)).toEqual(["10A1", "12A1", "11A2", "10A2", "11A1"]);
+  });
+
+  it("adds the Lượt vi phạm column only with the violationTurns tie-break", () => {
+    expect(rankingColumns(0.9).some((c) => c.header === "Lượt vi phạm")).toBe(false);
+    const headers = rankingColumns(0.9, THPT).map((c) => c.header);
+    expect(headers.slice(6, 9)).toEqual(["Điểm thi đua", "Lượt vi phạm", "Hạng"]);
   });
 });

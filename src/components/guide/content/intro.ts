@@ -4,7 +4,7 @@
  */
 import type { GuideContent } from "../types";
 
-export const UPDATED = "22/10/2026";
+export const UPDATED = "23/10/2026";
 
 export const INTRO =
   "Phần mềm **Nền nếp** giúp Trường Ngôi Sao Hoàng Mai ghi nhận, chấm điểm và đánh giá nền nếp học sinh ở cả ba cấp Tiểu học, THCS và THPT. Cán bộ nền nếp ghi sự việc ngay trên điện thoại, điểm trừ và xếp hạng thi đua được tính tự động, GVCN nhận báo cáo và phản hồi cho lớp mình, Ban Giám hiệu theo dõi tình hình qua các chỉ số, cảnh báo và báo cáo định kỳ. Hãy bắt đầu với lộ trình dành cho vai trò của thầy/cô bên dưới, rồi tra cứu từng màn hình khi cần.";
@@ -46,7 +46,7 @@ export const QUICK_STARTS: GuideContent["quickStarts"] = [
     steps: [
       "[Tổng quan](/) – 6 chỉ số chính so với kỳ trước, **Nhận định nhanh**, **Cảnh báo sớm** và **Top 5 lớp cần ưu tiên**.",
       "[Toàn trường](/toan-truong) – so sánh Tiểu học, THCS, THPT trên cùng một trang (với tài khoản xem nhiều cấp).",
-      "[Xếp hạng](/xep-hang) – bảng thi đua theo khối với Top 90% và mức cảnh báo; xem thêm [[Biến động xếp hạng]] và [[Bao phủ kiểm tra]].",
+      "[Xếp hạng](/xep-hang) – bảng thi đua theo khối (THPT: một bảng toàn cấp, nêu Top 3) với Top 90% và mức cảnh báo; xem thêm [[Biến động xếp hạng]] và [[Bao phủ kiểm tra]].",
       "[Báo cáo tuần/tháng](/bao-cao) – chọn người nhận **Ban Giám hiệu**, xem trước rồi [[In / Lưu PDF]].",
       "[Hành động](/hanh-dong) – đọc [[Bản tóm tắt quyết định]], tab [[Cảnh báo sớm]] và theo dõi hạn xử lý ở [[Quá hạn & leo thang]].",
     ],

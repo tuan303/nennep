@@ -60,6 +60,8 @@ export interface DemoRankingRow {
   ragReason: string;
   trend: number[];
   incidents: number;
+  /** Lượt vi phạm – tie-break of the level-wide (THPT) demo. */
+  turns?: number;
 }
 
 function ragOf(avg: number): { rag: RagStatus; reason: string } {
@@ -175,3 +177,50 @@ export const STUDENTS: DemoStudent[] = Array.from({ length: 32 }, (_, i) => ({
   classCode: "6A03",
   dob: `2014-${String((i % 12) + 1).padStart(2, "0")}-${String(((i * 5) % 27) + 1).padStart(2, "0")}`,
 }));
+
+/**
+ * THPT demo: ONE table for the whole level (21 classes, not per khối). Equal scores → fewer lượt vi phạm ranks higher;
+ * equal score and lượt (the two clean classes) → same rank. Built last so the PRNG sequence of the data above is unchanged.
+ */
+function buildLevelRanking(): DemoRankingRow[] {
+  const counted = WEEKS.length;
+  const base = 100 * counted;
+  const rows = [10, 11, 12].flatMap((grade) =>
+    Array.from({ length: 7 }, (_, i): DemoRankingRow => {
+      const n = (grade - 10) * 7 + i;
+      const clean = n === 3 || n === 10;
+      const twin = n === 6 || n === 15; // same score, different lượt vi phạm
+      const penalty = clean ? 0 : twin ? 36 : int(6, 40) * 2;
+      const reward = clean || twin ? 0 : int(0, 2) * 5;
+      const turns = clean ? 0 : n === 6 ? 9 : n === 15 ? 14 : Math.max(1, Math.round(penalty / 2.5));
+      const trend = WEEKS.map(() => Math.max(40, 100 + Math.round((reward - penalty) / counted) + (clean ? 0 : int(-4, 4))));
+      const { rag, reason } = ragOf(penalty / counted);
+      return {
+        classCode: `${grade}A${i + 1}`,
+        grade,
+        teacher: TEACHERS[(i + grade) % TEACHERS.length],
+        base,
+        reward,
+        penalty,
+        score: base + reward - penalty,
+        rank: 0,
+        inTop90: false,
+        rag,
+        ragReason: reason,
+        trend,
+        incidents: Math.round(turns * 0.8),
+        turns,
+      };
+    }),
+  );
+  const sorted = [...rows].sort((a, b) => b.score - a.score || (a.turns ?? 0) - (b.turns ?? 0));
+  const cutoff = Math.ceil(0.9 * rows.length);
+  sorted.forEach((r, i) => {
+    const prev = sorted[i - 1];
+    r.rank = prev && prev.score === r.score && prev.turns === r.turns ? prev.rank : i + 1;
+    r.inTop90 = r.rank <= cutoff;
+  });
+  return sorted;
+}
+
+export const LEVEL_RANKING: DemoRankingRow[] = buildLevelRanking();

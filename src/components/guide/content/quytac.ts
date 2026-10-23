@@ -51,7 +51,8 @@ const thiDua: GuideSection = {
   icon: "Trophy",
   group: "quytac",
   roles: "all",
-  summary: "Điểm thi đua = Điểm nền + Điểm thưởng được tính − Điểm trừ; xếp hạng trong khối kiểu 1-2-2-4 và nhóm Top 90%.",
+  summary:
+    "Điểm thi đua = Điểm nền + Điểm thưởng được tính − Điểm trừ; Tiểu học, THCS xếp hạng trong từng khối kiểu 1-2-2-4; THPT xếp hạng chung toàn cấp, bằng điểm thì lớp ít lượt vi phạm hơn xếp trên; nhóm Top 90%.",
   blocks: [
     {
       kind: "p",
@@ -68,7 +69,7 @@ const thiDua: GuideSection = {
     },
     {
       kind: "p",
-      text: "**Xếp hạng** tính riêng trong từng khối, trên tất cả lớp đang hoạt động của khối, điểm cao xếp trên. Các lớp bằng điểm thì **đồng hạng** và hạng kế tiếp bỏ qua tương ứng (kiểu 1-2-2-4).",
+      text: "**Tiểu học và THCS – xếp hạng trong từng khối**: tính riêng mỗi khối, trên tất cả lớp đang hoạt động của khối, điểm cao xếp trên. Các lớp bằng điểm thì **đồng hạng** và hạng kế tiếp bỏ qua tương ứng (kiểu 1-2-2-4).",
     },
     {
       kind: "table",
@@ -82,13 +83,36 @@ const thiDua: GuideSection = {
       ],
     },
     {
+      kind: "list",
+      title: "THPT – xếp hạng chung toàn cấp (quy định của nhà trường)",
+      items: [
+        "Tất cả lớp đang hoạt động của cấp THPT (khối 10, 11, 12) xếp chung **một bảng toàn cấp**, không chia theo khối; điểm cao xếp trên.",
+        "**Bằng điểm**: lớp có **ít lượt vi phạm hơn** xếp trên (cách đếm lượt: xem [Sự việc, lượt vi phạm và số học sinh](#quy-tac-so-lieu)).",
+        "**Bằng cả điểm và lượt vi phạm** thì **đồng hạng**, hạng kế tiếp bỏ qua tương ứng – ví dụ các lớp giữ nguyên điểm nền, không bị trừ lỗi nào cùng hạng 1.",
+        "Trang Xếp hạng, báo cáo và file Excel nêu **Top 3 toàn cấp**: 3 lớp xếp đầu, gồm cả các lớp đồng hạng ở vị trí thứ 3.",
+      ],
+    },
+    {
+      kind: "table",
+      caption:
+        "Ví dụ xếp hạng toàn cấp THPT trong một tuần (dữ liệu minh họa): 10A1 và 11A2 không bị trừ lỗi nào nên đồng hạng 1; 10A2 và 11A1 cùng 96 điểm, 10A2 ít lượt vi phạm hơn nên xếp trên.",
+      head: ["Lớp", "Điểm thi đua", "Lượt vi phạm", "Hạng toàn cấp"],
+      rows: [
+        ["10A1", "100", "0", "1"],
+        ["11A2", "100", "0", "1"],
+        ["12A1", "98", "1", "3"],
+        ["10A2", "96", "1", "4"],
+        ["11A1", "96", "2", "5"],
+      ],
+    },
+    {
       kind: "p",
-      text: "**Top 90%**: ngưỡng = làm tròn lên 90% × số lớp của khối (tỷ lệ do Quản trị cấu hình). Lớp có hạng ≤ ngưỡng **Thuộc Top 90%**, còn lại **Ngoài Top 90%**; các lớp đồng hạng tại ngưỡng đều thuộc Top. Ví dụ khối có 12 lớp: 90% × 12 = 10,8 → làm tròn lên 11, nên lớp hạng 1 đến 11 thuộc Top 90%.",
+      text: "**Top 90%**: ngưỡng = làm tròn lên 90% × số lớp của khối – với THPT là số lớp **toàn cấp** (tỷ lệ do Quản trị cấu hình). Lớp có hạng ≤ ngưỡng **Thuộc Top 90%**, còn lại **Ngoài Top 90%**; các lớp đồng hạng tại ngưỡng đều thuộc Top. Ví dụ khối có 12 lớp: 90% × 12 = 10,8 → làm tròn lên 11, nên lớp hạng 1 đến 11 thuộc Top 90%.",
     },
     { kind: "demo", demo: "top90", caption: "Nhãn Thuộc Top / Ngoài Top trên bảng xếp hạng." },
     {
       kind: "tip",
-      text: "Dải giải thích đầu trang [Xếp hạng](/xep-hang) luôn ghi số tuần tính điểm, điểm nền của kỳ, công thức và ngưỡng Top đang áp dụng cho cấp học.",
+      text: "Dải giải thích đầu trang [Xếp hạng](/xep-hang) luôn ghi số tuần tính điểm, điểm nền của kỳ, công thức, cách xếp hạng (trong khối hoặc toàn cấp) và ngưỡng Top đang áp dụng cho cấp học.",
     },
   ],
 };

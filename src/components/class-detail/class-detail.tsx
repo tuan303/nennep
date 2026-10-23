@@ -27,7 +27,7 @@ import { ClassKpis } from "./class-kpis";
 import { ClassStudents } from "./class-students";
 import { ClassTimeline } from "./class-timeline";
 import { ClassTopIssues } from "./class-top-issues";
-import { classScope, classSize, filterTimelineDays, issueFilterText, scoreChartData } from "./lib/class-view";
+import { classScope, classSize, filterTimelineDays, issueFilterText, rankRuleHint, rankScopeText, scoreChartData } from "./lib/class-view";
 
 export interface ClassDetailProps {
   ds: LevelDataset;
@@ -55,7 +55,8 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
   const prev = useMemo(() => previousPeriod(period, ds.weeks, ds.config.semesters), [period, ds.weeks, ds.config.semesters]);
   const previousNoun = prev ? previousPeriodNoun(period.mode) : "";
 
-  // Standing in the grade (BR-RANK-06: population = all active classes of the grade; every error counts).
+  // Standing in the class's ranking table (BR-RANK-06: population = all active classes of the grade – of the whole level
+  // for THPT, RankingRule; every error counts). `grade` only trims the per-khối tables; it is ignored level-wide.
   const row = useMemo(
     () => findRankingRow(buildRanking(ds, period, today, { grade: cls.grade, highlightClass: code }), code),
     [ds, period, today, cls.grade, code],
@@ -79,6 +80,9 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
   const students = useMemo(() => (hidden ? [] : studentStats(ds, scope, today)), [ds, scope, today, hidden]);
   const size = useMemo(() => classSize(ds, cls, canSee), [ds, cls, canSee]);
 
+  const rankScope = rankScopeText(ds.levelId, cls.grade);
+  const rankHint = rankRuleHint(ds.levelId);
+
   const [overlay, setOverlay] = useState<Overlay>(null);
   const periodText = periodLabel(period, ds.config.semesters);
   const studentName = studentId ? ds.students.find((s) => s.id === studentId)?.name : undefined;
@@ -92,6 +96,8 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
         row={row}
         previousRank={previousRank}
         previousNoun={previousNoun}
+        rankScope={rankScope}
+        rankHint={rankHint}
         size={size}
         period={period}
         config={ds.config}
@@ -114,6 +120,8 @@ export function ClassDetail({ ds, cls, filters, today }: ClassDetailProps) {
         previous={kpis.previous}
         previousNoun={previousNoun}
         row={row}
+        rankScope={rankScope}
+        rankHint={rankHint}
         trend={trend}
         scores={chart.score}
         config={ds.config}

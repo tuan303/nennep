@@ -112,7 +112,7 @@ export function ConfigTab({ ds }: { ds: LevelDataset }) {
         <GeneralCard {...props} className="xl:col-span-5" />
         <SemestersCard {...props} className="xl:col-span-7" />
         <RagCard {...props} className="md:col-span-2 xl:col-span-12" />
-        <RankingRulesCard {...props} classes={ds.classes} className="xl:col-span-4" />
+        <RankingRulesCard {...props} classes={ds.classes} levelId={ds.levelId} className="xl:col-span-4" />
         <StudentAlertCard {...props} className="xl:col-span-4" />
         <SlaCard {...props} className="md:col-span-2 xl:col-span-4" />
       </div>

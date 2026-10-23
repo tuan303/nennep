@@ -2,9 +2,10 @@
 import { useMemo } from "react";
 import { FilterX, Layers, Star } from "lucide-react";
 import { Button, Card, ProgressBar } from "@/components/ui";
-import { gradeStats, type GradeStat } from "@/lib/engine";
+import { gradeStats, LEVEL_RANKING_GROUP, rankingRuleOf, type GradeStat } from "@/lib/engine";
 import { fmtNumber, fmtPoints, fmtTopLabel } from "@/lib/client/format";
 import type { GlobalFilters, LevelDataset } from "@/lib/types";
+import { rankingGroupText } from "../lib/overview-model";
 import { share } from "../lib/view-helpers";
 import { RowButton } from "../shared/parts";
 
@@ -23,10 +24,14 @@ function rowLabel(g: GradeStat, active: boolean, topLabel: string): string {
   );
 }
 
-/** "Theo khối": per-grade statistics (engine gradeStats) as a compact list that never scrolls sideways; click → grade filter. */
+/**
+ * "Theo khối": per-grade statistics (engine gradeStats) as a compact list that never scrolls sideways; click → grade filter.
+ * The Top 90% of a level ranked as a whole (THPT) is computed over the level: labelled "Top 90% toàn cấp".
+ */
 export function GradeCard({ ds, filters, today, onPickGrade, className }: GradeCardProps) {
   const grades = useMemo(() => gradeStats(ds, filters, today), [ds, filters, today]);
-  const topLabel = fmtTopLabel(ds.config.top90Ratio);
+  const top = fmtTopLabel(ds.config.top90Ratio);
+  const topLabel = rankingRuleOf(ds.levelId).scope === "level" ? `${top} ${rankingGroupText(ds.levelId, LEVEL_RANKING_GROUP)}` : top;
   const maxPenalty = Math.max(0, ...grades.map((g) => g.penaltyPoints));
 
   return (
@@ -82,7 +87,7 @@ export function GradeCard({ ds, filters, today, onPickGrade, className }: GradeC
                   <span className="grid grid-cols-2 items-center gap-3">
                     <ProgressBar value={share(g.penaltyPoints, maxPenalty)} tone="bad" size="sm" ariaLabel={`Điểm trừ khối ${g.grade}`} />
                     <span className="flex items-center gap-2">
-                      <ProgressBar value={share(g.top90Count, g.classCount)} tone="star" size="sm" ariaLabel={`${topLabel} khối ${g.grade}`} className="flex-1" />
+                      <ProgressBar value={share(g.top90Count, g.classCount)} tone="star" size="sm" ariaLabel={`Số lớp khối ${g.grade} thuộc ${topLabel}`} className="flex-1" />
                       <span className="num inline-flex shrink-0 items-center gap-1 text-xs text-slate-600">
                         <Star aria-hidden className="size-3 fill-star-500 text-star-600" />
                         {fmtNumber(g.top90Count)}/{fmtNumber(g.classCount)}

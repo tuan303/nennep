@@ -3,13 +3,17 @@ import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import { RagBadge, Top90Badge, cn } from "@/components/ui";
 import { fmtNumber } from "@/lib/client/format";
+import { rankingGroupLabel } from "@/lib/engine";
 import type { RankingRow } from "@/lib/types";
 import { RankDelta, RankMedal } from "./rank-medal";
 import { HighlightChip, PenaltyText, RewardText, Top90Divider, scoreTone } from "./ranking-parts";
 
 export interface RankingCardsProps {
+  /** Ranking group: the khối, or LEVEL_RANKING_GROUP for a level-wide list. */
   grade: number;
   rows: RankingRow[];
+  /** Show lượt vi phạm (the level breaks score ties with it – THPT). */
+  showTurns?: boolean;
   dividerIndex: number;
   deltas?: ReadonlyMap<string, number>;
   previousNoun: string;
@@ -19,10 +23,10 @@ export interface RankingCardsProps {
   highlightRef?: (el: HTMLElement | null) => void;
 }
 
-/** Phone layout of a grade ranking: one tappable card per class (opens the breakdown sheet). */
-export function RankingCards({ grade, rows, dividerIndex, deltas, previousNoun, ratio, onOpen, highlightRef }: RankingCardsProps) {
+/** Phone layout of a ranking table: one tappable card per class (opens the breakdown sheet). */
+export function RankingCards({ grade, rows, showTurns, dividerIndex, deltas, previousNoun, ratio, onOpen, highlightRef }: RankingCardsProps) {
   return (
-    <ul role="list" aria-label={`Bảng xếp hạng khối ${grade}`} className="divide-y divide-border">
+    <ul role="list" aria-label={`Bảng xếp hạng ${rankingGroupLabel(grade).toLowerCase()}`} className="divide-y divide-border">
       {rows.map((r, idx) => (
         <Fragment key={r.classCode}>
           {idx === dividerIndex ? <Top90Divider as="li" cutoff={r.top90Cutoff} ratio={ratio} /> : null}
@@ -30,7 +34,9 @@ export function RankingCards({ grade, rows, dividerIndex, deltas, previousNoun, 
             <button
               type="button"
               onClick={() => onOpen(r)}
-              aria-label={`Lớp ${r.classCode}, hạng ${r.rank}, ${fmtNumber(r.score)} điểm thi đua. Xem phân tích`}
+              aria-label={`Lớp ${r.classCode}, hạng ${r.rank}, ${fmtNumber(r.score)} điểm thi đua${
+                showTurns ? `, ${fmtNumber(r.violationTurns)} lượt vi phạm` : ""
+              }. Xem phân tích`}
               aria-current={r.highlighted ? "true" : undefined}
               className={cn(
                 "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-brand-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
@@ -61,6 +67,7 @@ export function RankingCards({ grade, rows, dividerIndex, deltas, previousNoun, 
                   </span>
                   <PenaltyText value={r.penaltyPoints} />
                 </span>
+                {showTurns ? <span className="text-2xs text-slate-500">{fmtNumber(r.violationTurns)} lượt vi phạm</span> : null}
               </span>
               <ChevronRight aria-hidden className="size-4 shrink-0 text-slate-300" strokeWidth={2.25} />
             </button>

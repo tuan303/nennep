@@ -7,6 +7,7 @@ import { LEVELS } from "../constants";
 import type { LevelDataset, Period, Priority } from "../types";
 import { changePct, changeText, collectBriefContext, listText, num, q, type BriefContext } from "./brief-context";
 import { buildEvidence, buildFindings, buildImpact, topIssueShare } from "./brief-findings";
+import { LEVEL_RANKING_GROUP, namedTop, rankingRuleOf } from "./ranking";
 import { formatPercentVN } from "./text";
 
 export interface DecisionBrief {
@@ -132,6 +133,16 @@ function schoolRecommendations(ctx: BriefContext): Recommendation[] {
     const text = parts.join(" và ");
     out.push(rec(ctx, text.charAt(0).toUpperCase() + text.slice(1), c.confidence < config.rag.minConfidence ? "High" : "Low", OWNER_DISCIPLINE));
   }
+  // A level ranked as a whole (THPT): praise its named top (Top 3, ties at the cut included) when its data is reliable.
+  const rule = rankingRuleOf(ctx.ds.levelId);
+  const levelTable = rule.scope === "level" ? ctx.grades.find((g) => g.grade === LEVEL_RANKING_GROUP) : undefined;
+  if (levelTable && rule.topCount) {
+    const top = namedTop(levelTable.rows, rule.topCount).rows.filter((r) => r.confidence >= config.rag.minConfidence);
+    if (top.length) {
+      out.push(rec(ctx, `Biểu dương Top ${rule.topCount} toàn cấp: ${top.map((r) => r.classCode).join(", ")} trong buổi chào cờ`, "Low", OWNER_BGH));
+    }
+    return out;
+  }
   // Praise a grade leader only when it is unique, the grade has competition (≥ 2 classes) and its data is reliable.
   const leaders = ctx.grades
     .filter((g) => g.rows.length >= 2)
@@ -139,7 +150,12 @@ function schoolRecommendations(ctx: BriefContext): Recommendation[] {
     .filter((g) => g.firsts.length === 1 && g.firsts[0].confidence >= config.rag.minConfidence);
   if (leaders.length) {
     out.push(
-      rec(ctx, `Biểu dương các lớp dẫn đầu: ${leaders.map((g) => `${g.firsts[0].classCode} (khối ${g.grade})`).join(", ")} trong buổi chào cờ`, "Low", OWNER_BGH),
+      rec(
+        ctx,
+        `Biểu dương các lớp dẫn đầu: ${leaders.map((g) => `${g.firsts[0].classCode} (khối ${g.grade})`).join(", ")} trong buổi chào cờ`,
+        "Low",
+        OWNER_BGH,
+      ),
     );
   }
   return out;

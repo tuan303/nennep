@@ -1,8 +1,20 @@
 /**
- * Column sets for the "Xếp hạng" and "BC Học sinh" sheets (used by exportLevelWorkbook and the report exports).
+ * Column sets for the "Xếp hạng" and "BC Học sinh" sheets (used by exportLevelWorkbook and the report exports) and the
+ * shared "Xếp hạng" sheet writer – one table per khối, or one table for the whole level (THPT, RankingLayout).
  */
-import { isRagStatus, RAG_SHORT, ragLabel, studentAlertLabel, top90Label, topGroupLabel } from "./format";
-import { solidFill, XL_COLORS, type CellLook, type TableColumn } from "./sheet-writer";
+import type { Workbook, Worksheet } from "exceljs";
+import {
+  isRagStatus,
+  leadingClassesNote,
+  RAG_SHORT,
+  ragLabel,
+  rankingRuleNote,
+  studentAlertLabel,
+  top90Label,
+  topGroupLabel,
+  type RankingLayout,
+} from "./format";
+import { addTableSheet, solidFill, XL_COLORS, type CellLook, type TableColumn } from "./sheet-writer";
 
 /** One class of the ranking (engine RankingRow is structurally compatible). */
 export interface RankingExportRow {
@@ -16,6 +28,8 @@ export interface RankingExportRow {
   rank: number;
   inTop90: boolean;
   rag: string; // RagStatus ("GREEN"…) or any display text
+  /** Lượt vi phạm – a column when the level breaks score ties by it (THPT). */
+  violationTurns?: number;
 }
 
 /** One student of the student report (built from engine StudentStat by the caller). */
@@ -40,8 +54,13 @@ function ragCellText(rag: string): string {
   return isRagStatus(rag) ? `${RAG_SHORT[rag].icon} ${ragLabel(rag)}` : rag;
 }
 
-/** Ranking columns; the Top column follows config.top90Ratio (`ratio`, default 0.9). */
-export function rankingColumns(ratio?: number): ReadonlyArray<TableColumn<RankingExportRow>> {
+/**
+ * Ranking columns; the Top column follows config.top90Ratio (`ratio`, default 0.9). With the "violationTurns" tie-break
+ * (THPT) a "Lượt vi phạm" column sits before Hạng so equal scores are explained; "Khối" stays the class's own grade.
+ */
+export function rankingColumns(ratio?: number, layout?: RankingLayout): ReadonlyArray<TableColumn<RankingExportRow>> {
+  const turns: TableColumn<RankingExportRow>[] =
+    layout?.tieBreak === "violationTurns" ? [{ header: "Lượt vi phạm", width: 12, kind: "integer", value: (r) => r.violationTurns }] : [];
   return [
   { header: "Khối", width: 8, kind: "center", value: (r) => r.grade },
   { header: "Lớp", width: 10, kind: "center", value: (r) => r.classCode, look: () => ({ font: { bold: true } }) },
@@ -50,6 +69,7 @@ export function rankingColumns(ratio?: number): ReadonlyArray<TableColumn<Rankin
   { header: "Điểm thưởng", width: 12, kind: "number", value: (r) => r.rewardPoints },
   { header: "Điểm trừ", width: 11, kind: "number", value: (r) => r.penaltyPoints },
   { header: "Điểm thi đua", width: 13, kind: "number", value: (r) => r.score, look: () => ({ font: { bold: true } }) },
+  ...turns,
   { header: "Hạng", width: 8, kind: "center", value: (r) => r.rank },
   {
     header: topGroupLabel(ratio),
@@ -80,7 +100,44 @@ export const STUDENT_REPORT_COLUMNS: ReadonlyArray<TableColumn<StudentExportRow>
   },
 ];
 
-/** Sort ranking rows by grade, rank, class code. */
-export function sortRanking<T extends Pick<RankingExportRow, "grade" | "rank" | "classCode">>(rows: readonly T[]): T[] {
-  return [...rows].sort((a, b) => a.grade - b.grade || a.rank - b.rank || a.classCode.localeCompare(b.classCode, "vi"));
+/** Sort ranking rows by grade, rank, class code – or, for a level-wide ranking (THPT), by rank then class code. */
+export function sortRanking<T extends Pick<RankingExportRow, "grade" | "rank" | "classCode">>(rows: readonly T[], layout?: RankingLayout): T[] {
+  const level = layout?.scope === "level";
+  return [...rows].sort((a, b) => (level ? 0 : a.grade - b.grade) || a.rank - b.rank || a.classCode.localeCompare(b.classCode, "vi"));
+}
+
+export interface RankingSheetOptions {
+  title: string;
+  /** Row 2 text; the ranking rule note is appended. */
+  subtitle: string;
+  rows: readonly RankingExportRow[];
+  /** config.top90Ratio of the level (default 0.9). */
+  ratio?: number;
+  /** Ranking rule of the level (engine rankingRuleOf); default one table per khối, no tie-break. */
+  layout?: RankingLayout;
+}
+
+/**
+ * The "Xếp hạng" sheet: rows sorted per layout, rule note in the subtitle and – when the level names its leading
+ * classes (THPT: top 3, ties included) – "Top 3 toàn cấp: …" in row 3.
+ */
+export function addRankingSheet(wb: Workbook, opts: RankingSheetOptions): Worksheet {
+  const columns = rankingColumns(opts.ratio, opts.layout);
+  const ws = addTableSheet(wb, {
+    name: "Xếp hạng",
+    title: opts.title,
+    subtitle: `${opts.subtitle} · ${rankingRuleNote(opts.layout, opts.ratio)}`,
+    columns,
+    items: sortRanking(opts.rows, opts.layout),
+    freezeColumns: 2,
+    tabColor: XL_COLORS.gold,
+  });
+  const leaders = leadingClassesNote(opts.rows, opts.layout);
+  if (leaders) {
+    const cell = ws.getCell(3, 1);
+    cell.value = `★ ${leaders}`;
+    cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: XL_COLORS.navy } };
+    if (columns.length > 1) ws.mergeCells(3, 1, 3, columns.length);
+  }
+  return ws;
 }

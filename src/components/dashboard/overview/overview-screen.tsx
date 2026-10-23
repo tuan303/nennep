@@ -72,7 +72,7 @@ export function OverviewScreen({ ds }: { ds: LevelDataset }) {
 
       {!ds.config.rag.approved ? <RagApprovalNotice canManage={can("settings.manage")} /> : null}
 
-      <MyClassCard rows={mine} periodText={periodLabel(filters.period, ds.config.semesters)} topRatio={ds.config.top90Ratio} onOpenClass={openClass} />
+      <MyClassCard levelId={ds.levelId} rows={mine} periodText={periodLabel(filters.period, ds.config.semesters)} topRatio={ds.config.top90Ratio} onOpenClass={openClass} />
 
       <KpiRow views={data.kpis} onOpen={kpiDrill} />
 

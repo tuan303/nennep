@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
-import type { IssueStat, TrendPoint } from "@/lib/engine";
-import type { LevelDataset, RankingRow } from "@/lib/types";
+import { TODAY, makeClass, makeDataset, makeIncident, makeReward } from "@/lib/engine/__tests__/builders";
+import { rankingRuleOf, type IssueStat, type TrendPoint } from "@/lib/engine";
+import type { LevelDataset, RankingRow, StudentRef } from "@/lib/types";
 import {
   attentionClass,
   bestClass,
+  leadersText,
   levelIssues,
   levelPeriod,
   levelStudentCount,
@@ -86,7 +88,7 @@ describe("best / attention class", () => {
     top90Cutoff: 3,
     inTop90: true,
     incidentCount: 1,
-    relatedStudentCount: 1,
+    relatedStudentCount: 1, violationTurns: 0,
     avgWeeklyPenalty: avg,
     confidence: 1,
     rag,
@@ -99,6 +101,61 @@ describe("best / attention class", () => {
     expect(attentionClass([row("6A01", 90, 10, "YELLOW"), row("6A02", 70, 30, "RED")])?.classCode).toBe("6A02");
     expect(attentionClass([row("6A01", 100, 0, "GREEN")])).toBeUndefined();
     expect(bestClass([])).toBeUndefined();
+  });
+
+  it("THPT: equal scores → fewer lượt vi phạm first; TH/THCS keep fewer penalty points", () => {
+    const fewTurns = { ...row("12A1", 96, 6, "GREEN"), violationTurns: 1 };
+    const fewPoints = { ...row("10A2", 96, 4, "GREEN"), violationTurns: 2 };
+    expect(bestClass([fewPoints, fewTurns], rankingRuleOf("THPT"))?.classCode).toBe("12A1");
+    expect(bestClass([fewPoints, fewTurns], rankingRuleOf("THCS"))?.classCode).toBe("10A2");
+    expect(bestClass([fewPoints, fewTurns])?.classCode).toBe("10A2");
+  });
+
+  it("leadersText groups the classes sharing a rank (đồng hạng)", () => {
+    const ranked = (classCode: string, rank: number) => ({ ...row(classCode, 100, 0, "GREEN"), rank });
+    expect(leadersText([ranked("10A1", 1), ranked("11A1", 1), ranked("12A1", 3)])).toBe("Đồng hạng 1: 10A1, 11A1 · Hạng 3: 12A1");
+    expect(leadersText([ranked("10A1", 1), ranked("10A2", 2), ranked("12A1", 3)])).toBe("Hạng 1: 10A1 · Hạng 2: 10A2 · Hạng 3: 12A1");
+    const clean = ["10A1", "10A2", "10A3", "11A1", "11A2", "12A1", "12A2", "12A3"].map((c) => ranked(c, 1));
+    expect(leadersText(clean)).toBe("Đồng hạng 1: 10A1, 10A2, 10A3, 11A1, 11A2, 12A1 và 2 lớp khác");
+    expect(leadersText([])).toBe("");
+  });
+});
+
+describe("THPT: Top 3 toàn cấp", () => {
+  const stu = (n: number): StudentRef[] => Array.from({ length: n }, (_, i) => ({ id: `S${i}`, name: `HS ${i}`, classCode: "x" }));
+  /** Week of 19/10: 10A1, 11A1 = 100 (clean) · 12A1 = 100 (+2 −2, 1 lượt) · 12A2 = 96 (1 lượt) · 10A2 = 96 (2 lượt). */
+  const thpt = (): LevelDataset =>
+    makeDataset({
+      levelId: "THPT",
+      classes: [makeClass("10A1", 10), makeClass("10A2", 10), makeClass("11A1", 11), makeClass("12A1", 12), makeClass("12A2", 12)],
+      incidents: [
+        makeIncident({ date: "2026-10-20", classCode: "12A1", grade: 12, penalty: 2, students: stu(1) }),
+        makeIncident({ date: "2026-10-20", classCode: "12A2", grade: 12, penalty: 4, points: 4, unit: "/lần" }),
+        makeIncident({ date: "2026-10-21", classCode: "10A2", grade: 10, penalty: 2, students: stu(2) }),
+      ],
+      rewards: [makeReward({ date: "2026-10-20", classCode: "12A1", grade: 12, points: 2, status: "Đã xác nhận" })],
+    });
+
+  it("names the first 3 classes of the level, ties included, and the leader by the level ranking", () => {
+    const s = levelSummary(thpt(), "week", TODAY);
+    expect(s.period).toEqual({ mode: "week", key: "2026-10-19" });
+    expect(s.leaders?.label).toBe("Top 3 toàn cấp");
+    expect(s.leaders?.rows.map((r) => [r.classCode, r.grade, r.score, r.violationTurns, r.rank])).toEqual([
+      ["10A1", 10, 100, 0, 1],
+      ["11A1", 11, 100, 0, 1],
+      ["12A1", 12, 100, 1, 3],
+    ]);
+    expect(leadersText(s.leaders?.rows ?? [])).toBe("Đồng hạng 1: 10A1, 11A1 · Hạng 3: 12A1");
+    expect(s.best?.classCode).toBe("10A1");
+  });
+
+  it("every clean class (100 điểm, 0 lượt) shares rank 1; levels ranked per khối have no named top", () => {
+    const clean = levelSummary({ ...thpt(), incidents: [], rewards: [] }, "week", TODAY);
+    // Shared rule (engine namedTop): every class tied → no list, "tất cả N lớp đồng hạng 1".
+    expect(clean.leaders).toMatchObject({ rows: [], allTied: true, classCount: 5 });
+    expect(levelSummary({ ...thpt(), classes: [] }, "week", TODAY).leaders).toEqual({ count: 3, label: "Top 3 toàn cấp", rows: [], allTied: false, classCount: 0 });
+    expect(levelSummary({ ...thpt(), levelId: "THCS" }, "week", TODAY).leaders).toBeUndefined();
+    expect(levelSummary(makeFixtureDataset(), "month", FIXTURE_TODAY).leaders).toBeUndefined();
   });
 });
 

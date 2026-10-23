@@ -14,9 +14,9 @@ export function reportTitle(classCode: string): string {
 
 /**
  * "Sự việc: 5 | Lượt vi phạm: 7 | Số HS vi phạm: 4 | Điểm trừ: 14 | Điểm thưởng: 5 | Điểm thi đua: 491 | Hạng khối 6: 3/5"
- * (labels from the shared KPI_TERMS vocabulary).
+ * (labels from the shared KPI_TERMS vocabulary); THPT ranks the whole level: "… | Hạng toàn cấp: 4/21".
  */
-export function kpiLine(report: Pick<GvcnReport, "kpis" | "ranking" | "topRatio">): string {
+export function kpiLine(report: Pick<GvcnReport, "kpis" | "ranking" | "rankLabel" | "topRatio">): string {
   const { kpis, ranking } = report;
   const parts = [
     `${KPI_TERMS.incidents.label}: ${fmtNumber(kpis.incidents)}`,
@@ -27,7 +27,7 @@ export function kpiLine(report: Pick<GvcnReport, "kpis" | "ranking" | "topRatio"
   ];
   if (ranking) {
     parts.push(`Điểm thi đua: ${fmtNumber(ranking.score)}`);
-    parts.push(`Hạng khối ${ranking.grade}: ${ranking.rank}/${ranking.gradeClassCount}${ranking.inTop90 ? ` (${fmtTopLabel(report.topRatio)})` : ""}`);
+    parts.push(`${report.rankLabel}: ${ranking.rank}/${ranking.gradeClassCount}${ranking.inTop90 ? ` (${fmtTopLabel(report.topRatio)})` : ""}`);
   }
   return parts.join(" | ");
 }

@@ -8,6 +8,7 @@ import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { RAG_LABELS } from "@/lib/constants";
 import {
   EARLY_WARNING_KIND_LABELS,
+  LEVEL_RANKING_GROUP,
   NO_GROUP_LABEL,
   SCORE_BAND_ORDER,
   scoreBandLabel,
@@ -76,6 +77,11 @@ const TD = "border-b border-border px-2 py-1.5 align-top text-[12.5px] text-slat
 /** "6A01, 6A02 (103)" – every leader shares the top score. */
 function leadersText(rows: readonly RankingRow[]): string {
   return rows.length ? `${rows.map((r) => r.classCode).join(", ")} (${fmtNumber(rows[0].score)})` : "–";
+}
+
+/** "10A1 (100), 11A1 (100), 12A1 (99)" – Top N of a level ranked as a whole (scores may differ). */
+function scoredText(rows: readonly RankingRow[]): string {
+  return rows.length ? rows.map((r) => `${r.classCode} (${fmtNumber(r.score)})`).join(", ") : "–";
 }
 
 /** Share of the base of the period: "93%" (2 decimals at most). */
@@ -192,16 +198,18 @@ function LevelBands({ grades }: { grades: ReportGradeRanking[] }) {
   );
 }
 
+/** One row per khối – or, for a level ranked as a whole (THPT), a single "Toàn cấp" row with its Top N. */
 function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topLabel: string }) {
+  const levelWide = grades.some((g) => g.grade === LEVEL_RANKING_GROUP);
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse">
         <thead>
           <tr>
-            <th className={cn(THN, "w-px")}>Khối</th>
+            <th className={cn(THN, "w-px")}>{levelWide ? "Phạm vi" : "Khối"}</th>
             <th className={cn(THN, "w-px text-right")}>Số lớp</th>
             <th className={cn(THN, "w-px text-right")}>Điểm TB</th>
-            <th className={THN}>Dẫn đầu</th>
+            <th className={THN}>{grades[0]?.leadersLabel ?? "Dẫn đầu"}</th>
             <th className={THN}>Ngoài {topLabel}</th>
             <th className={THN}>Mức Đỏ</th>
           </tr>
@@ -209,11 +217,15 @@ function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topL
         <tbody>
           {grades.map((g) => (
             <tr key={g.grade}>
-              <td className={cn(TDN, "text-center font-semibold")}>{g.grade}</td>
+              <td className={cn(TDN, "text-center font-semibold")}>{g.grade === LEVEL_RANKING_GROUP ? g.label : g.grade}</td>
               <td className={cn(TDN, "text-right")}>{fmtNumber(g.classCount)}</td>
               <td className={cn(TDN, "text-right")}>{fmtNumber(g.avgScore)}</td>
               <td className={TD}>
-                <ClassChips rows={g.leaders} tone="LEADER" withScore />
+                {g.leadersAllTied ? (
+                  <span className="whitespace-nowrap text-slate-600">Tất cả {fmtNumber(g.rankCount)} lớp đồng hạng 1</span>
+                ) : (
+                  <ClassChips rows={g.leaders} tone="LEADER" withScore />
+                )}
               </td>
               <td className={TD}>
                 <ClassChips rows={g.outside} tone="NEUTRAL" />
@@ -229,13 +241,19 @@ function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topL
   );
 }
 
+/**
+ * Classes of one ranking table. A level ranked as a whole (THPT): the rows of one khối keep their LEVEL rank (n/N), the
+ * caption says so, and "Lượt vi phạm" explains the tie-break of equal scores.
+ */
 function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: string }) {
   const bands = grade.bands;
+  const levelWide = grade.rule.scope === "level";
+  const turns = grade.rule.tieBreak === "violationTurns";
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse">
         <caption className="pb-1 text-left text-xs text-slate-500">
-          Khối {grade.grade}: {fmtNumber(grade.classCount)} lớp · điểm TB {fmtNumber(grade.avgScore)} ·{" "}
+          {grade.label}: {fmtNumber(grade.classCount)} lớp · điểm TB {fmtNumber(grade.avgScore)} ·{" "}
           {bands
             ? bands.groups
               ? SCORE_BAND_ORDER.map((b) =>
@@ -244,16 +262,19 @@ function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: 
                     : `${scoreBandLabel(b, bands.rule)}: ${fmtNumber(bands.groups![b].length)} lớp`,
                 ).join(" · ")
               : "chưa xếp nhóm (kỳ không có tuần tính thi đua)"
-            : `${topLabel}: hạng ≤ ${fmtNumber(grade.cutoff)}`}
+            : levelWide
+              ? `thứ hạng toàn cấp (n/${fmtNumber(grade.rankCount)}) · ${topLabel} toàn cấp: hạng ≤ ${fmtNumber(grade.cutoff)} · ${grade.leadersLabel} toàn cấp: ${grade.leadersAllTied ? `tất cả ${fmtNumber(grade.rankCount)} lớp đồng hạng 1` : scoredText(grade.leaders)}`
+              : `${topLabel}: hạng ≤ ${fmtNumber(grade.cutoff)}`}
         </caption>
         <thead>
           <tr>
-            <th className={cn(THN, "w-px text-right")}>Hạng</th>
+            <th className={cn(THN, "w-px text-right")}>{levelWide ? "Hạng toàn cấp" : "Hạng"}</th>
             <th className={cn(THN, "w-px")}>Lớp</th>
             <th className={THN}>GVCN</th>
             <th className={cn(THN, "w-px text-right")}>Thưởng</th>
             <th className={cn(THN, "w-px text-right")}>Trừ</th>
             <th className={cn(THN, "w-px text-right")}>Điểm thi đua</th>
+            {turns ? <th className={cn(THN, "w-px text-right")}>Lượt vi phạm</th> : null}
             {bands ? <th className={cn(THN, "w-px text-right")}>Tỉ lệ</th> : null}
             <th className={cn(THN, "w-px")}>{bands ? "Xếp nhóm" : topLabel}</th>
             <th className={cn(THN, "w-px")}>Mức cảnh báo</th>
@@ -262,12 +283,16 @@ function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: 
         <tbody>
           {grade.rows.map((r) => (
             <tr key={r.classCode}>
-              <td className={cn(TDN, "text-right font-semibold")}>{r.rank}</td>
+              <td className={cn(TDN, "text-right font-semibold")}>
+                {r.rank}
+                {levelWide ? <span className="font-normal text-slate-500">/{fmtNumber(grade.rankCount)}</span> : null}
+              </td>
               <td className={cn(TDN, "font-semibold")}>{r.classCode}</td>
               <td className={TD}>{r.homeroomTeacher || "–"}</td>
               <td className={cn(TDN, "text-right")}>{r.rewardPoints > 0 ? `+${fmtNumber(r.rewardPoints)}` : "0"}</td>
               <td className={cn(TDN, "text-right")}>{r.penaltyPoints > 0 ? `−${fmtNumber(r.penaltyPoints)}` : "0"}</td>
               <td className={cn(TDN, "text-right font-bold")}>{fmtNumber(r.score)}</td>
+              {turns ? <td className={cn(TDN, "text-right")}>{fmtNumber(r.violationTurns)}</td> : null}
               {bands ? <td className={cn(TDN, "text-right")}>{shareText(r)}</td> : null}
               <td className={cn(TD, "whitespace-nowrap")}>{bands ? <BandChip grade={grade} classCode={r.classCode} /> : r.inTop90 ? "Thuộc" : "Ngoài"}</td>
               <td className={cn(TD, "whitespace-nowrap")}>{RAG_LABELS[r.rag]}</td>
@@ -291,23 +316,38 @@ export function RankingBlock({ ranking, topRatio, previousNoun }: { ranking: Rep
   const s = ranking.standing;
   if (!s) return <Empty>Lớp không được xếp hạng (lớp ngừng hoạt động hoặc không thuộc cấp học).</Empty>;
   const leader = s.grade.rows[0];
+  const levelWide = s.grade.rule.scope === "level";
+  const scopeWord = levelWide ? "toàn cấp" : "khối";
+  const inLeaders = s.grade.leaders.some((r) => r.classCode === s.row.classCode);
   // Score bands: every class tied at the top leads; name them all, and only for a class that does not lead.
+  // Top N (THPT): name the Top 3 of the level, or say the class is one of them.
   const leaderLine = s.grade.bands
     ? s.row.rank !== 1 && s.grade.leaders.length
       ? `Dẫn đầu khối: ${leadersText(s.grade.leaders)}`
       : undefined
-    : leader && leader.classCode !== s.row.classCode
-      ? `Dẫn đầu khối: ${leader.classCode} (${fmtNumber(leader.score)})`
-      : undefined;
+    : s.grade.rule.topCount !== undefined
+      ? s.grade.leadersAllTied
+        ? `Tất cả lớp ${scopeWord} đồng hạng 1`
+        : inLeaders
+        ? `Thuộc ${s.grade.leadersLabel} ${scopeWord}`
+        : s.grade.leaders.length
+          ? `${s.grade.leadersLabel} ${scopeWord}: ${scoredText(s.grade.leaders)}`
+          : undefined
+      : leader && leader.classCode !== s.row.classCode
+        ? `Dẫn đầu khối: ${leader.classCode} (${fmtNumber(leader.score)})`
+        : undefined;
   return (
     <dl data-keep className="grid grid-cols-2 gap-2 text-[13px] sm:grid-cols-4 print:grid-cols-4">
-      <Fact label="Thứ hạng trong khối">
+      <Fact label={levelWide ? "Thứ hạng toàn cấp" : "Thứ hạng trong khối"}>
         {fmtNumber(s.row.rank)}/{fmtNumber(s.row.gradeClassCount)}
         {s.previousRank !== undefined && previousNoun ? <span className="block text-xs font-normal text-slate-500">{`${previousNoun}: ${s.previousRank}`}</span> : null}
       </Fact>
       <Fact label="Điểm thi đua">
         {fmtNumber(s.row.score)}
-        <span className="block text-xs font-normal text-slate-500">TB khối {fmtNumber(s.grade.avgScore)}</span>
+        <span className="block text-xs font-normal text-slate-500">
+          TB {scopeWord} {fmtNumber(s.grade.avgScore)}
+          {s.grade.rule.tieBreak === "violationTurns" ? ` · ${fmtNumber(s.row.violationTurns)} lượt vi phạm` : null}
+        </span>
       </Fact>
       {s.grade.bands ? (
         <Fact label="Xếp nhóm">

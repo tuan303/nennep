@@ -168,6 +168,17 @@ describe("guide content – structure", () => {
     }
   });
 
+  it("states the ranking rule of each level (THPT: whole level, fewer lượt vi phạm first, Top 3)", () => {
+    const thiDua = sections.find((s) => s.id === "quy-tac-thi-dua")!;
+    const text = [thiDua.summary, ...thiDua.blocks.flatMap(blockTexts)].join("\n");
+    expect(text).toContain("1-2-2-4");
+    expect(text).toContain("xếp hạng chung toàn cấp");
+    expect(text).toContain("ít lượt vi phạm hơn");
+    expect(text).toContain("đồng hạng");
+    expect(text).toContain("Top 3 toàn cấp");
+    expect(text).toContain("số lớp **toàn cấp**");
+  });
+
   it("points every FAQ entry to an existing section and keeps glossary terms unique", () => {
     for (const f of GUIDE.faq) {
       expect(f.q.trim(), f.q).not.toBe("");

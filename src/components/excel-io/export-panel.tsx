@@ -7,7 +7,7 @@ import { api, downloadBlob, errorMessage, MIME } from "@/lib/client/api";
 import { fmtNumber } from "@/lib/client/format";
 import { useToday } from "@/lib/client/hooks";
 import { LEVELS } from "@/lib/constants";
-import { defaultPeriod, periodLabel, periodOptions } from "@/lib/engine";
+import { defaultPeriod, periodLabel, periodOptions, rankingRuleOf } from "@/lib/engine";
 import { buildHtmlSnapshot } from "@/lib/excel/html-snapshot";
 import type { LevelDataset, Period, PeriodMode } from "@/lib/types";
 import { Notice } from "@/components/data-inspect/notice";
@@ -107,7 +107,8 @@ export function ExportPanel({ ds }: ExportPanelProps) {
       <Card title="Bản chụp HTML (offline)" subtitle={`Báo cáo một trang · ${label}`} icon={Globe}>
         <div className="flex flex-col gap-3">
           <p className="text-[13px] leading-relaxed text-slate-600">
-            Một file HTML tự chứa: chỉ số chính, xếp hạng theo khối, vấn đề và lớp nổi bật. Mở được trên mọi trình duyệt, không cần mạng, in ra khổ A4.
+            Một file HTML tự chứa: chỉ số chính, xếp hạng {rankingRuleOf(ds.levelId).scope === "level" ? "toàn cấp" : "theo khối"}, vấn đề và lớp nổi bật. Mở
+            được trên mọi trình duyệt, không cần mạng, in ra khổ A4.
           </p>
           <Notice tone="star">Chỉ để lưu trữ/chia sẻ, không phải nguồn dữ liệu – không dùng file này để nhập lại.</Notice>
           <Button variant="secondary" icon={Download} loading={busy === "html"} disabled={busy !== null} onClick={exportSnapshot} block>

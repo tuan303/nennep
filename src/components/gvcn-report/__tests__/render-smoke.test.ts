@@ -60,6 +60,17 @@ describe("Báo GVCN render", () => {
     expect(custom).not.toContain("đã được xác nhận");
   });
 
+  it("THPT: the rank KPI reads 'Hạng toàn cấp' over every class of the level", () => {
+    const thpt = { ...ds, levelId: "THPT" as const };
+    const r = buildGvcnReport(thpt, "6A03", WEEK, FIXTURE_TODAY);
+    expect(r.ranking?.gradeClassCount).toBe(8); // every active class of the level (7A04 inactive)
+    const html = renderToStaticMarkup(createElement(ReportKpis, { report: r, periodMode: "week" }));
+    expect(html).toContain("Hạng toàn cấp");
+    expect(html).not.toContain("Hạng khối");
+    expect(html).toContain(`${r.ranking?.rank}/8`);
+    expect(html).toContain("ít lượt vi phạm hơn xếp trên");
+  });
+
   it("renders the detail table with the collective subject and feedback", () => {
     const html = renderToStaticMarkup(
       createElement(IncidentTable, {

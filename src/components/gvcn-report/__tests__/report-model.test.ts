@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURE_STUDENT_IDS, FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
-import { computeKpis } from "@/lib/engine";
-import type { Incident, Period, UserProfile } from "@/lib/types";
+import { buildRanking, computeKpis, findRankingRow } from "@/lib/engine";
+import { TODAY, makeClass, makeDataset, makeIncident, makeReward } from "@/lib/engine/__tests__/builders";
+import type { Incident, LevelDataset, Period, StudentRef, UserProfile } from "@/lib/types";
 import { buildCopyText, gvcnExportFileName, incidentLine, kpiLine, periodSlug, reportTitle } from "../lib/copy-text";
 import {
   buildGvcnReport,
@@ -13,6 +14,7 @@ import {
   isRewardCounted,
   ownClassesOf,
   previousLabelShort,
+  reportRankLabel,
   resolveReportClass,
   shortWeekday,
   statusCounts,
@@ -69,6 +71,8 @@ describe("buildGvcnReport", () => {
 
   it("includes the class ranking row inside its grade", () => {
     expect(report.ranking).toMatchObject({ classCode: "6A03", grade: 6, gradeClassCount: 5 });
+    expect(report.rankLabel).toBe("Hạng khối 6");
+    expect(report.rankHint).toBe("Xếp hạng theo điểm thi đua trong các lớp cùng khối; bằng điểm thì đồng hạng.");
     expect(report.classInfo?.homeroomTeacher).toBe("Lê Văn Hùng");
     expect(report.activeStudents).toBe(8);
   });
@@ -93,7 +97,57 @@ describe("buildGvcnReport", () => {
   it("has no ranking row for an unknown class", () => {
     const r = buildGvcnReport(ds, "9Z99", WEEK, FIXTURE_TODAY);
     expect(r.ranking).toBeUndefined();
+    expect(r.rankLabel).toBe("Hạng khối");
     expect(r.incidents).toEqual([]);
+  });
+});
+
+/* ------------------------- THPT: one ranking for the level ------------------------ */
+
+const WEEK_19: Period = { mode: "week", key: "2026-10-19" };
+const stu = (n: number): StudentRef[] => Array.from({ length: n }, (_, i) => ({ id: `S${i}`, name: `HS ${i}`, classCode: "x" }));
+
+/** Week of 19/10: 10A1, 11A1 = 100 (clean) · 12A1 = 100 (+2 −2, 1 lượt) · 12A2 = 96 (1 lượt) · 10A2 = 96 (2 lượt). */
+function thpt(): LevelDataset {
+  return makeDataset({
+    levelId: "THPT",
+    classes: [makeClass("10A1", 10), makeClass("10A2", 10), makeClass("11A1", 11), makeClass("12A1", 12), makeClass("12A2", 12)],
+    incidents: [
+      makeIncident({ date: "2026-10-20", classCode: "12A1", grade: 12, penalty: 2, students: stu(1) }),
+      makeIncident({ date: "2026-10-20", classCode: "12A2", grade: 12, penalty: 4, points: 4, unit: "/lần" }),
+      makeIncident({ date: "2026-10-21", classCode: "10A2", grade: 10, penalty: 2, students: stu(2) }),
+    ],
+    rewards: [makeReward({ date: "2026-10-20", classCode: "12A1", grade: 12, points: 2, status: "Đã xác nhận" })],
+  });
+}
+
+describe("THPT class report (rank toàn cấp)", () => {
+  it("labels the rank by the level's ranking rule", () => {
+    expect(reportRankLabel("THCS", 6)).toBe("Hạng khối 6");
+    expect(reportRankLabel("TH")).toBe("Hạng khối");
+    expect(reportRankLabel("THPT", 10)).toBe("Hạng toàn cấp");
+  });
+
+  it("ranks the class among every class of the level, fewer lượt vi phạm first on equal scores", () => {
+    const ds = thpt();
+    const r12a2 = buildGvcnReport(ds, "12A2", WEEK_19, TODAY);
+    const r10a2 = buildGvcnReport(ds, "10A2", WEEK_19, TODAY);
+    expect(r12a2.ranking).toMatchObject({ classCode: "12A2", grade: 12, score: 96, violationTurns: 1, rank: 4, gradeClassCount: 5 });
+    expect(r10a2.ranking).toMatchObject({ classCode: "10A2", grade: 10, score: 96, violationTurns: 2, rank: 5, gradeClassCount: 5 });
+    expect(r12a2.ranking).toEqual(findRankingRow(buildRanking(ds, WEEK_19, TODAY, { highlightClass: "12A2" }), "12A2"));
+    expect(r12a2.rankLabel).toBe("Hạng toàn cấp");
+    expect(r12a2.rankHint).toContain("ít lượt vi phạm hơn xếp trên");
+    // Clean 100-point classes share the rank.
+    expect(buildGvcnReport(ds, "10A1", WEEK_19, TODAY).ranking?.rank).toBe(1);
+    expect(buildGvcnReport(ds, "11A1", WEEK_19, TODAY).ranking?.rank).toBe(1);
+  });
+
+  it("copies 'Hạng toàn cấp: n/N' (never the khối)", () => {
+    const report = buildGvcnReport(thpt(), "12A2", WEEK_19, TODAY);
+    const line = kpiLine(report);
+    expect(line).toContain("| Hạng toàn cấp: 4/5 (Top 90%)");
+    expect(line).not.toContain("Hạng khối");
+    expect(buildCopyText(report, "Tuần 19/10 – 25/10/2026", TODAY).split("\n")[1]).toBe(line);
   });
 });
 

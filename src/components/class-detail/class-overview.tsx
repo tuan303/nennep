@@ -1,13 +1,14 @@
 "use client";
 import { useMemo } from "react";
-import { ClipboardList, Layers, MousePointerClick, School } from "lucide-react";
+import { Activity, ClipboardList, Layers, MousePointerClick, School } from "lucide-react";
 import { Card, EmptyState, RagBadge, Section, cn } from "@/components/ui";
 import { RagLegend } from "@/components/app/widgets";
 import { fmtNumber } from "@/lib/client/format";
-import { buildRanking } from "@/lib/engine";
+import { buildRanking, rankingRuleOf } from "@/lib/engine";
 import type { GlobalFilters, LevelDataset, Period, RagStatus, RankingRow } from "@/lib/types";
 import { CumulativeCard } from "../dashboard/overview/cumulative-card";
 import { RankMedal } from "../ranking/rank-medal";
+import { overviewSections, rankScopeText } from "./lib/class-view";
 
 const RAG_ACCENT: Record<RagStatus, string> = {
   GREEN: "before:bg-ok",
@@ -28,12 +29,19 @@ export interface ClassOverviewProps {
   filters?: GlobalFilters;
 }
 
-/** No class selected: every class of the level as a tile, per grade, in ranking order (click → class detail). */
+/**
+ * No class selected: every class of the level as a tile, per ranking table (khối, or "Toàn cấp" for THPT), in ranking
+ * order (click → class detail).
+ */
 export function ClassOverview({ ds, period, grade, today, ownCodes, onPick, filters }: ClassOverviewProps) {
   const ranking = useMemo(() => buildRanking(ds, period, today, { grade }), [ds, period, today, grade]);
+  const sections = useMemo(() => overviewSections(ranking.grades, grade), [ranking, grade]);
   const scope = useMemo<GlobalFilters>(() => ({ ...(filters ?? {}), period, grade, classCode: undefined }), [filters, period, grade]);
+  // THPT: equal scores are ordered by lượt vi phạm → the tiles show it instead of the number of sự việc.
+  const turns = rankingRuleOf(ds.levelId).tieBreak === "violationTurns";
+  const rankScope = rankScopeText(ds.levelId);
 
-  if (ranking.grades.length === 0) {
+  if (sections.length === 0) {
     return (
       <Card padding="none">
         <EmptyState
@@ -57,12 +65,12 @@ export function ClassOverview({ ds, period, grade, today, ownCodes, onPick, filt
 
       <CumulativeCard ds={ds} filters={scope} today={today} defaultMode="grade" />
 
-      {ranking.grades.map((g) => (
-        <Section key={g.grade} icon={Layers} title={`Khối ${g.grade}`} description={`${fmtNumber(g.rows.length)} lớp · sắp xếp theo hạng thi đua`}>
+      {sections.map((g) => (
+        <Section key={g.key} icon={Layers} title={g.title} description={g.description}>
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {g.rows.map((r) => (
               <li key={r.classCode}>
-                <ClassTile row={r} own={ownCodes.has(r.classCode)} onPick={onPick} />
+                <ClassTile row={r} own={ownCodes.has(r.classCode)} turns={turns} rankScope={rankScope} onPick={onPick} />
               </li>
             ))}
           </ul>
@@ -72,12 +80,25 @@ export function ClassOverview({ ds, period, grade, today, ownCodes, onPick, filt
   );
 }
 
-function ClassTile({ row: r, own, onPick }: { row: RankingRow; own: boolean; onPick: (code: string) => void }) {
+interface ClassTileProps {
+  row: RankingRow;
+  own: boolean;
+  /** Show lượt vi phạm (tie-break of the level) instead of sự việc. */
+  turns: boolean;
+  /** "trong khối" | "toàn cấp". */
+  rankScope: string;
+  onPick: (code: string) => void;
+}
+
+function ClassTile({ row: r, own, turns, rankScope, onPick }: ClassTileProps) {
+  const label =
+    `Lớp ${r.classCode}, hạng ${r.rank}/${r.gradeClassCount} ${rankScope}, ${fmtNumber(r.score)} điểm thi đua, ` +
+    `${fmtNumber(r.incidentCount)} sự việc, ${fmtNumber(r.violationTurns)} lượt vi phạm`;
   return (
     <button
       type="button"
       onClick={() => onPick(r.classCode)}
-      aria-label={`Lớp ${r.classCode}, hạng ${r.rank}, ${fmtNumber(r.score)} điểm thi đua, ${fmtNumber(r.incidentCount)} sự việc`}
+      aria-label={label}
       className={cn(
         "card relative flex h-full w-full flex-col gap-2 overflow-hidden p-3.5 pt-4 text-left transition-[box-shadow,transform,border-color] duration-200 ease-soft",
         "before:absolute before:inset-x-0 before:top-0 before:h-1 before:content-['']",
@@ -100,10 +121,17 @@ function ClassTile({ row: r, own, onPick }: { row: RankingRow; own: boolean; onP
       </span>
       <span className="mt-auto flex flex-wrap items-center justify-between gap-1.5">
         <RagBadge rag={r.rag} compact size="sm" />
-        <span className="num inline-flex items-center gap-1 text-xs text-slate-500">
-          <ClipboardList aria-hidden className="size-3.5" />
-          {fmtNumber(r.incidentCount)} sự việc
-        </span>
+        {turns ? (
+          <span className="num inline-flex items-center gap-1 text-xs text-slate-500">
+            <Activity aria-hidden className="size-3.5" />
+            {fmtNumber(r.violationTurns)} lượt vi phạm
+          </span>
+        ) : (
+          <span className="num inline-flex items-center gap-1 text-xs text-slate-500">
+            <ClipboardList aria-hidden className="size-3.5" />
+            {fmtNumber(r.incidentCount)} sự việc
+          </span>
+        )}
       </span>
     </button>
   );

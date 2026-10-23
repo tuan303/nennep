@@ -3,20 +3,39 @@ import { useMemo } from "react";
 import { Siren, Timer, Trophy } from "lucide-react";
 import { Card, Checkbox, Field, NumberStepper, PriorityBadge, StatusBadge } from "@/components/ui";
 import { PRIORITIES, PRIORITY_LABELS, REWARD_STATUSES } from "@/lib/constants";
-import { top90Cutoff } from "@/lib/engine";
-import type { ClassInfo, Priority } from "@/lib/types";
+import { rankingRuleOf, top90Cutoff } from "@/lib/engine";
+import type { ClassInfo, LevelId, Priority } from "@/lib/types";
 import { Notice } from "../shared/notice";
 import type { ConfigSectionProps } from "./config-general";
 
-/** Trạng thái điểm thưởng được tính + Tỷ lệ Top (with a live example from the real grades). */
-export function RankingRulesCard({ draft, errors, set, disabled, className, classes }: ConfigSectionProps & { classes: readonly ClassInfo[] }) {
+/**
+ * Trạng thái điểm thưởng được tính + Tỷ lệ Top (with a live example from the real classes: the largest khối, or – a
+ * level ranked as a whole, THPT – every active class of the level).
+ */
+export function RankingRulesCard({
+  draft,
+  errors,
+  set,
+  disabled,
+  className,
+  classes,
+  levelId,
+}: ConfigSectionProps & { classes: readonly ClassInfo[]; levelId: LevelId }) {
+  const rule = rankingRuleOf(levelId);
+  const levelWide = rule.scope === "level";
   const example = useMemo(() => {
+    const pct = draft.top90Pct;
+    if (levelWide) {
+      const count = classes.filter((c) => c.active).length;
+      return count ? `VD: Toàn cấp có ${count} lớp → ${top90Cutoff(count, pct / 100)} lớp thuộc Top ${pct}%.` : undefined;
+    }
     const counts = new Map<number, number>();
     for (const c of classes) if (c.active) counts.set(c.grade, (counts.get(c.grade) ?? 0) + 1);
     const [grade, count] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0] ?? [];
     if (!grade || !count) return undefined;
-    return `VD: Khối ${grade} có ${count} lớp → ${top90Cutoff(count, draft.top90Pct / 100)} lớp thuộc Top ${draft.top90Pct}%.`;
-  }, [classes, draft.top90Pct]);
+    return `VD: Khối ${grade} có ${count} lớp → ${top90Cutoff(count, pct / 100)} lớp thuộc Top ${pct}%.`;
+  }, [classes, draft.top90Pct, levelWide]);
+  const scopeHint = `Mặc định 90%: số lớp thuộc Top = làm tròn lên (tỷ lệ × số lớp ${levelWide ? "toàn cấp" : "của khối"}).`;
 
   const toggle = (status: (typeof REWARD_STATUSES)[number], on: boolean) =>
     set({ rewardCountedStatuses: REWARD_STATUSES.filter((s) => (s === status ? on : draft.rewardCountedStatuses.includes(s))) });
@@ -44,9 +63,16 @@ export function RankingRulesCard({ draft, errors, set, disabled, className, clas
             </Notice>
           ) : null}
         </fieldset>
-        <Field label="Tỷ lệ Top (%)" error={errors.top90Pct} hint={example ?? "Mặc định 90%: số lớp thuộc Top = làm tròn lên (tỷ lệ × số lớp của khối)."}>
+        <Field label="Tỷ lệ Top (%)" error={errors.top90Pct} hint={example ?? scopeHint}>
           <NumberStepper value={draft.top90Pct} onChange={(v) => set({ top90Pct: v })} min={50} max={100} suffix="%" disabled={disabled} className="w-full" />
         </Field>
+        {levelWide ? (
+          <Notice title="Xếp hạng chung toàn cấp">
+            Các lớp được xếp hạng chung, không chia theo khối.
+            {rule.tieBreak === "violationTurns" ? " Bằng điểm thì lớp ít lượt vi phạm hơn xếp trên; bằng cả điểm và lượt vi phạm thì đồng hạng." : " Bằng điểm thì đồng hạng."}
+            {rule.topCount ? ` Báo cáo nêu ${rule.topCount} lớp dẫn đầu toàn cấp (kể cả lớp đồng hạng).` : ""}
+          </Notice>
+        ) : null}
       </div>
     </Card>
   );

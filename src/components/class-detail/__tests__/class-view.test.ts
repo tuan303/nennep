@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { classScoreSeries, classTimeline, filterIncidents } from "@/lib/engine";
+import { buildRanking, classScoreSeries, classTimeline, filterIncidents, LEVEL_RANKING_GROUP } from "@/lib/engine";
 import { FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
-import type { Incident, Period } from "@/lib/types";
+import { TODAY, makeClass, makeDataset, makeIncident, makeReward } from "@/lib/engine/__tests__/builders";
+import type { Incident, LevelDataset, Period, StudentRef } from "@/lib/types";
 import {
   classContacts,
   classSize,
@@ -10,6 +11,9 @@ import {
   gradeFromCode,
   incidentSubjects,
   lastValues,
+  overviewSections,
+  rankRuleHint,
+  rankScopeText,
   scoreChartData,
   timelineTotals,
 } from "../lib/class-view";
@@ -135,5 +139,87 @@ describe("foldSlices", () => {
       { name: "D", value: 3 },
       { name: "Khác", value: 3 },
     ]);
+  });
+});
+
+/* ---------------------------- THPT: level-wide ranking ---------------------------- */
+
+const WEEK_19: Period = { mode: "week", key: "2026-10-19" };
+const stu = (n: number): StudentRef[] => Array.from({ length: n }, (_, i) => ({ id: `S${i}`, name: `HS ${i}`, classCode: "x" }));
+
+/** Week of 19/10: 10A1, 11A1 = 100 (clean) · 12A1 = 100 (+2 −2, 1 lượt) · 12A2 = 96 (1 lượt) · 10A2 = 96 (2 lượt). */
+function thpt(): LevelDataset {
+  return makeDataset({
+    levelId: "THPT",
+    classes: [makeClass("10A1", 10), makeClass("10A2", 10), makeClass("11A1", 11), makeClass("12A1", 12), makeClass("12A2", 12)],
+    incidents: [
+      makeIncident({ date: "2026-10-20", classCode: "12A1", grade: 12, penalty: 2, students: stu(1) }),
+      makeIncident({ date: "2026-10-20", classCode: "12A2", grade: 12, penalty: 4, points: 4, unit: "/lần" }),
+      makeIncident({ date: "2026-10-21", classCode: "10A2", grade: 10, penalty: 2, students: stu(2) }),
+    ],
+    rewards: [makeReward({ date: "2026-10-20", classCode: "12A1", grade: 12, points: 2, status: "Đã xác nhận" })],
+  });
+}
+
+describe("ranking wording (RankingRule of the level)", () => {
+  it("names where a class is ranked", () => {
+    expect(rankScopeText("THCS", 6)).toBe("trong khối 6");
+    expect(rankScopeText("TH")).toBe("trong khối");
+    expect(rankScopeText("THPT", 10)).toBe("toàn cấp");
+    expect(rankScopeText("THPT")).toBe("toàn cấp");
+  });
+
+  it("explains the population and the tie-break", () => {
+    expect(rankRuleHint("THCS")).toBe("Xếp hạng theo điểm thi đua trong các lớp cùng khối; bằng điểm thì đồng hạng.");
+    expect(rankRuleHint("THPT")).toBe(
+      "Xếp hạng chung toàn cấp theo điểm thi đua; bằng điểm thì lớp ít lượt vi phạm hơn xếp trên, bằng cả điểm và lượt vi phạm thì đồng hạng.",
+    );
+  });
+});
+
+describe("overviewSections", () => {
+  it("THCS: one section per khối, unchanged", () => {
+    const ds = makeFixtureDataset();
+    const sections = overviewSections(buildRanking(ds, OCTOBER, FIXTURE_TODAY).grades);
+    expect(sections.map((s) => [s.title, s.description])).toEqual([
+      ["Khối 6", "5 lớp · sắp xếp theo hạng thi đua"],
+      ["Khối 7", "3 lớp · sắp xếp theo hạng thi đua"],
+    ]);
+    const g7 = overviewSections(buildRanking(ds, OCTOBER, FIXTURE_TODAY, { grade: 7 }).grades, 7);
+    expect(g7.map((s) => s.title)).toEqual(["Khối 7"]);
+  });
+
+  it("THPT: one 'Toàn cấp' section in level rank order (ties by lượt vi phạm)", () => {
+    const grades = buildRanking(thpt(), WEEK_19, TODAY).grades;
+    expect(grades.map((g) => g.grade)).toEqual([LEVEL_RANKING_GROUP]);
+    const [all] = overviewSections(grades);
+    expect(all.title).toBe("Toàn cấp");
+    expect(all.description).toBe("5 lớp · sắp xếp theo hạng thi đua toàn cấp");
+    expect(all.rows.map((r) => [r.classCode, r.rank])).toEqual([
+      ["10A1", 1],
+      ["11A1", 1],
+      ["12A1", 3],
+      ["12A2", 4],
+      ["10A2", 5],
+    ]);
+  });
+
+  it("THPT + khối filter: only that khối's classes, ranks stay level-wide", () => {
+    const grades = buildRanking(thpt(), WEEK_19, TODAY, { grade: 10 }).grades;
+    const sections = overviewSections(grades, 10);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe("Khối 10");
+    expect(sections[0].description).toBe("2 lớp · sắp xếp theo hạng thi đua toàn cấp (5 lớp)");
+    expect(sections[0].rows.map((r) => [r.classCode, r.rank, r.gradeClassCount])).toEqual([
+      ["10A1", 1, 5],
+      ["10A2", 5, 5],
+    ]);
+    expect(overviewSections(grades, 9)).toEqual([]);
+  });
+
+  it("THPT weekly rank series: level-wide with the tie-break", () => {
+    const chart = scoreChartData(classScoreSeries(thpt(), "10A2", TODAY));
+    expect(chart.rank.at(-1)).toBe(5);
+    expect(chart.score.at(-1)).toBe(96);
   });
 });

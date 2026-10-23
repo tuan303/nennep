@@ -6,8 +6,8 @@ import type { ClassInfo, GlobalFilters, Incident, LevelDataset, Period } from ".
 import { formatDayMonthVN } from "./dates";
 import { countedRewards, filterIncidents } from "./filters";
 import { ALL_PERIOD, contextPeriod, elapsedWeeksInPeriod, periodMatcher } from "./period";
-import { competitionRanks } from "./ranking";
-import { round2 } from "./scoring";
+import { competitionRanks, LEVEL_RANKING_GROUP, rankingRuleOf } from "./ranking";
+import { round2, violationTurnsOf } from "./scoring";
 import { compareClassInfo, compareStr } from "./utils";
 
 export interface CumulativeSeries {
@@ -133,6 +133,8 @@ export interface RankHistory {
  *   the last point when the scope's last elapsed week is counted.
  * - basis "week": score_k = baseScorePerWeek + counted rewards − penalties of weeks[k] only (as classScoreSeries).
  * ranks[k] = competitionRanks over the grade at week k (1 = best). Classes in compareClassInfo order.
+ * A level ranked as a whole (RankingRule.scope "level", THPT): every active class whatever `grade`, out.grade =
+ * LEVEL_RANKING_GROUP, and equal scores ordered by fewer lượt vi phạm of the same basis (RankingRule.tieBreak).
  * Unknown grade → no classes; no counted week → weeks = [] and classes with empty arrays.
  */
 export function rankHistory(
@@ -148,43 +150,58 @@ export function rankHistory(
   const weeks = elapsedWeeksInPeriod(context.period, ds.weeks, today)
     .filter((w) => w.counted && (end === undefined || w.weekStart <= end))
     .map((w) => w.weekStart);
-  const classes = ds.classes.filter((c) => c.active && c.grade === grade).sort(compareClassInfo);
+  const rule = rankingRuleOf(ds.levelId);
+  const levelWide = rule.scope === "level";
+  const classes = ds.classes.filter((c) => c.active && (levelWide || c.grade === grade)).sort(compareClassInfo);
   const shell = (c: ClassInfo): RankHistoryClass => {
     const row: RankHistoryClass = { classCode: c.code, ranks: [], scores: [] };
     if (c.homeroomTeacher) row.homeroomTeacher = c.homeroomTeacher;
     return row;
   };
-  const out: RankHistory = { grade, basis, weeks: [], labels: [], classes: classes.map(shell) };
+  const out: RankHistory = { grade: levelWide ? LEVEL_RANKING_GROUP : grade, basis, weeks: [], labels: [], classes: classes.map(shell) };
   if (weeks.length === 0 || classes.length === 0) return out;
 
   // Net score change (counted rewards − penalties) per class, as [week, delta] entries of the scope.
   const members = new Set(classes.map((c) => c.code));
   const inScope = periodMatcher(context.period, ds.weeks);
   const deltas = new Map<string, Array<readonly [string, number]>>();
-  const add = (code: string, week: string, delta: number) => {
-    const list = deltas.get(code);
+  const turnDeltas = new Map<string, Array<readonly [string, number]>>();
+  const push = (map: Map<string, Array<readonly [string, number]>>, code: string, week: string, delta: number) => {
+    const list = map.get(code);
     if (list) list.push([week, delta]);
-    else deltas.set(code, [[week, delta]]);
+    else map.set(code, [[week, delta]]);
   };
-  for (const i of ds.incidents) if (!i.deletedAt && members.has(i.classCode) && inScope(i)) add(i.classCode, i.week, -i.points);
+  const add = (code: string, week: string, delta: number) => push(deltas, code, week, delta);
+  for (const i of ds.incidents) {
+    if (!i.deletedAt && members.has(i.classCode) && inScope(i)) {
+      add(i.classCode, i.week, -i.points);
+      push(turnDeltas, i.classCode, i.week, violationTurnsOf(i));
+    }
+  }
   for (const r of countedRewards(ds.rewards, ds.config)) {
     if (!r.deletedAt && members.has(r.classCode) && inScope(r)) add(r.classCode, r.week, r.points);
   }
 
   const base = ds.config.baseScorePerWeek;
-  const scores = classes.map((c) => {
-    const list = [...(deltas.get(c.code) ?? [])].sort((a, b) => compareStr(a[0], b[0]));
-    if (basis === "week") {
-      return weeks.map((w) => round2(base + list.reduce((s, [week, d]) => (week === w ? s + d : s), 0)));
-    }
+  /** Per class, one value per week: the week's own sum ("week") or the running sum up to it ("cumulative"). */
+  const series = (map: Map<string, Array<readonly [string, number]>>, code: string, start: (k: number) => number) => {
+    const list = [...(map.get(code) ?? [])].sort((a, b) => compareStr(a[0], b[0]));
+    if (basis === "week") return weeks.map((w, k) => round2(start(k) + list.reduce((s, [week, d]) => (week === w ? s + d : s), 0)));
     let idx = 0;
     let acc = 0;
     return weeks.map((w, k) => {
       while (idx < list.length && list[idx][0] <= w) acc += list[idx++][1];
-      return round2(base * (k + 1) + acc);
+      return round2(start(k) + acc);
     });
-  });
-  const ranksByWeek = weeks.map((_, k) => competitionRanks(scores.map((s) => s[k])));
+  };
+  const scores = classes.map((c) => series(deltas, c.code, (k) => (basis === "week" ? base : base * (k + 1))));
+  const turns = rule.tieBreak === "violationTurns" ? classes.map((c) => series(turnDeltas, c.code, () => 0)) : undefined;
+  const ranksByWeek = weeks.map((_, k) =>
+    competitionRanks(
+      scores.map((s) => s[k]),
+      turns?.map((t) => t[k]),
+    ),
+  );
   out.weeks = weeks;
   out.labels = weeks.map(formatDayMonthVN);
   out.classes = classes.map((c, idx) => ({ ...shell(c), scores: scores[idx], ranks: ranksByWeek.map((r) => r[idx]) }));

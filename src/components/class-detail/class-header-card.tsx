@@ -11,9 +11,13 @@ import { classContacts, type ClassSize } from "./lib/class-view";
 export interface ClassHeaderCardProps {
   cls: ClassInfo;
   row?: RankingRow;
-  /** Rank of the previous period (same grade), when known. */
+  /** Rank of the previous period (same ranking table), when known. */
   previousRank?: number;
   previousNoun: string;
+  /** Where the class is ranked: "trong khối 6" | "toàn cấp" (THPT) – engine RankingRule. */
+  rankScope: string;
+  /** How the level ranks its classes (tooltip of the rank). */
+  rankHint?: string;
   size: ClassSize;
   period: Period;
   config: LevelConfig;
@@ -22,8 +26,11 @@ export interface ClassHeaderCardProps {
   own: boolean;
 }
 
-/** Identity of the class (code, grade, teachers, contact, size) and its standing in the grade for the period. */
-export function ClassHeaderCard({ cls, row, previousRank, previousNoun, size, period, config, hidden, own }: ClassHeaderCardProps) {
+/**
+ * Identity of the class (code, grade, teachers, contact, size) and its standing for the period in its ranking table (the
+ * grade, or the whole level for THPT).
+ */
+export function ClassHeaderCard({ cls, row, previousRank, previousNoun, rankScope, rankHint, size, period, config, hidden, own }: ClassHeaderCardProps) {
   const contacts = classContacts(cls);
   return (
     <section aria-label={`Thông tin lớp ${cls.code}`} className="card overflow-hidden">
@@ -57,8 +64,8 @@ export function ClassHeaderCard({ cls, row, previousRank, previousNoun, size, pe
             {row ? (
               <>
                 <RankMedal rank={row.rank} size="lg" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-white/70">Hạng trong khối {cls.grade}</span>
+                <div className="flex flex-col" title={rankHint}>
+                  <span className="text-xs font-medium text-white/70">Hạng {rankScope}</span>
                   <span className="num text-2xl font-bold leading-8">
                     {fmtNumber(row.rank)}
                     <span className="text-base font-semibold text-white/70">/{fmtNumber(row.gradeClassCount)}</span>
@@ -106,7 +113,7 @@ export function ClassHeaderCard({ cls, row, previousRank, previousNoun, size, pe
                 inTop90={row.inTop90}
                 ratio={config.top90Ratio}
                 size="sm"
-                hint={`Hạng ${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)} · ngưỡng Top ${fmtPercent(config.top90Ratio)}: hạng ${fmtNumber(row.top90Cutoff)}`}
+                hint={`Hạng ${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)} ${rankScope} · ngưỡng Top ${fmtPercent(config.top90Ratio)}: hạng ${fmtNumber(row.top90Cutoff)}`}
               />
               <RagBadge rag={row.rag} reason={row.ragReason} size="sm" />
             </>

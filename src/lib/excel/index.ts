@@ -19,7 +19,19 @@ export {
 } from "./export-report";
 export { buildHtmlSnapshot, escapeHtml, formatGeneratedAt, type HtmlSnapshotInput } from "./html-snapshot";
 export type { RankingExportRow, StudentExportRow } from "./report-columns";
-export { catalogChoiceText, penaltyUnitText, formatPenalty, ragLabel, top90Label, topGroupLabel, studentAlertLabel, RAG_SHORT } from "./format";
+export {
+  catalogChoiceText,
+  penaltyUnitText,
+  formatPenalty,
+  ragLabel,
+  top90Label,
+  topGroupLabel,
+  studentAlertLabel,
+  RAG_SHORT,
+  rankingRuleNote,
+  leadingClassesNote,
+  type RankingLayout,
+} from "./format";
 export { ExcelParseError, loadExcelJS, toArrayBuffer, toUint8Array, type BinaryInput } from "./loader";
 export { extractErrorCode } from "./parse-incidents";
 export { splitStudentChoice } from "./parse-links";

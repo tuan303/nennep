@@ -5,18 +5,12 @@ import { countedRewards, filterIncidents, filterRewards } from "./filters";
 import { periodLabel, previousPeriod } from "./period";
 import { dataConfidence } from "./rag";
 import { buildRanking } from "./ranking";
-import { round2 } from "./scoring";
+import { round2, violationTurnsOf } from "./scoring";
 import { compareVN, naturalCompare } from "./text";
 import { compareClassInfo, groupBy, sumBy, uniqueCount } from "./utils";
 
-/**
- * Lượt vi phạm of one incident (KPI_TERMS.violationTurns): "/HS" → relatedStudentCount (named + unnamed);
- * "/lần" → occurrenceCount (≥ 1, as computePoints).
- */
-export function violationTurnsOf(i: Pick<Incident, "unit" | "relatedStudentCount" | "occurrenceCount">): number {
-  if (i.unit === "/HS") return Math.max(0, i.relatedStudentCount || 0);
-  return Math.max(1, Math.floor(i.occurrenceCount || 1));
-}
+// violationTurnsOf lives in ./scoring (the ranking needs it without importing analytics); re-exported here.
+export { violationTurnsOf } from "./scoring";
 
 function sumTurns(incidents: readonly Incident[]): number {
   let n = 0;
@@ -173,7 +167,8 @@ export function gradeStats(ds: LevelDataset, f: GlobalFilters, today: string): G
 
   return grades.map((grade) => {
     const inc = incByGrade.get(String(grade)) ?? [];
-    const rows = ranking.grades.find((g) => g.grade === grade)?.rows ?? [];
+    // Rows of this khối wherever they are ranked (THPT: one level-wide table; top90Count = its classes inside it).
+    const rows = ranking.grades.flatMap((g) => g.rows).filter((r) => r.grade === grade);
     return {
       grade,
       classCount: active.filter((c) => c.grade === grade).length,

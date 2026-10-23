@@ -416,7 +416,7 @@ permission. Inputs are the zod **outputs** of the contract schemas (`z.output<ty
 | `POST /api/actions` | actions.manage | `createAction` | 201, code `HD-yyyymmdd-NNN` (creation day), status Open, history; `scopeClass` must exist |
 | `PATCH /api/actions/:id` | actions.manage | `updateAction` | Done with empty evidence (after merge) → 400 "Cần nhập minh chứng hoàn tất trước khi chuyển sang Hoàn thành" (AC-014); history entry (`note` or auto text); `closedAt` set/cleared |
 | `GET /api/audit-logs` | audit.view (school-wide admins only) | `queryAuditLogs(AuditQuerySchema output)` | `?action&email&level&from&to&cursor&limit` (limit 1–100, default 50) |
-| `GET /api/rankings` | view.dashboard + level | `getRankings(user, RankingsQuerySchema output)` | `?level&mode&key&classCode&grade`; no `mode` = current week (`defaultPeriod`) |
+| `GET /api/rankings` | view.dashboard + level | `getRankings(user, RankingsQuerySchema output)` | `?level&mode&key&classCode&grade`; no `mode` = current week (`defaultPeriod`). Tables follow `rankingRuleOf(level)`: one per khối (`grade` keeps one), or – THPT – one level-wide table (`grade` = 0, rows keep their own grade, equal scores → fewer `violationTurns` first; the `grade` param is ignored) |
 | `PUT /api/settings/:level/config` | settings.manage | `putConfig(ctx, level, input, { allowHidingRecords })` | merge; firstWeek must be Monday; semesters ordered, non-overlapping; audit UPDATE_CONFIG `{ changes: { field: { before, after } } }`. While the calendar is generated from the config (no stored weeks), a firstWeek/semester change is checked like PUT weeks (`?allowHidingRecords=1`). |
 | `PUT /api/settings/:level/early-warning` | settings.manage | `putEarlyWarning(ctx, level, EarlyWarningPutSchema output)` | replaces `config.earlyWarning` (fixed key order, unique `seriousGroups`) through `saveReferenceParts` (`__ref` + version bump + audit UPDATE_CONFIG `detail.changes.earlyWarning { before, after }`); unchanged (canonical JSON) → no write. `putConfig` and the workbook config import spread the stored config and keep it. `normalizeEarlyWarning(input)` |
 | `PUT /api/settings/:level/catalog` | settings.manage | `putCatalog` | replace; unique codes; missing items → `active:false` (never deleted); audit `{ added, updated, deactivated }` |
@@ -504,7 +504,7 @@ Student mutations update `__stu` + bump the version in the same transaction. Act
 - `common.ts`: `loadStudentsInOtherLevels(levelId, ids)` (full docs; `findStudentsInOtherLevels` returns level/class only).
 - `audit-query.ts`: `AuditQuerySchema`, `vnDayStartIso(date)`, `encodeCursor/decodeCursor`, `MAX_SCAN = 3000` (in-memory filters scan at most
   this many logs per call; `nextCursor` then continues the scan, so a page can hold fewer than `limit` items).
-- `rankings.ts`: `RankingsQuerySchema`, `resolvePeriod(q, weeks, semesters, today)`.
+- `rankings.ts`: `RankingsQuerySchema`, `resolvePeriod(q, weeks, semesters, today)`; tests: `admin-rankings.test.ts` (THCS per khối), `admin-rankings-thpt.test.ts` (THPT level-wide + tie-break).
 - `env-file.ts`: `parseEnv(text)`, `loadEnvFile(path)` (existing env vars win).
 
 ### Scripts

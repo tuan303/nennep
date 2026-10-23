@@ -14,6 +14,10 @@ export interface ClassKpisProps {
   /** "tháng trước"… (empty for the whole year). */
   previousNoun: string;
   row?: RankingRow;
+  /** Where the class is ranked: "trong khối 6" | "toàn cấp" (THPT); omitted → no scope in the footer. */
+  rankScope?: string;
+  /** How the level ranks its classes (appended to the score tooltip). */
+  rankHint?: string;
   /** Weekly trend of the class (engine weeklyTrend) for the sparklines. */
   trend: TrendPoint[];
   /** Weekly competition scores (engine classScoreSeries). */
@@ -32,7 +36,7 @@ function delta(cur: number, prev: number | undefined, goodWhen: "up" | "down", n
  * Sự việc, Lượt vi phạm, Số HS vi phạm, Điểm trừ (shared KPI_TERMS vocabulary, REQ_V2 §13), Điểm thưởng, Điểm thi đua and
  * Độ tin cậy of the class in the period.
  */
-export function ClassKpis({ current: c, previous: p, previousNoun, row, trend, scores, config, hidden }: ClassKpisProps) {
+export function ClassKpis({ current: c, previous: p, previousNoun, row, rankScope, rankHint, trend, scores, config, hidden }: ClassKpisProps) {
   const lowConfidence = c.incidents > 0 && c.confidence < config.rag.minConfidence;
   const confidenceDelta =
     p && previousNoun && c.incidents > 0 && p.incidents > 0
@@ -104,9 +108,13 @@ export function ClassKpis({ current: c, previous: p, previousNoun, row, trend, s
         value={row ? fmtNumber(row.score) : "–"}
         icon={Trophy}
         tone="ok"
-        hint={`Điểm thi đua = Điểm nền + ${countedRewardTerm(config)} − Điểm trừ, tính mọi lỗi trong kỳ.`}
+        hint={`Điểm thi đua = Điểm nền + ${countedRewardTerm(config)} − Điểm trừ, tính mọi lỗi trong kỳ.${rankHint ? ` ${rankHint}` : ""}`}
         sparkline={lastValues(scores)}
-        footer={row ? `Hạng ${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)} · điểm nền ${fmtNumber(row.base)}` : "Không xếp hạng"}
+        footer={
+          row
+            ? `Hạng ${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)}${rankScope ? ` ${rankScope}` : ""} · điểm nền ${fmtNumber(row.base)}`
+            : "Không xếp hạng"
+        }
       />
       <KpiCard
         label="Độ tin cậy dữ liệu"

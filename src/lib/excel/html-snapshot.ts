@@ -3,7 +3,8 @@
  * no scripts, no external resources, no viewer/session data. No ExcelJS dependency (cheap to import).
  */
 import { formatDateVN, isIsoDate } from "../engine/dates";
-import { isRagStatus, RAG_SHORT, ragLabel, top90Label, topGroupLabel } from "./format";
+import { rankingGroupLabel } from "../engine/ranking";
+import { isRagStatus, leadingClassesNote, RAG_SHORT, ragLabel, rankingRuleNote, top90Label, topGroupLabel, type RankingLayout } from "./format";
 
 export interface HtmlSnapshotInput {
   schoolName: string;
@@ -14,9 +15,15 @@ export interface HtmlSnapshotInput {
   kpis: Array<{ label: string; value: string }>;
   /** config.top90Ratio of the level (default 0.9) – names the Top badge and column. */
   topRatio?: number;
+  /**
+   * Ranking rule of the level (engine rankingRuleOf; default one table per khối). THPT: one "Toàn cấp" table with a
+   * Lượt vi phạm column and its top classes named.
+   */
+  rankingLayout?: RankingLayout;
+  /** One entry per ranking table: grade = the khối, or LEVEL_RANKING_GROUP (0) for a level-wide table ("Toàn cấp"). */
   rankingByGrade: Array<{
     grade: number;
-    rows: Array<{ rank: number; classCode: string; score: number; penalty: number; reward: number; inTop90: boolean; rag: string }>;
+    rows: Array<{ rank: number; classCode: string; score: number; penalty: number; reward: number; inTop90: boolean; rag: string; violationTurns?: number }>;
   }>;
   topIssues: Array<{ issue: string; incidents: number; points: number }>;
   topClasses: Array<{ classCode: string; incidents: number; points: number }>;
@@ -89,6 +96,8 @@ tbody tr:nth-child(even) td{background:#FAFBFE}
 .bar{height:6px;margin-top:5px;border-radius:3px;background:#EEF2FF}
 .bar span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#D21235,#23328C)}
 .empty{margin:0;padding:12px 0;color:var(--muted);font-style:italic}
+.rule{margin:-4px 0 12px;font-size:13px;color:var(--muted)}
+.leaders{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--navy)}
 footer{margin-top:32px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
 @media (max-width:640px){.hero{flex-direction:column;align-items:flex-start;padding:20px}h1{font-size:22px}.star{width:44px;height:44px}th,td{padding:6px 8px}}
 @page{size:A4;margin:12mm}
@@ -115,7 +124,8 @@ function top90Badge(inTop90: boolean, ratio?: number): string {
     : `<span class="badge out">${escapeHtml(top90Label(false, ratio))}</span>`;
 }
 
-function rankingSection(groups: HtmlSnapshotInput["rankingByGrade"], ratio?: number): string {
+function rankingSection(groups: HtmlSnapshotInput["rankingByGrade"], ratio?: number, layout?: RankingLayout): string {
+  const turns = layout?.tieBreak === "violationTurns";
   const cards = [...groups]
     .sort((a, b) => a.grade - b.grade)
     .map((g) => {
@@ -125,18 +135,26 @@ function rankingSection(groups: HtmlSnapshotInput["rankingByGrade"], ratio?: num
             .map(
               (r) =>
                 `<tr><td class="rank">${r.rank}</td><td class="cls">${escapeHtml(r.classCode)}</td><td class="num score">${num(r.score)}</td>` +
+                (turns ? `<td class="num">${num(r.violationTurns ?? 0)}</td>` : "") +
                 `<td class="num">${num(r.penalty)}</td><td class="num">${num(r.reward)}</td><td>${top90Badge(r.inTop90, ratio)}</td><td>${ragBadge(r.rag)}</td></tr>`,
             )
             .join("")
-        : `<tr><td colspan="7" class="empty">Chưa có lớp nào.</td></tr>`;
+        : `<tr><td colspan="${turns ? 8 : 7}" class="empty">Chưa có lớp nào.</td></tr>`;
+      const leaders = leadingClassesNote(rows, layout);
       return (
-        `<div class="card"><h3>Khối ${g.grade}<small>${rows.length} lớp</small></h3><div class="table-wrap"><table>` +
-        `<thead><tr><th>Hạng</th><th>Lớp</th><th class="num">Điểm thi đua</th><th class="num">Điểm trừ</th><th class="num">Điểm thưởng</th><th>${escapeHtml(topGroupLabel(ratio))}</th><th>Đánh giá</th></tr></thead>` +
+        `<div class="card"><h3>${escapeHtml(rankingGroupLabel(g.grade))}<small>${rows.length} lớp</small></h3>` +
+        (leaders ? `<p class="leaders"><span aria-hidden="true">★ </span>${escapeHtml(leaders)}</p>` : "") +
+        `<div class="table-wrap"><table>` +
+        `<thead><tr><th>Hạng</th><th>Lớp</th><th class="num">Điểm thi đua</th>${turns ? `<th class="num">Lượt vi phạm</th>` : ""}<th class="num">Điểm trừ</th><th class="num">Điểm thưởng</th><th>${escapeHtml(topGroupLabel(ratio))}</th><th>Đánh giá</th></tr></thead>` +
         `<tbody>${body}</tbody></table></div></div>`
       );
     })
     .join("");
-  return `<section><h2>Xếp hạng thi đua theo khối</h2>${cards ? `<div class="grid">${cards}</div>` : `<p class="empty">Chưa có dữ liệu xếp hạng.</p>`}</section>`;
+  const title = layout?.scope === "level" ? "Xếp hạng thi đua toàn cấp" : "Xếp hạng thi đua theo khối";
+  return (
+    `<section><h2>${title}</h2><p class="rule">${escapeHtml(rankingRuleNote(layout, ratio))}</p>` +
+    `${cards ? `<div class="grid">${cards}</div>` : `<p class="empty">Chưa có dữ liệu xếp hạng.</p>`}</section>`
+  );
 }
 
 function barCell(label: string, value: number, max: number): string {
@@ -193,7 +211,7 @@ export function buildHtmlSnapshot(input: HtmlSnapshotInput): string {
 <main class="page">
 <header class="hero">${STAR_SVG}<div><p class="eyebrow">${school}</p><h1>Báo cáo nền nếp ${level}</h1><p class="meta"><span class="pill">${period}</span><span>Số liệu tại ${generated}</span></p></div></header>
 ${kpiGrid(input.kpis)}
-${rankingSection(input.rankingByGrade, input.topRatio)}
+${rankingSection(input.rankingByGrade, input.topRatio, input.rankingLayout)}
 <section><h2>Điểm cần quan tâm</h2><div class="grid">${topIssuesCard(input.topIssues)}${topClassesCard(input.topClasses)}</div></section>
 <footer>Báo cáo được tạo tự động từ hệ thống NSHM Nền nếp – ${school}. Số liệu tổng hợp theo lớp và khối, không bao gồm thông tin cá nhân của học sinh. Điểm thi đua = điểm nền + điểm thưởng được xác nhận − điểm trừ.</footer>
 </main>

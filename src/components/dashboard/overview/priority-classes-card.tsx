@@ -6,7 +6,7 @@ import { EmptyDataHint } from "@/components/app/widgets";
 import type { ClassStat } from "@/lib/engine";
 import { fmtNumber, fmtPoints } from "@/lib/client/format";
 import type { GradeRanking, LevelDataset } from "@/lib/types";
-import { priorityClasses } from "../lib/overview-model";
+import { priorityClasses, rankText } from "../lib/overview-model";
 import { RowButton } from "../shared/parts";
 
 export interface PriorityClassesCardProps {
@@ -19,7 +19,7 @@ export interface PriorityClassesCardProps {
   className?: string;
 }
 
-/** "Top 5 lớp cần ưu tiên": classes with the most penalty points in scope, with RAG and rank; click → Khối & lớp. */
+/** "Top 5 lớp cần ưu tiên": classes with the most penalty points in scope, with RAG and rank (khối, or toàn cấp for THPT); click → Khối & lớp. */
 export function PriorityClassesCard({ ds, classes, ranking, mine = [], onOpenClass, className }: PriorityClassesCardProps) {
   const top = useMemo(() => priorityClasses(classes, ranking, 5), [classes, ranking]);
 
@@ -55,9 +55,7 @@ export function PriorityClassesCard({ ds, classes, ranking, mine = [], onOpenCla
                     {c.row ? (
                       <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
                         <RagBadge rag={c.row.rag} compact size="sm" />
-                        <span className="num text-xs text-slate-500">
-                          Hạng {c.row.rank}/{c.row.gradeClassCount} khối {c.grade}
-                        </span>
+                        <span className="num text-xs text-slate-500">{rankText(c.row, ds.levelId)}</span>
                       </span>
                     ) : null}
                   </span>

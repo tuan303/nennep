@@ -14,14 +14,13 @@ export interface ReportKpisProps {
 
 /**
  * Sự việc · Lượt vi phạm · Số HS vi phạm · Điểm trừ (shared KPI_TERMS labels / tooltips) · Điểm thưởng · Điểm thi đua ·
- * Hạng khối (+ Top 90%, RAG).
+ * Hạng khối – Hạng toàn cấp for THPT – (+ Top 90%, RAG).
  */
 export function ReportKpis({ report, periodMode }: ReportKpisProps) {
-  const { kpis, previous, ranking, classInfo } = report;
+  const { kpis, previous, ranking } = report;
   const prevLabel = previousLabelShort(periodMode);
   const delta = (cur: number, prev: number | undefined, goodWhen: KpiDelta["goodWhen"]): KpiDelta | undefined =>
     prev === undefined || !prevLabel ? undefined : { value: cur - prev, goodWhen, label: prevLabel };
-  const grade = ranking?.grade ?? classInfo?.grade;
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 2xl:grid-cols-7">
@@ -89,11 +88,11 @@ export function ReportKpis({ report, periodMode }: ReportKpisProps) {
         }
       />
       <KpiCard
-        label={grade ? `Hạng khối ${grade}` : "Hạng khối"}
+        label={report.rankLabel}
         value={ranking ? `${ranking.rank}/${ranking.gradeClassCount}` : "–"}
         icon={Medal}
         tone="star"
-        hint="Xếp hạng theo điểm thi đua trong các lớp cùng khối (đồng điểm cùng hạng)."
+        hint={report.rankHint}
         footer={
           ranking ? (
             <span className="flex flex-wrap items-center gap-1.5">

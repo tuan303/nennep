@@ -1,13 +1,20 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { Calculator, ChevronDown, Clock, Filter, Highlighter, PartyPopper, Star, type LucideIcon } from "lucide-react";
+import { Calculator, ChevronDown, Clock, Filter, Highlighter, ListOrdered, PartyPopper, Star, type LucideIcon } from "lucide-react";
 import { Card, cn } from "@/components/ui";
 import { PeriodBadge, RagLegend } from "@/components/app/widgets";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
-import type { LevelConfig, Period } from "@/lib/types";
+import { LEVELS } from "@/lib/constants";
+import { DEFAULT_RANKING_RULE, rankingRuleOf } from "@/lib/engine";
+import type { LevelConfig, LevelId, Period } from "@/lib/types";
+import { rankingPopulationText, rankingRuleNote } from "./lib/ranking-view";
 
 export interface RankingExplainerProps {
   config: LevelConfig;
+  /** Level of the dataset: its ranking rule (THPT: one table for the level, fewer lượt vi phạm first). Default rule when omitted. */
+  levelId?: LevelId;
+  /** Grade filter of the page (a level-wide ranking ignores it: a note says so). */
+  gradeFilter?: number;
   period: Period;
   countedWeeks: number;
   /** The period contains the week in progress. */
@@ -21,8 +28,21 @@ export interface RankingExplainerProps {
 }
 
 /** Subtle strip explaining how the ranking is computed (period, base score, formula, Top 90% rule, RAG thresholds). */
-export function RankingExplainer({ config, period, countedWeeks, inProgress, highlightClass, issueFilterActive, quiet }: RankingExplainerProps) {
+export function RankingExplainer({
+  config,
+  levelId,
+  gradeFilter,
+  period,
+  countedWeeks,
+  inProgress,
+  highlightClass,
+  issueFilterActive,
+  quiet,
+}: RankingExplainerProps) {
   const [open, setOpen] = useState(false);
+  const rule = levelId ? rankingRuleOf(levelId) : DEFAULT_RANKING_RULE;
+  const levelWide = rule.scope === "level";
+  const ruleNote = levelId ? rankingRuleNote(rule, LEVELS[levelId].short) : undefined;
   const base = config.baseScorePerWeek * countedWeeks;
   const statuses = config.rewardCountedStatuses.map((s) => s.toLowerCase()).join(", ");
   return (
@@ -51,6 +71,7 @@ export function RankingExplainer({ config, period, countedWeeks, inProgress, hig
           </button>
         </div>
 
+        {ruleNote ? <Note icon={ListOrdered}>{ruleNote}</Note> : null}
         {countedWeeks === 0 ? (
           <Note icon={Clock} tone="warn">
             Kỳ đang chọn chưa có tuần nào được tính thi đua (tuần nghỉ hoặc chưa diễn ra) nên điểm nền bằng 0.
@@ -65,8 +86,13 @@ export function RankingExplainer({ config, period, countedWeeks, inProgress, hig
         ) : null}
         {highlightClass ? (
           <Note icon={Highlighter}>
-            Lớp <strong className="font-semibold text-brand-900">{highlightClass}</strong> đang được làm nổi bật; thứ hạng vẫn tính trên toàn bộ các
-            lớp của khối.
+            Lớp <strong className="font-semibold text-brand-900">{highlightClass}</strong> đang được làm nổi bật; thứ hạng vẫn tính trên toàn bộ{" "}
+            {rankingPopulationText(rule)}.
+          </Note>
+        ) : null}
+        {levelWide && typeof gradeFilter === "number" ? (
+          <Note icon={Filter}>
+            Bộ lọc Khối {gradeFilter} không thu hẹp bảng xếp hạng: thứ hạng tính chung toàn cấp nên bảng gồm mọi lớp của cấp học.
           </Note>
         ) : null}
         {issueFilterActive ? <Note icon={Filter}>Bộ lọc mảng, nhóm lỗi, lỗi và học sinh không áp dụng cho xếp hạng – điểm thi đua luôn tính mọi lỗi.</Note> : null}
@@ -79,7 +105,7 @@ export function RankingExplainer({ config, period, countedWeeks, inProgress, hig
             Điểm thi đua = Điểm nền + Điểm thưởng ({statuses}) − Điểm trừ. Điểm có thể âm.
           </Rule>
           <Rule icon={Star} title={`Top ${fmtPercent(config.top90Ratio)}`}>
-            Ngưỡng = làm tròn lên {fmtPercent(config.top90Ratio)} số lớp của khối; các lớp đồng hạng tại ngưỡng đều Thuộc Top{" "}
+            Ngưỡng = làm tròn lên {fmtPercent(config.top90Ratio)} số lớp {levelWide ? "toàn cấp" : "của khối"}; các lớp đồng hạng tại ngưỡng đều Thuộc Top{" "}
             {fmtPercent(config.top90Ratio)}.
           </Rule>
           <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 xl:col-span-1">

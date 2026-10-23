@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KPI_TERMS } from "@/lib/constants";
-import { buildRanking, computeKpis, earlyWarnings, filterIncidents, periodOptions } from "@/lib/engine";
+import { buildRanking, computeKpis, earlyWarnings, filterIncidents, findRankingRow, LEVEL_RANKING_GROUP, periodOptions, rankingRuleOf } from "@/lib/engine";
 import { FIXTURE_TODAY, makeFixtureDataset } from "@/lib/engine/__fixtures__/dataset";
 import { makeV2FixtureDataset } from "@/lib/engine/__fixtures__/dataset-v2";
 import type { Incident, Period, UserProfile } from "@/lib/types";
@@ -11,6 +11,7 @@ import {
   groupShares,
   ownReportClasses,
   parseDetail,
+  rankingRuleNote,
   parseRecipient,
   recipientFilters,
   recipientKey,
@@ -20,6 +21,7 @@ import {
   resolveRecipient,
   subjectsText,
 } from "../lib/report-model";
+import { THPT_PREVIOUS_WEEK, THPT_TODAY, THPT_WEEK, makeThptDataset } from "./thpt-dataset";
 
 const OCT: Period = { mode: "month", key: "2026-10" };
 const WEEK: Period = { mode: "week", key: "2026-10-12" };
@@ -253,9 +255,89 @@ describe("score bands in the report (THCS)", () => {
   });
 
   it("other levels keep the Top 90% view (no bands, up to 3 leaders)", () => {
-    const ds = { ...makeFixtureDataset(), levelId: "THPT" as const };
+    const ds = { ...makeFixtureDataset(), levelId: "TH" as const };
     const r = buildPeriodReport(ds, { period: OCT, recipient: { kind: "bgh" } }, FIXTURE_TODAY);
     if (r.ranking.kind !== "level") throw new Error("level ranking expected");
     expect(r.ranking.grades.every((g) => g.bands === undefined && g.leaders.length <= 3)).toBe(true);
+  });
+});
+
+describe("THPT: one level-wide ranking (Top 3, fewer lượt vi phạm first)", () => {
+  const codes = (rows: ReadonlyArray<{ classCode: string }> | undefined) => rows?.map((r) => r.classCode);
+
+  it("BGH: a single 'Toàn cấp' table; Top 3 with every class tied at the cut; level count / average / Top 90%", () => {
+    const ds = makeThptDataset();
+    const r = buildPeriodReport(ds, { period: THPT_WEEK, recipient: { kind: "bgh" } }, THPT_TODAY);
+    if (r.ranking.kind !== "level") throw new Error("level ranking expected");
+    expect(r.ranking.rule).toEqual(rankingRuleOf("THPT"));
+    expect(r.ranking.grades).toHaveLength(1);
+    const g = r.ranking.grades[0];
+    expect(g).toMatchObject({ grade: LEVEL_RANKING_GROUP, label: "Toàn cấp", leadersLabel: "Top 3", classCount: 6, rankCount: 6, cutoff: 6 });
+    expect(g.rows.map((x) => [x.classCode, x.rank])).toEqual([
+      ["10A1", 1],
+      ["11A1", 1],
+      ["11A2", 3],
+      ["12A1", 3],
+      ["12A2", 5],
+      ["10A2", 6],
+    ]);
+    expect(codes(g.leaders)).toEqual(["10A1", "11A1", "11A2", "12A1"]);
+    expect(g.avgScore).toBe(98.67);
+    expect(g.outside).toEqual(g.rows.filter((x) => !x.inTop90));
+    expect(g.bands).toBeUndefined();
+  });
+
+  it("tổ khối: only the classes of that khối, with their LEVEL rank (n / classes of the level) and the level's Top 3", () => {
+    const ds = makeThptDataset();
+    const r = buildPeriodReport(ds, { period: THPT_WEEK, recipient: { kind: "grade", grade: 12 } }, THPT_TODAY);
+    if (r.ranking.kind !== "grade") throw new Error("grade ranking expected");
+    const g = r.ranking.grade!;
+    expect(g).toMatchObject({ grade: 12, label: "Khối 12", classCount: 2, rankCount: 6, avgScore: 98 });
+    expect(g.rows.map((x) => [x.classCode, x.rank, x.gradeClassCount])).toEqual([
+      ["12A1", 3, 6],
+      ["12A2", 5, 6],
+    ]);
+    expect(codes(g.leaders)).toEqual(["10A1", "11A1", "11A2", "12A1"]);
+    expect(r.detail.every((d) => d.classCode.startsWith("12"))).toBe(true);
+    // A khối without active class has no table.
+    const none = buildPeriodReport(ds, { period: THPT_WEEK, recipient: { kind: "grade", grade: 9 } }, THPT_TODAY);
+    expect(none.ranking).toMatchObject({ kind: "grade", grade: undefined });
+  });
+
+  it("lớp: level rank, level ranking group, previous rank from the previous level-wide ranking", () => {
+    const ds = makeThptDataset();
+    const r = buildPeriodReport(ds, { period: THPT_WEEK, recipient: { kind: "class", classCode: "12A2" } }, THPT_TODAY);
+    if (r.ranking.kind !== "class") throw new Error("class ranking expected");
+    const s = r.ranking.standing!;
+    expect(s.row).toMatchObject({ classCode: "12A2", grade: 12, rank: 5, gradeClassCount: 6, violationTurns: 1 });
+    expect(s.grade).toMatchObject({ grade: LEVEL_RANKING_GROUP, label: "Toàn cấp", classCount: 6 });
+    expect(s.previousRank).toBe(1);
+    const first = buildPeriodReport(ds, { period: THPT_WEEK, recipient: { kind: "class", classCode: "10A1" } }, THPT_TODAY);
+    if (first.ranking.kind !== "class") throw new Error("class ranking expected");
+    expect(first.ranking.standing?.row.rank).toBe(1);
+    expect(first.ranking.standing?.previousRank).toBe(findRankingRow(buildRanking(ds, THPT_PREVIOUS_WEEK, THPT_TODAY), "10A1")?.rank);
+    expect(first.ranking.standing?.previousRank).toBe(6);
+  });
+
+  it("a period without a counted week names no Top 3 (every class would tie)", () => {
+    const r = buildPeriodReport(makeThptDataset(), { period: { mode: "week", key: "2026-11-02" }, recipient: { kind: "bgh" } }, THPT_TODAY);
+    if (r.ranking.kind !== "level") throw new Error("level ranking expected");
+    expect(r.ranking.countedWeeks).toBe(0);
+    expect(r.ranking.grades[0].leaders).toEqual([]);
+  });
+
+  it("TH / THCS keep one table per khối, 'Dẫn đầu' and the khối wording", () => {
+    const th = buildPeriodReport({ ...makeThptDataset(), levelId: "TH" }, { period: THPT_WEEK, recipient: { kind: "bgh" } }, THPT_TODAY);
+    if (th.ranking.kind !== "level") throw new Error("level ranking expected");
+    expect(th.ranking.grades.map((g) => [g.grade, g.label, g.leadersLabel, g.classCount, g.rankCount])).toEqual([
+      [10, "Khối 10", "Dẫn đầu", 2, 2],
+      [11, "Khối 11", "Dẫn đầu", 2, 2],
+      [12, "Khối 12", "Dẫn đầu", 2, 2],
+    ]);
+    expect(rankingRuleNote(rankingRuleOf("TH"))).toBe("thứ hạng tính trên toàn bộ lớp của khối");
+    expect(rankingRuleNote(rankingRuleOf("THCS"))).toBe("thứ hạng tính trên toàn bộ lớp của khối");
+    expect(rankingRuleNote(rankingRuleOf("THPT"))).toBe(
+      "thứ hạng tính trên toàn bộ lớp của cấp; bằng điểm: ít lượt vi phạm xếp trên, bằng cả số lượt: đồng hạng; Top 3 gồm cả các lớp đồng hạng",
+    );
   });
 });

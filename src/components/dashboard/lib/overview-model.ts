@@ -6,7 +6,7 @@ import type { Tone } from "@/components/ui/tones";
 import { topIssues, type ClassStat, type IssueStat, type Kpis, type TrendPoint } from "@/lib/engine/analytics";
 import { countedRewards, filterRewards } from "@/lib/engine/filters";
 import { weeksInPeriod } from "@/lib/engine/period";
-import { findRankingRow } from "@/lib/engine/ranking";
+import { findRankingRow, LEVEL_RANKING_GROUP, rankingGroupLabel, rankingRuleOf } from "@/lib/engine/ranking";
 import { round2 } from "@/lib/engine/scoring";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { KPI_TERMS } from "@/lib/constants";
@@ -267,13 +267,28 @@ export interface RagSummary {
 
 const SEVERITY: Record<RagStatus, number> = { RED: 0, YELLOW: 1, GREEN: 2, GRAY: 3 };
 
-/** RAG counts over the ranking population (all active classes, or one grade). The class filter only highlights. */
+/**
+ * RAG counts over the ranking population (all active classes, or one khối). Filtered on the rows' own grade, so it also
+ * works on a level-wide table (THPT: one group, grade = LEVEL_RANKING_GROUP). The class filter only highlights.
+ */
 export function ragSummary(grades: readonly GradeRanking[], grade?: number): RagSummary {
-  const rows = grades.filter((g) => typeof grade !== "number" || g.grade === grade).flatMap((g) => g.rows);
+  const rows = grades.flatMap((g) => g.rows).filter((r) => typeof grade !== "number" || r.grade === grade);
   const counts: Record<RagStatus, number> = { GREEN: 0, YELLOW: 0, RED: 0, GRAY: 0 };
   for (const r of rows) counts[r.rag]++;
   const sorted = [...rows].sort((a, b) => SEVERITY[a.rag] - SEVERITY[b.rag] || b.avgWeeklyPenalty - a.avgWeeklyPenalty);
   return { counts, total: rows.length, rows: sorted, highlighted: rows.find((r) => r.highlighted) };
+}
+
+/* --------------------------------- Rank ---------------------------------- */
+
+/** Lower-case name of the ranking group of a class of `grade`: "khối 6", or "toàn cấp" when the level ranks as a whole (THPT). */
+export function rankingGroupText(levelId: LevelId, grade: number): string {
+  return rankingGroupLabel(rankingRuleOf(levelId).scope === "level" ? LEVEL_RANKING_GROUP : grade).toLocaleLowerCase("vi");
+}
+
+/** "Hạng 2/5 khối 6" | "Hạng 3/15 toàn cấp" (THPT): rank inside the class's ranking group (gradeClassCount = its size). */
+export function rankText(row: Pick<RankingRow, "rank" | "gradeClassCount" | "grade">, levelId: LevelId): string {
+  return `Hạng ${fmtNumber(row.rank)}/${fmtNumber(row.gradeClassCount)} ${rankingGroupText(levelId, row.grade)}`;
 }
 
 /* ----------------------------- Priority classes --------------------------- */

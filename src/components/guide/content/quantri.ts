@@ -181,7 +181,7 @@ const nhapXuat: GuideSection = {
       kind: "list",
       title: "Xuất dữ liệu",
       items: [
-        "**Xuất workbook Excel** – toàn bộ dữ liệu cấp học của năm học: các trang Nhập liệu, HS liên quan, DS Học sinh, Danh mục, Bảng điểm lỗi, Cấu hình, Lịch tuần, Điểm thưởng, Xếp hạng, BC Học sinh. **Kỳ báo cáo** chọn ở trên áp dụng cho trang Xếp hạng, BC Học sinh và bản chụp HTML. Bấm [[Xuất Excel]].",
+        "**Xuất workbook Excel** – toàn bộ dữ liệu cấp học của năm học: các trang Nhập liệu, HS liên quan, DS Học sinh, Danh mục, Bảng điểm lỗi, Cấu hình, Lịch tuần, Điểm thưởng, Xếp hạng, BC Học sinh. **Kỳ báo cáo** chọn ở trên áp dụng cho trang Xếp hạng, BC Học sinh và bản chụp HTML. Với THPT, trang Xếp hạng là một bảng toàn cấp sắp theo hạng, có cột Lượt vi phạm và dòng **Top 3 toàn cấp**. Bấm [[Xuất Excel]].",
         "**Bản chụp HTML (offline)** – báo cáo một trang mở được không cần mạng, để lưu trữ/chia sẻ. Bấm [[Tải bản chụp HTML]]. Không dùng file này để nhập lại.",
       ],
     },
@@ -242,7 +242,7 @@ const caiDat: GuideSection = {
       items: [
         "**Năm học & điểm nền**: Năm học (dạng 2026-2027), **Điểm nền / lớp / tuần**, **Tuần đầu tính thi đua** (phải là Thứ Hai), các **Học kỳ** (Bắt đầu – Kết thúc).",
         "**Ngưỡng cảnh báo RAG**: mức Vàng (“Cần chú ý”) và mức Đỏ (“Cần can thiệp”) theo điểm trừ trung bình mỗi tuần, **Độ tin cậy tối thiểu**, và công tắc **Phê duyệt ngưỡng cảnh báo**.",
-        "**Điểm thưởng & Top**: **Trạng thái điểm thưởng được tính** (mặc định chỉ Đã xác nhận; đề xuất của GVCN luôn chỉ được tính khi Đã xác nhận) và **Tỷ lệ Top (%)** (mặc định 90%).",
+        "**Điểm thưởng & Top**: **Trạng thái điểm thưởng được tính** (mặc định chỉ Đã xác nhận; đề xuất của GVCN luôn chỉ được tính khi Đã xác nhận) và **Tỷ lệ Top (%)** (mặc định 90%; ngưỡng tính theo số lớp của khối, THPT theo số lớp toàn cấp).",
         "**Cảnh báo học sinh**: Cảnh báo đỏ từ n lượt vi phạm trong 1 tuần (mặc định 3); Tái phạm từ n lượt trong vòng n tuần gần nhất (mặc định 2 lượt trong 4 tuần).",
         "**Thời hạn xử lý hành động**: số ngày cho mức Cao, Trung bình, Thấp.",
       ],
