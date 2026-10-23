@@ -275,6 +275,30 @@ export interface ActionHistoryEntry {
   note?: string;
 }
 
+/** One task of "Công tác phối hợp tuần/tháng mới" (Báo cáo tuần/tháng, section 5). */
+export interface ReportPlanItem {
+  content: string; // Nội dung công việc (required)
+  owner?: string; // Phụ trách / phối hợp ("GVCN khối 10", "Đoàn trường", …)
+  due?: string; // Thời hạn, free text ("Thứ Hai 27/10", "Cả tuần")
+}
+
+/**
+ * "Công tác phối hợp tuần mới" of a level for one report period (the plan written in the report of week W is the
+ * work of the week after W; for a month report: of the next month). Doc id = reportPlanId(levelId, mode, key).
+ */
+export interface ReportPlan {
+  id: string;
+  levelId: LevelId;
+  mode: "week" | "month";
+  key: string; // week: Monday yyyy-mm-dd; month: yyyy-mm (the REPORT period, not the next one)
+  items: ReportPlanItem[];
+  note?: string; // free paragraph under the list
+  rev: number; // incremented by every save (optimistic concurrency: PUT baseRev)
+  updatedAt: string;
+  updatedBy: string; // email
+  updatedByName: string;
+}
+
 export interface ActionItem {
   id: string; // `${levelId}_${code}`
   code: string; // "HD-20261021-001"
@@ -331,7 +355,8 @@ export type AuditAction =
   | "REBUILD_DIGESTS"
   | "CREATE_INSPECTION"
   | "UPDATE_INSPECTION"
-  | "DELETE_INSPECTION";
+  | "DELETE_INSPECTION"
+  | "UPDATE_REPORT_PLAN";
 
 export interface AuditLog {
   id: string;

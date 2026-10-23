@@ -61,6 +61,12 @@ describe("summarizeAudit", () => {
     expect(fieldLabel("earlyWarning")).toBe("Ngưỡng cảnh báo sớm");
   });
 
+  it("report plans: report period · number of tasks (never the raw detail keys)", () => {
+    expect(s("UPDATE_REPORT_PLAN", { mode: "week", key: "2026-10-19", items: 3 })).toBe("Báo cáo tuần 19/10 – 25/10/2026 · 3 công việc");
+    expect(s("UPDATE_REPORT_PLAN", { mode: "month", key: "2026-10", items: 0 })).toBe("Báo cáo tháng 10/2026 · 0 công việc");
+    expect(s("UPDATE_REPORT_PLAN", { mode: "week", key: "x", items: 2 })).toBe("2 công việc");
+  });
+
   it("is defensive and short", () => {
     expect(s("UPDATE_CONFIG")).toBe("");
     expect(s("REBUILD_DIGESTS", { incidents: 12, weeks: 5 })).toBe("incidents: 12 · weeks: 5");

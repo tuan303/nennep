@@ -32,6 +32,8 @@ import type {
   OkResponse,
   RankingsResponse,
   RebuildSchema,
+  ReportPlanPutInput,
+  ReportPlanResponse,
   ResetLevelSchema,
   RestoreResetSchema,
   RewardCreateInput,
@@ -66,6 +68,7 @@ import type {
   LevelDataset,
   LevelId,
   PeriodMode,
+  ReportPlan,
   Reward,
   SchoolWeek,
   Student,
@@ -255,6 +258,16 @@ export const api = {
 
   /** Audit an export done in the browser (EXPORT_EXCEL). */
   exportsLog: (input: ExportLogInput) => post<OkResponse>("/api/exports/log", input),
+
+  /**
+   * "Công tác phối hợp tuần/tháng mới" of Báo cáo tuần/tháng (not part of LevelDataset). `key` = the REPORT period
+   * (week: Monday yyyy-mm-dd; month: yyyy-mm). PUT replaces the whole plan; send `baseRev: plan?.rev ?? 0` (409 when
+   * someone saved in between).
+   */
+  reportPlans: {
+    get: (levelId: LevelId, mode: ReportPlan["mode"], key: string) => get<ReportPlanResponse>("/api/report-plans", { level: levelId, mode, key }),
+    put: (input: ReportPlanPutInput) => put<ReportPlan>("/api/report-plans", input),
+  },
 
   actions: {
     list: (levelId: LevelId) => get<ListResponse<ActionItem>>("/api/actions", { level: levelId }),

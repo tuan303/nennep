@@ -3,7 +3,7 @@
  * JSON written by many services, so every read is defensive.
  */
 import { ACTION_STATUS_LABELS, PRIORITY_LABELS, ROLE_LABELS, STUDENT_STATUS_LABELS } from "@/lib/constants";
-import { formatDateVN, formatNumberVN, isIsoDate } from "@/lib/engine";
+import { formatDateVN, formatNumberVN, isIsoDate, periodLabel } from "@/lib/engine";
 import type { AuditLog } from "@/lib/types";
 import { EXPORT_KIND_LABELS } from "./audit-labels";
 
@@ -209,6 +209,19 @@ function inspectionText(d: Detail): string | undefined {
   ]);
 }
 
+/** "Báo cáo tuần 19/10 – 25/10/2026 · 3 công việc" (UPDATE_REPORT_PLAN; `key` = the report period, not the planned one). */
+function reportPlanText(d: Detail): string {
+  const key = str(d.key);
+  const period =
+    key && d.mode === "week" && isIsoDate(key)
+      ? periodLabel({ mode: "week", key }, [])
+      : key && d.mode === "month" && /^\d{4}-\d{2}$/.test(key)
+        ? periodLabel({ mode: "month", key }, [])
+        : undefined;
+  const items = numOf(d.items);
+  return join([period && `Báo cáo ${period.toLocaleLowerCase("vi")}`, items !== undefined ? `${formatNumberVN(items)} công việc` : undefined]);
+}
+
 function genericText(d: Detail): string {
   return Object.entries(d)
     .filter(([, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
@@ -340,6 +353,8 @@ export function summarizeAudit(log: Pick<AuditLog, "action" | "detail" | "ip">):
         return clip(join([str(d.code), `Đánh dấu không trùng với ${others.join(", ") || "sự việc khác"}`]));
       }
       return clip(join([str(d.code), changesText(d)]) || genericText(d));
+    case "UPDATE_REPORT_PLAN":
+      return clip(reportPlanText(d) || genericText(d));
     case "UPDATE_REWARD":
     case "UPDATE_STUDENT":
     case "UPDATE_CONFIG":

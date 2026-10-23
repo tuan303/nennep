@@ -122,6 +122,14 @@ Analytics
 - dataset(levelId, etag?): { status: 200; dataset; etag } | { status: 304 }
 - rankings(q: RankingsQuery): RankingsResponse
 
+reportPlans ("Công tác phối hợp tuần/tháng mới" = section 5 of Báo cáo tuần/tháng; not part of LevelDataset, no meta/versions bump)
+- get(levelId, mode: "week" | "month", key): ReportPlanResponse { plan: ReportPlan | null } – GET /api/report-plans?level&mode&key;
+  `key` = the REPORT period (week: its Monday yyyy-mm-dd; month: yyyy-mm), the plan is about the week / month after it.
+  `view.dashboard` + level access (GVCN too).
+- put(ReportPlanPutInput { levelId, mode, key, items: { content, owner?, due? }[] (≤ 30), note?, baseRev? }): ReportPlan –
+  `report.plan` (ADMIN, EDITOR) + level; replaces the whole plan (empty items + "" note clears it); send
+  `baseRev: plan?.rev ?? 0` → 409 CONFLICT when someone saved in between (show the message, offer a reload).
+
 incidents
 - create(IncidentCreateInput): Incident – REQ_V2: optional `notDuplicateOf?: string[]` ("Không trùng, vẫn lưu" in the duplicate dialog)
 - get(id): Incident
@@ -331,6 +339,12 @@ ROUTES
   - Each `page.tsx` is a small "use client" page inside the right RequirePermission (/toan-truong also uses LevelGuard minLevels=2).
   - Each route folder also has a `layout.tsx` that only exports the tab title; keep it.
 - REQ_V2 tab/view params: /nhap-lieu `?tab=kiem-tra` (Đợt kiểm tra), /xep-hang `?view=bang|bien-dong|bao-phu`, /du-lieu `?tab=trung-lap` (Có thể trùng), /hanh-dong `?tab=canh-bao`, /cai-dat `?tab=canh-bao`, /bao-cao `?mode=week|month&key=…&to=bgh|khoi-N|lop-X&detail=0|1`.
+- /bao-cao document sections: 1 Chỉ số chính · 2 Xếp hạng thi đua · 3 Vấn đề nổi bật · 4 Cảnh báo sớm · 5 Công tác phối hợp tuần mới /
+  tháng mới (always printed; "Chưa cập nhật công tác phối hợp." when empty) · 6 Chi tiết sự việc (`detail=1`). Section 5 per level +
+  report period: `useReportPlan(levelId, period, can("report.plan"))` (src/components/report/use-report-plan.ts) loads it and holds the
+  editor draft; `ReportPlanEditor` (above the A4 preview, `report.plan` only) edits it and `ReportDocument({ …, plan })` prints the
+  draft for an editor (WYSIWYG) and the saved plan for everyone else. Pure helpers (next period label, draft ↔ PUT body, validation)
+  in src/components/report/lib/report-plan.ts. Unsaved plan edits are guarded (`useLeaveGuard`; period changes go through `requestLeave`).
 - Also: `/manifest.webmanifest`, `/icon.svg`, `/apple-icon.png`, `/icons/*.png`.
 
 ### WIDGETS (public API)

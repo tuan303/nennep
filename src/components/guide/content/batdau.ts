@@ -196,6 +196,7 @@ const vaiTroQuyen: GuideSection = {
         ["Xóa và khôi phục bản ghi", "✓", "Chỉ xóa đợt kiểm tra của mình, trong 24 giờ", "–", "–"],
         ["Phản hồi của GVCN", "✓", "–", "–", "Lớp mình"],
         ["Biện pháp khắc phục và trạng thái xử lý", "✓", "✓", "–", "Lớp mình"],
+        ["Ghi công tác phối hợp tuần/tháng mới (Báo cáo tuần/tháng)", "✓", "✓", "–", "–"],
         ["Xem Hành động (tóm tắt, cảnh báo sớm, sổ hành động)", "✓", "✓", "✓", "–"],
         ["Tạo và cập nhật hành động", "✓", "–", "–", "–"],
         ["Dữ liệu & rà soát", "✓", "✓", "–", "–"],

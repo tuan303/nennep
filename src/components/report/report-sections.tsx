@@ -2,7 +2,7 @@
  * Sections of the A4 report document. Plain HTML (no canvas) so the page prints identically on every browser;
  * colour is never the only signal (text labels next to every badge / bar).
  */
-import type { ReactNode } from "react";
+import { Fragment, memo, type ReactNode } from "react";
 import { Badge, cn } from "@/components/ui";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { RAG_LABELS } from "@/lib/constants";
@@ -21,6 +21,7 @@ import {
 import type { RankingRow } from "@/lib/types";
 import { SEVERITY_LABEL, SEVERITY_TONE } from "../dashboard/lib/warning-model";
 import { groupShares, type ReportDetailRow, type ReportGradeRanking, type ReportKpi, type ReportRanking } from "./lib/report-model";
+import { textLines, type ReportPlanContent } from "./lib/report-plan";
 
 export function ReportSection({ index, title, children, note }: { index: number; title: string; children: ReactNode; note?: ReactNode }) {
   return (
@@ -464,11 +465,78 @@ export function WarningsBlock({ warnings, max = 12 }: { warnings: EarlyWarning[]
   );
 }
 
+/* --------------------------- Coordination plan ---------------------------- */
+
+/** Multi-line text with <br> between lines (the print stylesheet resets white-space in table cells). */
+function MultiLine({ text }: { text: string }) {
+  return (
+    <>
+      {textLines(text).map((line, i) => (
+        <Fragment key={i}>
+          {i > 0 ? <br /> : null}
+          {line}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/** Free text typed by staff may hold a long link or code: break it anywhere rather than push the table off the A4 page. */
+const TD_TEXT = cn(TD, "[overflow-wrap:anywhere]");
+
+/**
+ * "Công tác phối hợp tuần/tháng mới": the tasks of the next period (STT | Nội dung công việc | Phụ trách / phối hợp |
+ * Thời hạn) and the note. "loading" / "error" while the stored plan is not known.
+ */
+export function PlanBlock({ plan }: { plan?: ReportPlanContent | "loading" | "error" }) {
+  if (plan === "loading") return <Empty>Đang tải công tác phối hợp…</Empty>;
+  if (plan === "error") return <Empty>Chưa tải được công tác phối hợp.</Empty>;
+  const items = plan?.items ?? [];
+  const note = plan?.note?.trim();
+  if (items.length === 0 && !note) return <Empty>Chưa cập nhật công tác phối hợp.</Empty>;
+  return (
+    <>
+      {items.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse print:min-w-0">
+            <thead>
+              <tr>
+                <th className={cn(THN, "w-px text-right")}>STT</th>
+                <th className={THN}>Nội dung công việc</th>
+                <th className={cn(THN, "w-[30%]")}>Phụ trách / phối hợp</th>
+                <th className={cn(THN, "w-[18%]")}>Thời hạn</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, idx) => (
+                <tr key={idx}>
+                  <td className={cn(TDN, "text-right font-semibold")}>{fmtNumber(idx + 1)}</td>
+                  <td className={TD_TEXT}>
+                    <MultiLine text={item.content} />
+                  </td>
+                  <td className={TD_TEXT}>{item.owner || "–"}</td>
+                  <td className={TD_TEXT}>{item.due || "–"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {note ? (
+        <p className="text-[12.5px] leading-5 text-slate-800 [overflow-wrap:anywhere]">
+          <span className="font-semibold">Ghi chú:</span> <MultiLine text={note} />
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 /* --------------------------------- Detail --------------------------------- */
 
 const DETAIL_HEAD = ["Ngày", "Mã sự việc", "Lớp", "Mã lỗi – Nội dung", "Nhóm", "Phạm vi", "Đối tượng", "Mã HS", "Lượt", "Điểm", "Trạng thái", "Khắc phục"];
 
-export function DetailBlock({ rows }: { rows: ReportDetailRow[] }) {
+/** Memoised: the document re-renders while section 5 is being typed, the register (often long) does not change. */
+export const DetailBlock = memo(function DetailBlock({ rows }: { rows: ReportDetailRow[] }) {
   if (rows.length === 0) return <Empty>Không có sự việc trong kỳ.</Empty>;
   return (
     <>
@@ -528,4 +596,4 @@ export function DetailBlock({ rows }: { rows: ReportDetailRow[] }) {
       </div>
     </>
   );
-}
+});

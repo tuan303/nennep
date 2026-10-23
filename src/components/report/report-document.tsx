@@ -1,6 +1,7 @@
 /**
  * The A4 report document (REQ_V2 §6.5): school header, title, addressee, KPI block, ranking of the scope, top issues +
- * groups, early warnings, optional detail register and signatures. Screen = preview of the printed page.
+ * groups, early warnings, the coordination tasks of the next week / month, optional detail register and signatures.
+ * Screen = preview of the printed page.
  */
 import { LogoMark } from "@/components/app/shell/logo";
 import { fmtNumber } from "@/lib/client/format";
@@ -8,8 +9,9 @@ import { SCHOOL_NAME } from "@/lib/constants";
 import { formatDateVN } from "@/lib/engine/dates";
 import { previousPeriodNoun } from "../ranking/lib/ranking-view";
 import { rankingRuleNote, type PeriodReport } from "./lib/report-model";
+import { nextPeriodLabel, planPeriodOf, planTitle, type ReportPlanContent } from "./lib/report-plan";
 import { REPORT_DOC_ATTR, ReportSignatures } from "./report-print";
-import { DetailBlock, IssuesBlock, KpiBlock, RankingBlock, ReportSection, ScoreBandLegend, WarningsBlock } from "./report-sections";
+import { DetailBlock, IssuesBlock, KpiBlock, PlanBlock, RankingBlock, ReportSection, ScoreBandLegend, WarningsBlock } from "./report-sections";
 
 export interface ReportDocumentProps {
   report: PeriodReport;
@@ -21,10 +23,16 @@ export interface ReportDocumentProps {
   today: string;
   /** "Người lập báo cáo" (display name of the viewer). */
   preparedBy?: string;
+  /**
+   * "Công tác phối hợp tuần/tháng mới" to print: the editor's draft (WYSIWYG) or the saved plan; "loading" / "error"
+   * while the stored plan is not known. Omitted → printed as not filled in yet.
+   */
+  plan?: ReportPlanContent | "loading" | "error";
 }
 
-export function ReportDocument({ report, detail, topRatio, today, preparedBy }: ReportDocumentProps) {
+export function ReportDocument({ report, detail, topRatio, today, preparedBy, plan }: ReportDocumentProps) {
   const previousNoun = report.previousLabel ? previousPeriodNoun(report.period.mode) : undefined;
+  const planPeriod = planPeriodOf(report.period);
   let index = 0;
   const next = () => ++index;
   return (
@@ -85,6 +93,12 @@ export function ReportDocument({ report, detail, topRatio, today, preparedBy }: 
       <ReportSection index={next()} title="Cảnh báo sớm">
         <WarningsBlock warnings={report.warnings} />
       </ReportSection>
+
+      {planPeriod ? (
+        <ReportSection index={next()} title={planTitle(planPeriod.mode)} note={nextPeriodLabel(planPeriod)}>
+          <PlanBlock plan={plan} />
+        </ReportSection>
+      ) : null}
 
       {detail ? (
         <ReportSection index={next()} title="Chi tiết sự việc" note={`${fmtNumber(report.detail.length)} sự việc, xếp theo ngày và mã sự việc.`}>

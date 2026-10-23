@@ -201,7 +201,8 @@ export type Permission =
   | "data.reset"
   | "reward.propose" // open Điểm thưởng + create rewards; without reward.create (GVCN): own classes only, status "Mới ghi nhận", proposed = true
   | "incident.remediate" // biện pháp xử lý/khắc phục + status via POST /api/incidents/:id/feedback, any class of an accessible level
-  | "inspection.manage"; // ghi nhận / sửa / xóa đợt kiểm tra
+  | "inspection.manage" // ghi nhận / sửa / xóa đợt kiểm tra
+  | "report.plan"; // "Công tác phối hợp tuần/tháng mới" of Báo cáo tuần/tháng (PUT /api/report-plans)
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
@@ -227,6 +228,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "reward.propose",
     "incident.remediate",
     "inspection.manage",
+    "report.plan",
   ],
   EDITOR: [
     "view.dashboard",
@@ -239,6 +241,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "reward.propose",
     "incident.remediate",
     "inspection.manage",
+    "report.plan",
   ],
   VIEWER: ["view.dashboard", "view.allClassesDetail", "actions.view"],
   GVCN: ["view.dashboard", "incident.gvcnFeedback", "reward.propose"],

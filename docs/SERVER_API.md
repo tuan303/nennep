@@ -295,6 +295,18 @@ Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ l
   - Edit/delete: `inspection.manage` + level; `assertCanEditRecord` (ADMIN any, EDITOR own ≤ 24 h); PATCH `baseRev` → 409 `INSPECTION_MSG.stale`;
     no change → no write; soft delete (409 when already deleted; edits of a deleted round → 409). No restore endpoint.
   - Not scored; ignored by reset-level, `checkRemovedWeeks` (calendar changes) and the workbook import/export.
+- `report-plans.ts` ("Công tác phối hợp tuần/tháng mới", section 5 of Báo cáo tuần/tháng): `getReportPlan(user, query) → ReportPlan | null`,
+  `saveReportPlan(ctx, input) → ReportPlan`, `assertReportPeriod(mode, key)`, `reportPlanRef(id)`, `REPORT_PLAN_MSG`, types `ReportPlanQuery`,
+  `ReportPlanPutData`.
+  - One doc per level + REPORT period: `reportPlans/{level}_{mode}_{key}` (`reportPlanId`; week key = the report week's Monday, month key =
+    `yyyy-mm` of the report month; the content is the work of the following week/month). Not part of `LevelDataset`: no digest, no version bump.
+  - Period key (read and write, 400): a week key must be a real Monday (`Tuần báo cáo phải bắt đầu từ Thứ Hai: ngày 20/10/2026 là Thứ Ba.`),
+    a month key `yyyy-mm` with month 01–12 (`Tháng không hợp lệ (yyyy-mm).`).
+  - `saveReportPlan` (`report.plan` + level) replaces items + note in one transaction: `(baseRev ?? 0) ≠ (stored rev ?? 0)` → 409
+    `REPORT_PLAN_MSG.stale` (an omitted `baseRev` means "no plan yet", so it conflicts with any stored plan); items trimmed, empty `owner`/`due`
+    and `note` omitted; `rev + 1`, `updatedAt`, `updatedBy` (email), `updatedByName`; audit `UPDATE_REPORT_PLAN` (entity `"reportPlan"`,
+    entityId = doc id, `detail: { mode, key, items: <count> }`). An empty list without note is a valid save: the doc stays with `items: []`
+    so the rev chain continues. Same items + note as the stored plan → nothing written, the stored plan is returned (same `rev`, no audit).
 - `evidence.ts`: `saveEvidence(ctx, input) → id` (`incident.create | reward.create | reward.propose` + level), `readEvidence(user, id)`, `decodeImageDataUrl(dataUrl)` (JPEG/PNG/WebP, magic bytes checked, ≤ `EVIDENCE_MAX_BYTES` = 700 KB), `EvidenceDoc`.
 - `session.ts`: `recordLogin(user, ip?) → MeResponse` (sets `lastLoginAt` and audits LOGIN in one batch), `recordLogout(user, ip?)`,
   `recordLoginFailed(email, reason, ip) → "recorded" | "invalid-email" | "duplicate" | "daily-cap" | "error"`: anonymous, so bounded –
@@ -334,6 +346,8 @@ Editors cannot modify a reward that is already "Đã xác nhận". Changing a st
 | `POST /api/inspections` | inspection.manage + level | `InspectionCreateSchema` → 201 `Inspection` (200 + existing round for a repeated `clientRequestId`) |
 | `PATCH /api/inspections/:id` | inspection.manage; ADMIN any, EDITOR own ≤ 24 h | `InspectionUpdateSchema` (+ `baseRev` → 409) → `Inspection` |
 | `DELETE /api/inspections/:id` | inspection.manage; ADMIN any, EDITOR own ≤ 24 h | body `{ reason }` → `{ ok: true }`; soft delete, 409 if already deleted |
+| `GET /api/report-plans?level&mode&key` | view.dashboard + level (GVCN: levels of their classes) | `ReportPlanQuerySchema` (`level` → `levelId`; Monday / `yyyy-mm` key, else 400) → `ReportPlanResponse { plan }`, `null` when nothing was saved |
+| `PUT /api/report-plans` | report.plan (ADMIN, EDITOR) + level | `ReportPlanPutSchema` (≤ 30 items, `baseRev` → 409) → `ReportPlan`; audit UPDATE_REPORT_PLAN (see `report-plans.ts`) |
 | `GET /api/evidence/:id` | level access | bytes, `Cache-Control: private, max-age=86400, immutable` |
 | `GET /api/health` | public | `{ ok: true, time }` |
 
@@ -363,7 +377,8 @@ Tips:
 - To test the 24 h window, update `createdAt` on the stored doc.
 - The emulator uses gRPC. REST transport is used only against real Firestore.
 - Run: `npx vitest run src/lib/server/__tests__/` (server-core files are `core-*.test.ts`; REQ_V2 server rules are covered by
-  `v2-{inspections,rewards,feedback,duplicates,settings}.test.ts`, project ids `demo-test-v2-*`).
+  `v2-{inspections,rewards,feedback,duplicates,settings}.test.ts`, project ids `demo-test-v2-*`; the report plans by `report-plans.test.ts`,
+  `demo-test-report-plans`).
 - `setupTestProject` also clears the dataset memo (`invalidateDatasetCache`) and the LOGIN_FAILED state. After writing digests directly
   (without a version bump) call `invalidateDatasetCache()`.
 - Never call the Auth emulator's keyed client endpoints (`/v1/accounts:signUp?key=…`, `signInWithPassword`) from tests: they target the
@@ -387,6 +402,7 @@ Composite indexes:
 | students | levelId ASC, classCode ASC, name ASC | class rosters ordered by name |
 
 REQ_V2 adds no composite index: `rebuildInspectionDigests` queries `inspections` by `levelId` only (automatic single-field index).
+`reportPlans` are only read by document id (no query, no index).
 Single-field index exemptions (large or opaque values that are never queried): `digests.items/classes/catalog/weeks/config`,
 `evidence.data`, `auditLogs.detail`, `incidents.dataIssues`, `incidents.detail`, `students.history`.
 If you add a query with an inequality or `orderBy` on another field, add its index here. This file belongs to server-core, so ask its owner to add it.

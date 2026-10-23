@@ -45,6 +45,7 @@ export const COL = {
   importBatches: "importBatches",
   digests: "digests",
   meta: "meta",
+  reportPlans: "reportPlans",
 } as const;
 
 export const SUB = { classes: "classes", catalog: "catalog", weeks: "weeks" } as const;
@@ -62,3 +63,5 @@ export const digestIncidentsWeekId = (levelId: LevelId, weekStart: string) => `$
 export const digestInspectionsMonthId = (levelId: LevelId, month: string) => `${levelId}__ins__${month}`;
 export const counterId = (prefix: "NN" | "KT" | "HD" | "DKT", levelId: LevelId, yyyymmdd: string) => `${prefix}_${levelId}_${yyyymmdd}`;
 export const idempotencyId = (uid: string, clientRequestId: string) => `${uid}_${clientRequestId}`;
+/** reportPlans/{id}: "THPT_week_2026-10-19" | "THCS_month_2026-10". */
+export const reportPlanId = (levelId: LevelId, mode: "week" | "month", key: string) => `${levelId}_${mode}_${key}`;

@@ -65,6 +65,8 @@
  *  POST   /api/admin/reset-level            → ResetLevelSchema            → { batchId: string; incidents: number; rewards: number } (data.reset)
  *  POST   /api/admin/restore-reset          → RestoreResetSchema          → { incidents: number; rewards: number } (data.reset)
  *  POST   /api/admin/evidence                → EvidenceMaintenanceSchema   → EvidenceMaintenanceResult (data.reset; dryRun = statistics only)
+ *  GET    /api/report-plans?level&mode&key  → –                           → ReportPlanResponse       (view.dashboard + level access; GVCN too)
+ *  PUT    /api/report-plans                 → ReportPlanPutSchema         → ReportPlan               (report.plan + level; audit UPDATE_REPORT_PLAN; baseRev → 409)
  *  GET    /api/health                       → –                           → { ok: true; time: string }
  */
 import { z } from "zod";
@@ -76,6 +78,7 @@ import type {
   GradeRanking,
   LevelId,
   Period,
+  ReportPlan,
   Student,
   StudentLite,
   UserProfile,
@@ -522,6 +525,41 @@ export type InspectionCreateInput = z.input<typeof InspectionCreateSchema>;
 
 export const InspectionUpdateSchema = InspectionCreateSchema.omit({ levelId: true, clientRequestId: true }).partial().extend({ baseRev: zBaseRev });
 export type InspectionUpdateInput = z.input<typeof InspectionUpdateSchema>;
+
+/** Key of a report period: week → Monday "yyyy-mm-dd", month → "yyyy-mm". */
+const zReportPeriod = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("week"), key: zIsoDate }),
+  z.object({ mode: z.literal("month"), key: z.string().regex(/^\d{4}-\d{2}$/, "Tháng không hợp lệ (yyyy-mm).") }),
+]);
+
+export const ReportPlanItemSchema = z.object({
+  content: z.string().trim().min(1, "Nhập nội dung công việc").max(500),
+  owner: zText(120).optional(),
+  due: zText(60).optional(),
+});
+
+/** Query of GET /api/report-plans (level + period of the report). */
+export const ReportPlanQuerySchema = z.object({ levelId: zLevelId }).and(zReportPeriod);
+
+/**
+ * PUT /api/report-plans – replaces the whole plan of a level & report period (an empty list + no note clears it).
+ * The week key must be a Monday (400 otherwise). `baseRev` = rev of the plan the editor started from (0 / omitted for
+ * a new plan); a different stored rev → 409 (someone saved in between).
+ */
+export const ReportPlanPutSchema = z
+  .object({
+    levelId: zLevelId,
+    items: z.array(ReportPlanItemSchema).max(30, "Tối đa 30 công việc"),
+    note: zText(2000).optional(),
+    baseRev: zBaseRev,
+  })
+  .and(zReportPeriod);
+export type ReportPlanPutInput = z.input<typeof ReportPlanPutSchema>;
+
+/** GET /api/report-plans: the stored plan, or null when nothing was written for that period yet. */
+export interface ReportPlanResponse {
+  plan: ReportPlan | null;
+}
 
 /* ------------------------------ early warning ----------------------------- */
 

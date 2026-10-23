@@ -290,7 +290,7 @@ const baoCao: GuideSection = {
   group: "xem",
   roles: "all",
   route: "/bao-cao",
-  summary: "Báo cáo nền nếp khổ A4 theo tuần hoặc tháng, gửi Ban Giám hiệu, tổ khối hoặc GVCN: in, lưu PDF và xuất Excel chi tiết.",
+  summary: "Báo cáo nền nếp khổ A4 theo tuần hoặc tháng, gửi Ban Giám hiệu, tổ khối hoặc GVCN: công tác phối hợp tuần/tháng mới, in, lưu PDF và xuất Excel chi tiết.",
   blocks: [
     {
       kind: "steps",
@@ -300,8 +300,23 @@ const baoCao: GuideSection = {
         "Ở **Kỳ báo cáo**, chọn [[Tuần]] hoặc [[Tháng]] rồi chọn tuần/tháng cụ thể.",
         "Ở **Người nhận**, chọn **Ban Giám hiệu – (cấp học)**, **Tổ khối N** hoặc **GVCN lớp X**. GVCN chỉ chọn được các lớp chủ nhiệm.",
         "Bật/tắt [[Kèm bảng chi tiết]] (mặc định bật với tổ khối và GVCN, tắt với BGH).",
+        "Quản trị và Cán bộ nền nếp: ghi **Công tác phối hợp tuần mới** (báo cáo tháng: **tháng mới**) ở thẻ ngay dưới các nút điều khiển rồi bấm [[Lưu]] – xem phần dưới.",
         "Xem trước bản A4 ngay trên màn hình, rồi bấm [[In / Lưu PDF]]. Quản trị có thêm [[Xuất Excel chi tiết]].",
       ],
+    },
+    {
+      kind: "steps",
+      title: "Ghi công tác phối hợp tuần mới / tháng mới",
+      items: [
+        "Chọn kỳ báo cáo. Thẻ **Công tác phối hợp tuần mới** ghi rõ kỳ được giao việc: báo cáo tuần 19/10 – 25/10 → **Tuần 26/10 – 01/11**; báo cáo tháng 10 → **Tháng 11**.",
+        "Bấm [[Thêm công việc]] cho mỗi việc: **Nội dung công việc** (bắt buộc, có thể xuống dòng), **Phụ trách / phối hợp** (ví dụ “GVCN khối 6, Đội TNTP”) và **Thời hạn** (ví dụ “Thứ Hai 26/10”, “Cả tuần”). Dùng nút mũi tên để đổi thứ tự, nút thùng rác để xóa; tối đa 30 công việc.",
+        "Thêm **Ghi chú** nếu cần (in dưới bảng công việc).",
+        "Bản A4 bên dưới hiện ngay nội dung đang gõ; nhãn **Chưa lưu** nhắc còn thay đổi chưa lưu. Bấm [[Lưu]] (hoặc Ctrl + Enter) để lưu, [[Hoàn tác]] để quay về bản đã lưu. Dòng “Đã lưu lúc …” cho biết lần lưu cuối và người lưu.",
+      ],
+    },
+    {
+      kind: "note",
+      text: "Công tác phối hợp lưu theo **cấp học và kỳ báo cáo**, dùng chung cho mọi người nhận (BGH, tổ khối, GVCN) của kỳ đó. Chỉ **Quản trị** và **Cán bộ nền nếp** sửa được; **Người xem** và **GVCN** thấy nội dung đã lưu trong mục 5 của báo cáo. Nếu người khác vừa lưu cùng kỳ, phần mềm báo và mời [[Tải lại bản mới nhất]] – thay đổi chưa lưu của bạn sẽ được thay bằng bản mới, hãy nhập lại nếu cần. Đổi kỳ báo cáo, đổi cấp học hoặc rời trang khi còn thay đổi chưa lưu, phần mềm sẽ hỏi trước.",
     },
     {
       kind: "list",
@@ -312,7 +327,8 @@ const baoCao: GuideSection = {
         "**Xếp hạng thi đua**: BGH – tóm tắt mọi khối; tổ khối – bảng của khối; GVCN – thứ hạng của lớp trong khối và nhóm Top (THCS: nhóm Dẫn đầu / Top >90% / Top 51%–90% / Top <51%, xem bảng dưới).",
         "**THPT**: thứ hạng tính chung toàn cấp (tổ khối thấy các lớp của khối với **hạng toàn cấp**), có cột **Lượt vi phạm** – bằng điểm thì lớp ít lượt vi phạm hơn xếp trên – và báo cáo nêu **Top 3 toàn cấp** (gồm cả lớp đồng hạng). Xem [Điểm thi đua, xếp hạng và Top 90%](#quy-tac-thi-dua).",
         "**Vấn đề nổi bật** (5 lỗi nhiều nhất, theo nhóm lỗi) và **Cảnh báo sớm** của phạm vi.",
-        "**Chi tiết sự việc** (khi bật): Ngày, Mã sự việc, Lớp, Mã lỗi – Nội dung, Nhóm, Phạm vi, Đối tượng, Mã HS, Lượt, Điểm, Trạng thái, Khắc phục.",
+        "**5. Công tác phối hợp tuần mới / tháng mới**: bảng STT, Nội dung công việc, Phụ trách / phối hợp, Thời hạn và ghi chú; chưa ghi thì in “Chưa cập nhật công tác phối hợp.”.",
+        "**6. Chi tiết sự việc** (khi bật): Ngày, Mã sự việc, Lớp, Mã lỗi – Nội dung, Nhóm, Phạm vi, Đối tượng, Mã HS, Lượt, Điểm, Trạng thái, Khắc phục.",
         "Ô ký **Người lập báo cáo** và **Xác nhận của BGH**.",
       ],
     },
