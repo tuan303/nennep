@@ -73,12 +73,6 @@ export function KpiBlock({ kpis, previousNoun }: { kpis: ReportKpi[]; previousNo
 const TH = "border-b border-border-strong bg-surface-2 px-2 py-1.5 text-left text-[11.5px] font-semibold text-slate-600";
 const TD = "border-b border-border px-2 py-1.5 align-top text-[12.5px] text-slate-800";
 
-function codes(rows: readonly RankingRow[], max = 6): string {
-  if (rows.length === 0) return "–";
-  const head = rows.slice(0, max).map((r) => r.classCode);
-  return rows.length > max ? `${head.join(", ")} và ${rows.length - max} lớp khác` : head.join(", ");
-}
-
 /** "6A01, 6A02 (103)" – every leader shares the top score. */
 function leadersText(rows: readonly RankingRow[]): string {
   return rows.length ? `${rows.map((r) => r.classCode).join(", ")} (${fmtNumber(rows[0].score)})` : "–";
@@ -99,40 +93,99 @@ function bandText(grade: ReportGradeRanking, classCode: string): string {
   return band && grade.bands ? scoreBandLabel(band, grade.bands.rule) : "–";
 }
 
-/** THCS: classes of each grade per score band (Dẫn đầu · Top >90% · Top 51%–90% · Top <51%). */
+/* Ranking tables: headers and figures never wrap; class lists are chips that wrap between classes only. */
+const THN = cn(TH, "whitespace-nowrap");
+const TDN = cn(TD, "num whitespace-nowrap");
+const CHIP = "num inline-flex items-center whitespace-nowrap rounded-md px-1.5 py-px text-[11.5px] font-semibold leading-[18px] ring-1 ring-inset";
+const CHIP_TONE: Record<ScoreBand | "NEUTRAL" | "RED", string> = {
+  LEADER: "bg-star-100 text-star-900 ring-star-400/70",
+  HIGH: "bg-ok-soft text-ok-strong ring-ok/30",
+  MIDDLE: "bg-warn-soft text-warn-strong ring-warn/35",
+  LOW: "bg-bad-soft text-bad-strong ring-bad/30",
+  NEUTRAL: "bg-surface-2 text-slate-700 ring-border-strong",
+  RED: "bg-bad-soft text-bad-strong ring-bad/30",
+};
+
+function ClassChips({ rows, tone, withScore }: { rows: readonly RankingRow[]; tone: keyof typeof CHIP_TONE; withScore?: boolean }) {
+  if (rows.length === 0) return <span className="text-slate-400">–</span>;
+  return (
+    <ul className="flex flex-wrap gap-1">
+      {rows.map((r) => (
+        <li key={r.classCode} className={cn(CHIP, CHIP_TONE[tone])}>
+          {r.classCode}
+          {withScore ? <span className="ml-1 font-normal opacity-80">{fmtNumber(r.score)}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Band of one class as a chip (khối table). */
+function BandChip({ grade, classCode }: { grade: ReportGradeRanking; classCode: string }) {
+  const band = bandOf(grade, classCode);
+  if (!band || !grade.bands) return <span className="text-slate-400">–</span>;
+  return <span className={cn(CHIP, CHIP_TONE[band])}>{scoreBandLabel(band, grade.bands.rule)}</span>;
+}
+
+const BAND_DOT: Record<ScoreBand, string> = { LEADER: "bg-star-500", HIGH: "bg-ok", MIDDLE: "bg-warn", LOW: "bg-bad" };
+
+/**
+ * THCS: classes of each grade per score band. One wide "Phân nhóm lớp" cell per grade with the 4 bands stacked
+ * (label left, class chips right), so the chips get the full width instead of 4 narrow columns.
+ */
 function LevelBands({ grades }: { grades: ReportGradeRanking[] }) {
   const rule = grades.find((g) => g.bands)?.bands?.rule;
   if (!rule || !grades.some((g) => g.bands?.groups)) return <Empty>Kỳ này không có tuần tính thi đua (nghỉ hoặc chưa diễn ra) – chưa xếp nhóm lớp.</Empty>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse print:min-w-0">
+      <table className="w-full min-w-[600px] border-collapse print:min-w-0">
         <thead>
           <tr>
-            <th className={TH}>Khối</th>
-            <th className={cn(TH, "text-right")}>Số lớp</th>
-            <th className={cn(TH, "text-right")}>Điểm TB</th>
-            {SCORE_BAND_ORDER.map((b) => (
-              <th key={b} className={TH}>
-                {scoreBandLabel(b, rule)}
-              </th>
-            ))}
-            <th className={TH}>Mức Đỏ</th>
+            <th className={cn(THN, "w-px")}>Khối</th>
+            <th className={cn(THN, "w-px text-right")}>Số lớp</th>
+            <th className={cn(THN, "w-px text-right")}>Điểm TB</th>
+            <th className={THN}>Phân nhóm lớp</th>
+            <th className={cn(THN, "w-px")}>Mức Đỏ</th>
           </tr>
         </thead>
         <tbody>
-          {grades.map((g) => (
-            <tr key={g.grade}>
-              <td className={cn(TD, "num font-semibold")}>{g.grade}</td>
-              <td className={cn(TD, "num text-right")}>{fmtNumber(g.classCount)}</td>
-              <td className={cn(TD, "num text-right")}>{fmtNumber(g.avgScore)}</td>
-              {SCORE_BAND_ORDER.map((b) => (
-                <td key={b} className={cn(TD, "num", b === "LEADER" && "font-semibold")}>
-                  {!g.bands?.groups ? "–" : b === "LEADER" ? leadersText(g.bands.groups.LEADER) : codes(g.bands.groups[b], 40)}
+          {grades.map((g) => {
+            const groups = g.bands?.groups;
+            return (
+              <tr key={g.grade} data-keep>
+                <td className={cn(TDN, "text-center text-[13px] font-bold text-brand-900")}>{g.grade}</td>
+                <td className={cn(TDN, "text-right")}>{fmtNumber(g.classCount)}</td>
+                <td className={cn(TDN, "text-right")}>{fmtNumber(g.avgScore)}</td>
+                <td className={TD}>
+                  {groups ? (
+                    <dl className="grid grid-cols-[max-content_1fr] items-start gap-x-3 gap-y-1">
+                      {SCORE_BAND_ORDER.map((b) => (
+                        <div key={b} className="contents">
+                          <dt className="whitespace-nowrap py-px text-[11.5px] font-semibold leading-[18px] text-slate-600">
+                            <span className="flex items-center gap-1.5">
+                              <span aria-hidden className={cn("size-2 shrink-0 rounded-full", BAND_DOT[b])} />
+                              {scoreBandLabel(b, rule)}
+                            </span>
+                            {b === "LEADER" && groups.LEADER.length ? (
+                              <span className="num block pl-3.5 text-2xs font-normal text-slate-500">{fmtNumber(groups.LEADER[0].score)} điểm</span>
+                            ) : null}
+                          </dt>
+                          <dd className="min-w-0">
+                            <ClassChips rows={groups[b]} tone={b} />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <span className="text-slate-400">–</span>
+                  )}
                 </td>
-              ))}
-              <td className={cn(TD, "num")}>{codes(g.red)}</td>
-            </tr>
-          ))}
+                <td className={TD}>
+                  <ClassChips rows={g.red} tone="RED" />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -145,23 +198,29 @@ function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topL
       <table className="w-full min-w-[560px] border-collapse">
         <thead>
           <tr>
-            <th className={TH}>Khối</th>
-            <th className={cn(TH, "text-right")}>Số lớp</th>
-            <th className={cn(TH, "text-right")}>Điểm TB</th>
-            <th className={TH}>Dẫn đầu</th>
-            <th className={TH}>Ngoài {topLabel}</th>
-            <th className={TH}>Mức Đỏ</th>
+            <th className={cn(THN, "w-px")}>Khối</th>
+            <th className={cn(THN, "w-px text-right")}>Số lớp</th>
+            <th className={cn(THN, "w-px text-right")}>Điểm TB</th>
+            <th className={THN}>Dẫn đầu</th>
+            <th className={THN}>Ngoài {topLabel}</th>
+            <th className={THN}>Mức Đỏ</th>
           </tr>
         </thead>
         <tbody>
           {grades.map((g) => (
             <tr key={g.grade}>
-              <td className={cn(TD, "num font-semibold")}>{g.grade}</td>
-              <td className={cn(TD, "num text-right")}>{fmtNumber(g.classCount)}</td>
-              <td className={cn(TD, "num text-right")}>{fmtNumber(g.avgScore)}</td>
-              <td className={cn(TD, "num")}>{g.leaders.map((r) => `${r.classCode} (${fmtNumber(r.score)})`).join(", ") || "–"}</td>
-              <td className={cn(TD, "num")}>{codes(g.outside)}</td>
-              <td className={cn(TD, "num")}>{codes(g.red)}</td>
+              <td className={cn(TDN, "text-center font-semibold")}>{g.grade}</td>
+              <td className={cn(TDN, "text-right")}>{fmtNumber(g.classCount)}</td>
+              <td className={cn(TDN, "text-right")}>{fmtNumber(g.avgScore)}</td>
+              <td className={TD}>
+                <ClassChips rows={g.leaders} tone="LEADER" withScore />
+              </td>
+              <td className={TD}>
+                <ClassChips rows={g.outside} tone="NEUTRAL" />
+              </td>
+              <td className={TD}>
+                <ClassChips rows={g.red} tone="RED" />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -189,31 +248,29 @@ function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: 
         </caption>
         <thead>
           <tr>
-            <th className={cn(TH, "text-right")}>Hạng</th>
-            <th className={TH}>Lớp</th>
-            <th className={TH}>GVCN</th>
-            <th className={cn(TH, "text-right")}>Thưởng</th>
-            <th className={cn(TH, "text-right")}>Trừ</th>
-            <th className={cn(TH, "text-right")}>Điểm thi đua</th>
-            {bands ? <th className={cn(TH, "text-right")}>Tỉ lệ</th> : null}
-            <th className={TH}>{bands ? "Xếp nhóm" : topLabel}</th>
-            <th className={TH}>Mức cảnh báo</th>
+            <th className={cn(THN, "w-px text-right")}>Hạng</th>
+            <th className={cn(THN, "w-px")}>Lớp</th>
+            <th className={THN}>GVCN</th>
+            <th className={cn(THN, "w-px text-right")}>Thưởng</th>
+            <th className={cn(THN, "w-px text-right")}>Trừ</th>
+            <th className={cn(THN, "w-px text-right")}>Điểm thi đua</th>
+            {bands ? <th className={cn(THN, "w-px text-right")}>Tỉ lệ</th> : null}
+            <th className={cn(THN, "w-px")}>{bands ? "Xếp nhóm" : topLabel}</th>
+            <th className={cn(THN, "w-px")}>Mức cảnh báo</th>
           </tr>
         </thead>
         <tbody>
           {grade.rows.map((r) => (
             <tr key={r.classCode}>
-              <td className={cn(TD, "num text-right font-semibold")}>{r.rank}</td>
-              <td className={cn(TD, "num font-semibold")}>{r.classCode}</td>
+              <td className={cn(TDN, "text-right font-semibold")}>{r.rank}</td>
+              <td className={cn(TDN, "font-semibold")}>{r.classCode}</td>
               <td className={TD}>{r.homeroomTeacher || "–"}</td>
-              <td className={cn(TD, "num text-right")}>{r.rewardPoints > 0 ? `+${fmtNumber(r.rewardPoints)}` : "0"}</td>
-              <td className={cn(TD, "num text-right")}>{r.penaltyPoints > 0 ? `−${fmtNumber(r.penaltyPoints)}` : "0"}</td>
-              <td className={cn(TD, "num text-right font-bold")}>{fmtNumber(r.score)}</td>
-              {bands ? <td className={cn(TD, "num text-right")}>{shareText(r)}</td> : null}
-              <td className={cn(TD, bands && bandOf(grade, r.classCode) === "LEADER" && "font-semibold")}>
-                {bands ? bandText(grade, r.classCode) : r.inTop90 ? "Thuộc" : "Ngoài"}
-              </td>
-              <td className={TD}>{RAG_LABELS[r.rag]}</td>
+              <td className={cn(TDN, "text-right")}>{r.rewardPoints > 0 ? `+${fmtNumber(r.rewardPoints)}` : "0"}</td>
+              <td className={cn(TDN, "text-right")}>{r.penaltyPoints > 0 ? `−${fmtNumber(r.penaltyPoints)}` : "0"}</td>
+              <td className={cn(TDN, "text-right font-bold")}>{fmtNumber(r.score)}</td>
+              {bands ? <td className={cn(TDN, "text-right")}>{shareText(r)}</td> : null}
+              <td className={cn(TD, "whitespace-nowrap")}>{bands ? <BandChip grade={grade} classCode={r.classCode} /> : r.inTop90 ? "Thuộc" : "Ngoài"}</td>
+              <td className={cn(TD, "whitespace-nowrap")}>{RAG_LABELS[r.rag]}</td>
             </tr>
           ))}
         </tbody>
