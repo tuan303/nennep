@@ -9,7 +9,7 @@ import { formatDateVN } from "@/lib/engine/dates";
 import { previousPeriodNoun } from "../ranking/lib/ranking-view";
 import type { PeriodReport } from "./lib/report-model";
 import { REPORT_DOC_ATTR, ReportSignatures } from "./report-print";
-import { DetailBlock, IssuesBlock, KpiBlock, RankingBlock, ReportSection, WarningsBlock } from "./report-sections";
+import { DetailBlock, IssuesBlock, KpiBlock, RankingBlock, ReportSection, ScoreBandLegend, WarningsBlock } from "./report-sections";
 
 export interface ReportDocumentProps {
   report: PeriodReport;
@@ -75,6 +75,7 @@ export function ReportDocument({ report, detail, topRatio, today, preparedBy }: 
         note={`${fmtNumber(report.ranking.countedWeeks)} tuần tính thi đua trong kỳ · thứ hạng tính trên toàn bộ lớp của khối.`}
       >
         <RankingBlock ranking={report.ranking} topRatio={topRatio} previousNoun={previousNoun} />
+        <ScoreBandLegend ranking={report.ranking} />
       </ReportSection>
 
       <ReportSection index={next()} title="Vấn đề nổi bật">

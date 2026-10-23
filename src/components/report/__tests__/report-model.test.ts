@@ -232,3 +232,30 @@ describe("Excel chi tiết & file names", () => {
     expect(reportFileBase({ levelId: "THPT", periodLabel: "Tháng 10/2026", scopeLabel: "Lớp 10A1" })).toMatch(/^[\w-]+$/);
   });
 });
+
+describe("score bands in the report (THCS)", () => {
+  it("THCS: leaders = every class at rank 1; each class in exactly one band, by its share of the base", () => {
+    const ds = makeFixtureDataset();
+    for (const period of [OCT, WEEK]) {
+      const r = buildPeriodReport(ds, { period, recipient: { kind: "bgh" } }, FIXTURE_TODAY);
+      if (r.ranking.kind !== "level") throw new Error("level ranking expected");
+      for (const g of r.ranking.grades) {
+        expect(g.bands).toBeDefined();
+        const groups = g.bands!.groups!;
+        expect(g.leaders).toEqual(g.rows.filter((row) => row.rank === 1));
+        expect(groups.LEADER).toEqual(g.leaders);
+        expect([...groups.LEADER, ...groups.HIGH, ...groups.MIDDLE, ...groups.LOW].map((x) => x.classCode).sort()).toEqual(g.rows.map((x) => x.classCode).sort());
+        for (const row of groups.HIGH) expect(row.score / row.base).toBeGreaterThan(0.9);
+        for (const row of groups.MIDDLE) expect(row.score / row.base).toBeGreaterThanOrEqual(0.51);
+        for (const row of groups.LOW) expect(row.score / row.base).toBeLessThan(0.51);
+      }
+    }
+  });
+
+  it("other levels keep the Top 90% view (no bands, up to 3 leaders)", () => {
+    const ds = { ...makeFixtureDataset(), levelId: "THPT" as const };
+    const r = buildPeriodReport(ds, { period: OCT, recipient: { kind: "bgh" } }, FIXTURE_TODAY);
+    if (r.ranking.kind !== "level") throw new Error("level ranking expected");
+    expect(r.ranking.grades.every((g) => g.bands === undefined && g.leaders.length <= 3)).toBe(true);
+  });
+});

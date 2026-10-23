@@ -12,11 +12,13 @@ import {
   filterIncidents,
   formatDateVN,
   groupBreakdown,
+  groupByScoreBand,
   kpiComparison,
   naturalCompare,
   periodLabel,
   previousPeriod,
   round2,
+  SCORE_BAND_RULES,
   topIssues,
   violationTurnsOf,
   type EarlyWarning,
@@ -24,6 +26,8 @@ import {
   type IssueStat,
   type Kpis,
   type PeriodOption,
+  type ScoreBand,
+  type ScoreBandRule,
 } from "@/lib/engine";
 import type { ClassInfo, GlobalFilters, Incident, IncidentStatus, LevelDataset, LevelId, Period, RankingRow, Scope, UserProfile } from "@/lib/types";
 
@@ -195,12 +199,17 @@ export interface ReportGradeRanking {
   /** Last rank inside Top 90%. */
   cutoff: number;
   rows: RankingRow[];
-  /** Up to 3 best classes. */
+  /** Up to 3 best classes; with score bands (THCS): every class tied at the highest score. */
   leaders: RankingRow[];
   /** Classes outside Top 90%. */
   outside: RankingRow[];
   /** Classes at RAG RED. */
   red: RankingRow[];
+  /**
+   * Levels with SCORE_BAND_RULES (THCS): Dẫn đầu · Top >90% · Top 51%–90% · Top <51%. `groups` / `perWeek` (base points
+   * of one week) are undefined when the period counts no week (holiday / future): no band then.
+   */
+  bands?: { rule: ScoreBandRule; groups?: Record<ScoreBand, RankingRow[]>; perWeek?: number };
 }
 
 export interface ReportClassStanding {
@@ -214,17 +223,20 @@ export type ReportRanking =
   | { kind: "grade"; countedWeeks: number; grade?: ReportGradeRanking }
   | { kind: "class"; countedWeeks: number; standing?: ReportClassStanding };
 
-function gradeRanking(grade: number, rows: RankingRow[]): ReportGradeRanking {
+function gradeRanking(grade: number, rows: RankingRow[], rule?: ScoreBandRule): ReportGradeRanking {
   const count = rows.length;
+  const counted = rows.find((r) => r.base > 0 && r.countedWeeks > 0);
+  const groups = rule && counted ? groupByScoreBand(rows, rule) : undefined;
   return {
     grade,
     classCount: count,
     avgScore: count ? round2(rows.reduce((a, r) => a + r.score, 0) / count) : 0,
     cutoff: rows[0]?.top90Cutoff ?? 0,
     rows,
-    leaders: rows.slice(0, 3),
+    leaders: rule ? rows.filter((r) => r.rank === 1) : rows.slice(0, 3),
     outside: rows.filter((r) => !r.inTop90),
     red: rows.filter((r) => r.rag === "RED"),
+    ...(rule ? { bands: { rule, groups, perWeek: counted ? round2(counted.base / counted.countedWeeks) : undefined } } : {}),
   };
 }
 
@@ -327,7 +339,8 @@ export function buildPeriodReport(
   const incidents = filterIncidents(ds, filters);
 
   const ranking = buildRanking(ds, period, today);
-  const byGrade = ranking.grades.map((g) => gradeRanking(g.grade, g.rows));
+  const bandRule = SCORE_BAND_RULES[ds.levelId];
+  const byGrade = ranking.grades.map((g) => gradeRanking(g.grade, g.rows, bandRule));
   let reportRanking: ReportRanking;
   if (recipient.kind === "bgh") {
     reportRanking = { kind: "level", countedWeeks: ranking.countedWeeks, grades: byGrade };

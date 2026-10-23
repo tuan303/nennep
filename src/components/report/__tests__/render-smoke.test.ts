@@ -115,3 +115,29 @@ describe("ReportToolbar", () => {
     expect(noExport).not.toContain("Xuất Excel chi tiết");
   });
 });
+
+describe("THCS score bands in the document", () => {
+  it("tied leaders: a leading class gets no 'Dẫn đầu khối' line, another class sees every leader", () => {
+    const ds = makeFixtureDataset();
+    const report = buildPeriodReport(ds, { period: WEEK, recipient: { kind: "grade", grade: 6 } }, FIXTURE_TODAY);
+    const grade = report.ranking.kind === "grade" ? report.ranking.grade : undefined;
+    const leaders = grade?.leaders.map((r) => r.classCode) ?? [];
+    const follower = grade?.rows.find((r) => r.rank !== 1)?.classCode;
+    expect(leaders.length).toBeGreaterThan(1);
+    expect(follower).toBeDefined();
+    const own = doc(ds, { kind: "class", classCode: leaders[1] }, false);
+    expect(own).toContain("Xếp nhóm");
+    expect(own).not.toContain("Dẫn đầu khối:");
+    const other = doc(ds, { kind: "class", classCode: follower! }, false);
+    expect(other).toContain(`Dẫn đầu khối: ${leaders.join(", ")}`);
+    const bgh = doc(ds, { kind: "bgh" }, false);
+    for (const label of ["Top &gt;90%", "Top 51%–90%", "Top &lt;51%", "Xếp nhóm:"]) expect(bgh).toContain(label);
+    expect(bgh).not.toContain("Ngoài Top");
+  });
+
+  it("a period without a counted week is not grouped (and does not fall back to Top 90%)", () => {
+    const html = doc(makeFixtureDataset(), { kind: "bgh" }, false, { mode: "week", key: "2026-08-31" });
+    expect(html).toContain("chưa xếp nhóm lớp");
+    expect(html).not.toContain("Ngoài Top");
+  });
+});

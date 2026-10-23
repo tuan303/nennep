@@ -308,11 +308,22 @@ const baoCao: GuideSection = {
       items: [
         "Tiêu đề “BÁO CÁO NỀN NẾP TUẦN …/THÁNG …”, cấp học, dòng **Kính gửi** và ngày lập.",
         "**Chỉ số chính** của phạm vi (so với kỳ trước).",
-        "**Xếp hạng thi đua**: BGH – tóm tắt mọi khối; tổ khối – bảng của khối; GVCN – thứ hạng của lớp trong khối và nhóm Top.",
+        "**Xếp hạng thi đua**: BGH – tóm tắt mọi khối; tổ khối – bảng của khối; GVCN – thứ hạng của lớp trong khối và nhóm Top (THCS: nhóm Dẫn đầu / Top >90% / Top 51%–90% / Top <51%, xem bảng dưới).",
         "**Vấn đề nổi bật** (5 lỗi nhiều nhất, theo nhóm lỗi) và **Cảnh báo sớm** của phạm vi.",
         "**Chi tiết sự việc** (khi bật): Ngày, Mã sự việc, Lớp, Mã lỗi – Nội dung, Nhóm, Phạm vi, Đối tượng, Mã HS, Lượt, Điểm, Trạng thái, Khắc phục.",
         "Ô ký **Người lập báo cáo** và **Xác nhận của BGH**.",
       ],
+    },
+    {
+      kind: "table",
+      head: ["Nhóm (THCS)", "Lớp thuộc nhóm"],
+      rows: [
+        ["Dẫn đầu", "Lớp có điểm thi đua cao nhất khối – nếu nhiều lớp bằng điểm thì tất cả cùng dẫn đầu."],
+        ["Top >90%", "Trên 90% điểm nền (báo cáo tuần: trên 90 điểm) đến dưới điểm dẫn đầu."],
+        ["Top 51%–90%", "Từ 51% đến 90% điểm nền (báo cáo tuần: từ 51 đến 90 điểm)."],
+        ["Top <51%", "Dưới 51% điểm nền (báo cáo tuần: dưới 51 điểm)."],
+      ],
+      caption: "THCS – xếp nhóm lớp trong báo cáo. Điểm nền = điểm cơ sở mỗi tuần (mặc định 100) × số tuần tính thi đua trong kỳ (tháng 4 tuần: 400). Kỳ không có tuần tính thi đua thì chưa xếp nhóm. Báo cáo BGH liệt kê lớp của từng nhóm theo khối; báo cáo tổ khối có thêm cột Tỉ lệ và Xếp nhóm; báo cáo GVCN ghi nhóm của lớp. Cấp Tiểu học và THPT vẫn dùng Top 90% theo thứ hạng.",
     },
     {
       kind: "tip",

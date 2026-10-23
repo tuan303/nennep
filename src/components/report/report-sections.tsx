@@ -6,7 +6,17 @@ import type { ReactNode } from "react";
 import { Badge, cn } from "@/components/ui";
 import { fmtNumber, fmtPercent } from "@/lib/client/format";
 import { RAG_LABELS } from "@/lib/constants";
-import { EARLY_WARNING_KIND_LABELS, NO_GROUP_LABEL, type EarlyWarning, type GroupStat, type IssueStat } from "@/lib/engine";
+import {
+  EARLY_WARNING_KIND_LABELS,
+  NO_GROUP_LABEL,
+  SCORE_BAND_ORDER,
+  scoreBandLabel,
+  scoreShare,
+  type EarlyWarning,
+  type GroupStat,
+  type IssueStat,
+  type ScoreBand,
+} from "@/lib/engine";
 import type { RankingRow } from "@/lib/types";
 import { SEVERITY_LABEL, SEVERITY_TONE } from "../dashboard/lib/warning-model";
 import { groupShares, type ReportDetailRow, type ReportGradeRanking, type ReportKpi, type ReportRanking } from "./lib/report-model";
@@ -69,6 +79,66 @@ function codes(rows: readonly RankingRow[], max = 6): string {
   return rows.length > max ? `${head.join(", ")} và ${rows.length - max} lớp khác` : head.join(", ");
 }
 
+/** "6A01, 6A02 (103)" – every leader shares the top score. */
+function leadersText(rows: readonly RankingRow[]): string {
+  return rows.length ? `${rows.map((r) => r.classCode).join(", ")} (${fmtNumber(rows[0].score)})` : "–";
+}
+
+/** Share of the base of the period: "93%" (2 decimals at most). */
+function shareText(r: RankingRow): string {
+  const share = scoreShare(r);
+  return share === undefined ? "–" : fmtPercent(share / 100, 2);
+}
+
+function bandOf(grade: ReportGradeRanking, classCode: string): ScoreBand | undefined {
+  return SCORE_BAND_ORDER.find((b) => grade.bands?.groups?.[b].some((r) => r.classCode === classCode));
+}
+
+function bandText(grade: ReportGradeRanking, classCode: string): string {
+  const band = bandOf(grade, classCode);
+  return band && grade.bands ? scoreBandLabel(band, grade.bands.rule) : "–";
+}
+
+/** THCS: classes of each grade per score band (Dẫn đầu · Top >90% · Top 51%–90% · Top <51%). */
+function LevelBands({ grades }: { grades: ReportGradeRanking[] }) {
+  const rule = grades.find((g) => g.bands)?.bands?.rule;
+  if (!rule || !grades.some((g) => g.bands?.groups)) return <Empty>Kỳ này không có tuần tính thi đua (nghỉ hoặc chưa diễn ra) – chưa xếp nhóm lớp.</Empty>;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] border-collapse print:min-w-0">
+        <thead>
+          <tr>
+            <th className={TH}>Khối</th>
+            <th className={cn(TH, "text-right")}>Số lớp</th>
+            <th className={cn(TH, "text-right")}>Điểm TB</th>
+            {SCORE_BAND_ORDER.map((b) => (
+              <th key={b} className={TH}>
+                {scoreBandLabel(b, rule)}
+              </th>
+            ))}
+            <th className={TH}>Mức Đỏ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grades.map((g) => (
+            <tr key={g.grade}>
+              <td className={cn(TD, "font-semibold")}>Khối {g.grade}</td>
+              <td className={cn(TD, "num text-right")}>{fmtNumber(g.classCount)}</td>
+              <td className={cn(TD, "num text-right")}>{fmtNumber(g.avgScore)}</td>
+              {SCORE_BAND_ORDER.map((b) => (
+                <td key={b} className={cn(TD, "num", b === "LEADER" && "font-semibold")}>
+                  {!g.bands?.groups ? "–" : b === "LEADER" ? leadersText(g.bands.groups.LEADER) : codes(g.bands.groups[b], 40)}
+                </td>
+              ))}
+              <td className={cn(TD, "num")}>{codes(g.red)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topLabel: string }) {
   return (
     <div className="overflow-x-auto">
@@ -101,11 +171,21 @@ function LevelRanking({ grades, topLabel }: { grades: ReportGradeRanking[]; topL
 }
 
 function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: string }) {
+  const bands = grade.bands;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse">
         <caption className="pb-1 text-left text-xs text-slate-500">
-          Khối {grade.grade}: {fmtNumber(grade.classCount)} lớp · điểm TB {fmtNumber(grade.avgScore)} · {topLabel}: hạng ≤ {fmtNumber(grade.cutoff)}
+          Khối {grade.grade}: {fmtNumber(grade.classCount)} lớp · điểm TB {fmtNumber(grade.avgScore)} ·{" "}
+          {bands
+            ? bands.groups
+              ? SCORE_BAND_ORDER.map((b) =>
+                  b === "LEADER"
+                    ? `${scoreBandLabel(b, bands.rule)}: ${leadersText(bands.groups!.LEADER)}`
+                    : `${scoreBandLabel(b, bands.rule)}: ${fmtNumber(bands.groups![b].length)} lớp`,
+                ).join(" · ")
+              : "chưa xếp nhóm (kỳ không có tuần tính thi đua)"
+            : `${topLabel}: hạng ≤ ${fmtNumber(grade.cutoff)}`}
         </caption>
         <thead>
           <tr>
@@ -115,7 +195,8 @@ function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: 
             <th className={cn(TH, "text-right")}>Thưởng</th>
             <th className={cn(TH, "text-right")}>Trừ</th>
             <th className={cn(TH, "text-right")}>Điểm thi đua</th>
-            <th className={TH}>{topLabel}</th>
+            {bands ? <th className={cn(TH, "text-right")}>Tỉ lệ</th> : null}
+            <th className={TH}>{bands ? "Xếp nhóm" : topLabel}</th>
             <th className={TH}>Mức cảnh báo</th>
           </tr>
         </thead>
@@ -128,7 +209,10 @@ function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: 
               <td className={cn(TD, "num text-right")}>{r.rewardPoints > 0 ? `+${fmtNumber(r.rewardPoints)}` : "0"}</td>
               <td className={cn(TD, "num text-right")}>{r.penaltyPoints > 0 ? `−${fmtNumber(r.penaltyPoints)}` : "0"}</td>
               <td className={cn(TD, "num text-right font-bold")}>{fmtNumber(r.score)}</td>
-              <td className={TD}>{r.inTop90 ? "Thuộc" : "Ngoài"}</td>
+              {bands ? <td className={cn(TD, "num text-right")}>{shareText(r)}</td> : null}
+              <td className={cn(TD, bands && bandOf(grade, r.classCode) === "LEADER" && "font-semibold")}>
+                {bands ? bandText(grade, r.classCode) : r.inTop90 ? "Thuộc" : "Ngoài"}
+              </td>
               <td className={TD}>{RAG_LABELS[r.rag]}</td>
             </tr>
           ))}
@@ -141,7 +225,8 @@ function GradeTable({ grade, topLabel }: { grade: ReportGradeRanking; topLabel: 
 export function RankingBlock({ ranking, topRatio, previousNoun }: { ranking: ReportRanking; topRatio: number; previousNoun?: string }) {
   const topLabel = `Top ${fmtPercent(topRatio)}`;
   if (ranking.kind === "level") {
-    return ranking.grades.length ? <LevelRanking grades={ranking.grades} topLabel={topLabel} /> : <Empty>Chưa có lớp đang hoạt động.</Empty>;
+    if (!ranking.grades.length) return <Empty>Chưa có lớp đang hoạt động.</Empty>;
+    return ranking.grades[0].bands ? <LevelBands grades={ranking.grades} /> : <LevelRanking grades={ranking.grades} topLabel={topLabel} />;
   }
   if (ranking.kind === "grade") {
     return ranking.grade ? <GradeTable grade={ranking.grade} topLabel={topLabel} /> : <Empty>Khối không có lớp đang hoạt động.</Empty>;
@@ -149,6 +234,14 @@ export function RankingBlock({ ranking, topRatio, previousNoun }: { ranking: Rep
   const s = ranking.standing;
   if (!s) return <Empty>Lớp không được xếp hạng (lớp ngừng hoạt động hoặc không thuộc cấp học).</Empty>;
   const leader = s.grade.rows[0];
+  // Score bands: every class tied at the top leads; name them all, and only for a class that does not lead.
+  const leaderLine = s.grade.bands
+    ? s.row.rank !== 1 && s.grade.leaders.length
+      ? `Dẫn đầu khối: ${leadersText(s.grade.leaders)}`
+      : undefined
+    : leader && leader.classCode !== s.row.classCode
+      ? `Dẫn đầu khối: ${leader.classCode} (${fmtNumber(leader.score)})`
+      : undefined;
   return (
     <dl data-keep className="grid grid-cols-2 gap-2 text-[13px] sm:grid-cols-4 print:grid-cols-4">
       <Fact label="Thứ hạng trong khối">
@@ -159,19 +252,39 @@ export function RankingBlock({ ranking, topRatio, previousNoun }: { ranking: Rep
         {fmtNumber(s.row.score)}
         <span className="block text-xs font-normal text-slate-500">TB khối {fmtNumber(s.grade.avgScore)}</span>
       </Fact>
-      <Fact label={topLabel}>
-        {s.row.inTop90 ? `Thuộc ${topLabel}` : `Ngoài ${topLabel}`}
-        <span className="block text-xs font-normal text-slate-500">Ngưỡng: hạng ≤ {fmtNumber(s.grade.cutoff)}</span>
-      </Fact>
+      {s.grade.bands ? (
+        <Fact label="Xếp nhóm">
+          {bandText(s.grade, s.row.classCode)}
+          <span className="block text-xs font-normal text-slate-500">Tỉ lệ: {shareText(s.row)} điểm nền</span>
+        </Fact>
+      ) : (
+        <Fact label={topLabel}>
+          {s.row.inTop90 ? `Thuộc ${topLabel}` : `Ngoài ${topLabel}`}
+          <span className="block text-xs font-normal text-slate-500">Ngưỡng: hạng ≤ {fmtNumber(s.grade.cutoff)}</span>
+        </Fact>
+      )}
       <Fact label="Mức cảnh báo">
         {RAG_LABELS[s.row.rag]}
-        {leader && leader.classCode !== s.row.classCode ? (
-          <span className="block text-xs font-normal text-slate-500">
-            Dẫn đầu khối: {leader.classCode} ({fmtNumber(leader.score)})
-          </span>
-        ) : null}
+        {leaderLine ? <span className="block text-xs font-normal text-slate-500">{leaderLine}</span> : null}
       </Fact>
     </dl>
+  );
+}
+
+/** Rule of the score bands, under the ranking of a level that uses them. */
+export function ScoreBandLegend({ ranking }: { ranking: ReportRanking }) {
+  const grades = ranking.kind === "level" ? ranking.grades : ranking.kind === "grade" ? [ranking.grade] : [ranking.standing?.grade];
+  const bands = grades.find((g) => g?.bands)?.bands;
+  if (!bands) return null;
+  const { rule, perWeek } = bands;
+  const pts = (pct: number) => (perWeek ? ` (một tuần: ${fmtNumber((perWeek * pct) / 100)} điểm)` : "");
+  return (
+    <p className="text-2xs leading-4 text-slate-500">
+      <span className="font-semibold text-slate-600">Xếp nhóm:</span> Dẫn đầu – lớp (hoặc các lớp bằng điểm) có điểm cao nhất khối · Tỉ lệ = điểm thi đua ÷
+      điểm nền ({perWeek ? `${fmtNumber(perWeek)} điểm` : "điểm cơ sở"} × số tuần tính thi đua) · {scoreBandLabel("HIGH", rule)}: trên {rule.above}%
+      {pts(rule.above)} đến dưới điểm dẫn đầu · {scoreBandLabel("MIDDLE", rule)}: từ {rule.from}% đến {rule.above}% · {scoreBandLabel("LOW", rule)}: dưới{" "}
+      {rule.from}%{pts(rule.from)}.
+    </p>
   );
 }
 

@@ -10,6 +10,7 @@ export * from "./period";
 export * from "./filters";
 export * from "./rag";
 export * from "./ranking";
+export * from "./score-bands";
 export * from "./analytics";
 export * from "./brief";
 export * from "./duplicates";
