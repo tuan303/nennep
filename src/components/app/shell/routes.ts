@@ -3,7 +3,8 @@
  * Pure module (no React, no icons) – safe to import from server components (route `metadata`) and tests.
  */
 import type { Metadata } from "next";
-import type { Permission } from "@/lib/constants";
+import { REGULATION_IDS, REGULATION_LABELS, type Permission } from "@/lib/constants";
+import type { RegulationId } from "@/lib/types";
 
 export type AppRouteId =
   | "overview"
@@ -213,6 +214,52 @@ export const GUIDE_ROUTE = {
 /** Link to the guide, optionally to one section: guideHref("xep-hang") → "/huong-dan#xep-hang". */
 export function guideHref(sectionId?: string): string {
   return sectionId ? `${GUIDE_ROUTE.href}#${encodeURIComponent(sectionId)}` : GUIDE_ROUTE.href;
+}
+
+/**
+ * Quy chế khen thưởng / kỷ luật (src/app/(app)/quy-che/[id]): school-wide documents for EVERY signed-in user, so not
+ * AppRoutes (no permission, not in the sidebar). Linked from the top bar (two buttons from 1024px, a "Quy chế" menu
+ * below) and from tiles of the phone "Thêm" sheet, before the guide.
+ */
+export interface RegulationRoute {
+  id: `quy-che-${RegulationId}`;
+  regulationId: RegulationId;
+  href: string;
+  title: string;
+  shortLabel: string;
+  description: string;
+}
+
+export const REGULATION_ROUTE_BASE = "/quy-che";
+
+const REGULATION_DESCRIPTIONS: Record<RegulationId, string> = {
+  "khen-thuong": "Quy chế khen thưởng học sinh của nhà trường – áp dụng cho mọi cấp học.",
+  "ky-luat": "Quy chế kỷ luật học sinh của nhà trường – áp dụng cho mọi cấp học.",
+};
+
+/** "/quy-che/khen-thuong", optionally to one article: regulationHref("ky-luat", "dieu-5") → "/quy-che/ky-luat#dieu-5". */
+export function regulationHref(id: RegulationId, anchor?: string): string {
+  const href = `${REGULATION_ROUTE_BASE}/${id}`;
+  return anchor ? `${href}#${encodeURIComponent(anchor)}` : href;
+}
+
+export const REGULATION_ROUTES: readonly RegulationRoute[] = REGULATION_IDS.map((id) => ({
+  id: `quy-che-${id}` as const,
+  regulationId: id,
+  href: regulationHref(id),
+  title: REGULATION_LABELS[id].title,
+  shortLabel: REGULATION_LABELS[id].short,
+  description: REGULATION_DESCRIPTIONS[id],
+}));
+
+export function isRegulationId(value: string | null | undefined): value is RegulationId {
+  return (REGULATION_IDS as readonly string[]).includes(value ?? "");
+}
+
+/** Regulation shown at `pathname` ("/quy-che/ky-luat" → "ky-luat"), undefined elsewhere. */
+export function regulationIdForPath(pathname: string): RegulationId | undefined {
+  const m = /^\/quy-che\/([^/?#]+)\/?$/.exec(pathname);
+  return m && isRegulationId(m[1]) ? m[1] : undefined;
 }
 
 /** `metadata` export for a route segment layout: `export const metadata = routeMetadata("ranking")`. */

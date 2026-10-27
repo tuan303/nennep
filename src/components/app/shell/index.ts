@@ -17,6 +17,7 @@ export { PeriodPicker, type PeriodPickerProps } from "./period-picker";
 export { periodChoices, periodText, stepPeriodKey, optionsOfMode, PERIOD_MODES, PERIOD_MODE_OPTIONS, type PeriodOptionLists, type PeriodChoice } from "./period-utils";
 export { SyncIndicator } from "./sync-indicator";
 export { UserMenu, profileScopeText } from "./user-menu";
+export { RegulationLinks, RegulationMenu } from "./regulation-links";
 export { ChangePasswordDialog, type ChangePasswordDialogProps } from "./change-password-dialog";
 export {
   RequirePermission,
@@ -39,6 +40,8 @@ export {
   NAV_ICONS,
   GUIDE_NAV_ITEM,
   FOOTER_NAV_ITEMS,
+  REGULATION_NAV_ITEMS,
+  REGULATION_ICONS,
   visibleNavGroups,
   bottomNavModel,
   activeNavItem,
@@ -53,11 +56,17 @@ export {
   APP_ROUTE_LIST,
   GUIDE_ROUTE,
   guideHref,
+  REGULATION_ROUTES,
+  REGULATION_ROUTE_BASE,
+  regulationHref,
+  regulationIdForPath,
+  isRegulationId,
   routeForPath,
   isRouteActive,
   canSeeRoute,
   routeMetadata,
   type AppRoute,
   type AppRouteId,
+  type RegulationRoute,
 } from "./routes";
 export { InShellNotFound } from "./in-shell-not-found";

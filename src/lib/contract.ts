@@ -65,6 +65,11 @@
  *  POST   /api/admin/reset-level            → ResetLevelSchema            → { batchId: string; incidents: number; rewards: number } (data.reset)
  *  POST   /api/admin/restore-reset          → RestoreResetSchema          → { incidents: number; rewards: number } (data.reset)
  *  POST   /api/admin/evidence                → EvidenceMaintenanceSchema   → EvidenceMaintenanceResult (data.reset; dryRun = statistics only)
+ *  GET    /api/regulations                  → –                           → ListResponse<Regulation> (any active signed-in user; both ids, missing ones omitted)
+ *  PUT    /api/regulations/:id              → RegulationPutSchema         → Regulation               (regulations.manage; audit UPDATE_REGULATION; baseRev → 409)
+ *  GET    /api/regulations/:id/pdf          → –                           → application/pdf bytes    (any active signed-in user; 404 when none)
+ *  PUT    /api/regulations/:id/pdf          → RegulationPdfPutSchema      → Regulation               (regulations.manage; audit UPDATE_REGULATION; %PDF signature, ≤ REGULATION_PDF_MAX_BYTES)
+ *  DELETE /api/regulations/:id/pdf          → { baseRev } (JSON body)     → Regulation               (regulations.manage; audit UPDATE_REGULATION)
  *  GET    /api/report-plans?level&mode&key  → –                           → ReportPlanResponse       (view.dashboard + level access; GVCN too)
  *  PUT    /api/report-plans                 → ReportPlanPutSchema         → ReportPlan               (report.plan + level; audit UPDATE_REPORT_PLAN; baseRev → 409)
  *  GET    /api/health                       → –                           → { ok: true; time: string }
@@ -78,6 +83,7 @@ import type {
   GradeRanking,
   LevelId,
   Period,
+  Regulation,
   ReportPlan,
   Student,
   StudentLite,
@@ -525,6 +531,35 @@ export type InspectionCreateInput = z.input<typeof InspectionCreateSchema>;
 
 export const InspectionUpdateSchema = InspectionCreateSchema.omit({ levelId: true, clientRequestId: true }).partial().extend({ baseRev: zBaseRev });
 export type InspectionUpdateInput = z.input<typeof InspectionUpdateSchema>;
+
+/**
+ * REGULATION_MARKUP – the light markup of Regulation.body (one block per line group; blank line = new block):
+ *   "## CHƯƠNG I. QUY ĐỊNH CHUNG"        → chapter heading
+ *   "### Điều 1. Phạm vi và đối tượng"   → article heading (anchor + table of contents)
+ *   "- item"                              → bullet list item;  "1. item" → numbered item (the number is kept)
+ *   "| a | b |" lines                     → table (first row = header; a "|---|---|" separator row is optional)
+ *   "> text"                              → note / callout paragraph
+ *   any other line                        → paragraph text (consecutive lines join into one paragraph)
+ *   inline "**bold**"
+ * Header lines of the official document (quốc hiệu, số hiệu, nơi nhận, chữ ký) are not part of the body.
+ */
+export const zRegulationId = z.enum(["khen-thuong", "ky-luat"]);
+
+export const RegulationPutSchema = z.object({
+  title: z.string().trim().min(3, "Nhập tên quy chế").max(200),
+  schoolYear: z.string().trim().min(4, "Nhập năm học").max(20),
+  body: z.string().trim().min(1, "Nhập nội dung quy chế").max(60_000),
+  baseRev: zBaseRev,
+});
+export type RegulationPutInput = z.input<typeof RegulationPutSchema>;
+
+/** Original PDF (base64 of the file bytes, no data: prefix). */
+export const RegulationPdfPutSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  data: z.string().min(8).max(1_000_000),
+  baseRev: zBaseRev,
+});
+export type RegulationPdfPutInput = z.input<typeof RegulationPdfPutSchema>;
 
 /** Key of a report period: week → Monday "yyyy-mm-dd", month → "yyyy-mm". */
 const zReportPeriod = z.discriminatedUnion("mode", [

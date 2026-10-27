@@ -18,8 +18,10 @@ export interface MoreSheetProps {
   /** Permitted items that are not in the tab bar. */
   groups: NavGroup[];
   activeId?: AppRouteId;
-  /** Tiles after the features, for every role (default: Hướng dẫn sử dụng). */
+  /** Tiles after the features, for every role (default: Hướng dẫn sử dụng; the tab bar passes the quy chế + guide). */
   extras?: readonly FooterNavItem[];
+  /** Href of the extra tile of the current page (a quy chế page). */
+  activeExtraHref?: string;
 }
 
 const TILE =
@@ -48,7 +50,7 @@ function Tile({ item, active, badge, onNavigate }: { item: NavItem | FooterNavIt
 }
 
 /** "Thêm" bottom sheet on phones: remaining features as tiles (in sidebar order) + account actions. */
-export function MoreSheet({ open, onOpenChange, groups, activeId, extras = FOOTER_NAV_ITEMS }: MoreSheetProps) {
+export function MoreSheet({ open, onOpenChange, groups, activeId, extras = FOOTER_NAV_ITEMS, activeExtraHref }: MoreSheetProps) {
   const { profile } = useSession();
   const { badges } = useShellContext();
   const signOut = useSignOut();
@@ -68,10 +70,10 @@ export function MoreSheet({ open, onOpenChange, groups, activeId, extras = FOOTE
                 <Tile item={it} active={it.id === activeId} badge={badges[it.href]} onNavigate={close} />
               </li>
             ))}
-            {/* Hướng dẫn sử dụng: always the last tile, whatever the role. */}
+            {/* Quy chế khen thưởng, Quy chế kỷ luật, then Hướng dẫn sử dụng as the last tile, whatever the role. */}
             {extras.map((it) => (
               <li key={it.id}>
-                <Tile item={it} active={false} onNavigate={close} />
+                <Tile item={it} active={it.href === activeExtraHref} onNavigate={close} />
               </li>
             ))}
           </ul>

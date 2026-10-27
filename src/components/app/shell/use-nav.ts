@@ -3,10 +3,10 @@ import { useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "@/components/ui/toaster";
 import { errorMessage } from "@/lib/client/api-errors";
-import { APP_NAME } from "@/lib/constants";
+import { APP_NAME, REGULATION_LABELS } from "@/lib/constants";
 import { useSession } from "@/lib/client/session";
 import { FOOTER_NAV_ITEMS, bottomNavModel, visibleNavGroups, type BottomNavModel, type FooterNavItem, type NavGroup } from "./nav-config";
-import { routeForPath, type AppRoute } from "./routes";
+import { regulationIdForPath, routeForPath, type AppRoute } from "./routes";
 import { useShellContext } from "./shell-context";
 
 export interface NavModel {
@@ -30,15 +30,19 @@ export function useNavModel(): NavModel {
   }, [can, levelCount, pathname]);
 }
 
-/** Effective shell settings for the current page: route defaults merged with useShellOptions(). */
+/**
+ * Effective shell settings for the current page: route defaults merged with useShellOptions(). The quy chế pages
+ * (school-wide documents) have their title and no level switcher / filters by default.
+ */
 export function usePageChrome(): { title: string; showFilters: boolean; showLevelSwitcher: boolean } {
   const { options } = useShellContext();
   const pathname = usePathname() ?? "/";
   const route = routeForPath(pathname);
+  const regulation = route ? undefined : regulationIdForPath(pathname);
   return {
-    title: options.title ?? route?.title ?? APP_NAME,
+    title: options.title ?? route?.title ?? (regulation ? REGULATION_LABELS[regulation].title : APP_NAME),
     showFilters: options.hideFilters !== undefined ? !options.hideFilters : (route?.filters ?? false),
-    showLevelSwitcher: options.hideLevelSwitcher !== undefined ? !options.hideLevelSwitcher : (route?.levelSwitcher ?? true),
+    showLevelSwitcher: options.hideLevelSwitcher !== undefined ? !options.hideLevelSwitcher : (route?.levelSwitcher ?? !regulation),
   };
 }
 

@@ -5,6 +5,7 @@ import { LayoutGrid, Plus } from "lucide-react";
 import { cn } from "@/components/ui";
 import { MoreSheet } from "./more-sheet";
 import { activeNavItem, type BottomSlot } from "./nav-config";
+import { isRouteActive } from "./routes";
 import { useShellContext } from "./shell-context";
 import { useNavModel } from "./use-nav";
 
@@ -48,7 +49,9 @@ export function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreItems = bottom.more.flatMap((g) => g.items);
   const active = activeNavItem([...bottom.slots.map((s) => s.item), ...moreItems], pathname);
-  const moreActive = !!active && moreItems.some((i) => i.id === active.id);
+  // A quy chế page lives behind "Thêm" too (its tile sits before the guide).
+  const activeExtra = active ? undefined : bottom.extras.find((i) => isRouteActive(i.href, pathname));
+  const moreActive = (!!active && moreItems.some((i) => i.id === active.id)) || !!activeExtra;
   const moreBadge = moreItems.some((i) => badges[i.href] !== undefined);
 
   return (
@@ -85,7 +88,14 @@ export function BottomNav() {
           </li>
         </ul>
       </nav>
-      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} groups={bottom.more} extras={bottom.extras} activeId={active?.id} />
+      <MoreSheet
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        groups={bottom.more}
+        extras={bottom.extras}
+        activeId={active?.id}
+        activeExtraHref={activeExtra?.href}
+      />
     </>
   );
 }

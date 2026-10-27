@@ -45,7 +45,8 @@ describe("guide link in the in-app menu", () => {
     const m = bottomNavModel({ can: () => false, levelCount: 0 });
     expect(m.slots).toEqual([]);
     expect(m.more).toEqual([]);
-    expect(m.extras.map((i) => i.href)).toEqual(["/huong-dan"]);
+    // The quy chế tiles (every signed-in user) come first, the guide stays last.
+    expect(m.extras.map((i) => i.href)).toEqual(["/quy-che/khen-thuong", "/quy-che/ky-luat", "/huong-dan"]);
   });
 });
 

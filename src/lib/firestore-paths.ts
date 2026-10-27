@@ -46,6 +46,8 @@ export const COL = {
   digests: "digests",
   meta: "meta",
   reportPlans: "reportPlans",
+  regulations: "regulations", // {id: RegulationId} → Regulation
+  regulationFiles: "regulationFiles", // {id: RegulationId} → { name, size, contentType: "application/pdf", data: base64, uploadedAt, uploadedBy }
 } as const;
 
 export const SUB = { classes: "classes", catalog: "catalog", weeks: "weeks" } as const;

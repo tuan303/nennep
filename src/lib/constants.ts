@@ -202,7 +202,8 @@ export type Permission =
   | "reward.propose" // open Điểm thưởng + create rewards; without reward.create (GVCN): own classes only, status "Mới ghi nhận", proposed = true
   | "incident.remediate" // biện pháp xử lý/khắc phục + status via POST /api/incidents/:id/feedback, any class of an accessible level
   | "inspection.manage" // ghi nhận / sửa / xóa đợt kiểm tra
-  | "report.plan"; // "Công tác phối hợp tuần/tháng mới" of Báo cáo tuần/tháng (PUT /api/report-plans)
+  | "report.plan" // "Công tác phối hợp tuần/tháng mới" of Báo cáo tuần/tháng (PUT /api/report-plans)
+  | "regulations.manage"; // Quy chế khen thưởng / kỷ luật: edit content, replace the original PDF (school-wide)
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
@@ -229,6 +230,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "incident.remediate",
     "inspection.manage",
     "report.plan",
+    "regulations.manage",
   ],
   EDITOR: [
     "view.dashboard",
@@ -252,7 +254,16 @@ const MATRIX: Record<Role, Permission[]> = {
  * WITHOUT a level restriction (`levels = []`) hold them. A level-limited ADMIN keeps the rest of the ADMIN
  * permissions for its own levels (settings, imports, maintenance are checked per level by the server).
  */
-export const ALL_LEVEL_PERMISSIONS: readonly Permission[] = ["users.manage", "audit.view"];
+export const ALL_LEVEL_PERMISSIONS: readonly Permission[] = ["users.manage", "audit.view", "regulations.manage"];
+
+/** Quy chế of the school (one set for every level), in the order of the top bar. */
+export const REGULATION_IDS = ["khen-thuong", "ky-luat"] as const;
+export const REGULATION_LABELS: Record<(typeof REGULATION_IDS)[number], { title: string; short: string }> = {
+  "khen-thuong": { title: "Quy chế khen thưởng", short: "Khen thưởng" },
+  "ky-luat": { title: "Quy chế kỷ luật", short: "Kỷ luật" },
+};
+/** Original PDF of a regulation: decoded size limit (stored base64 in Firestore, one doc per file). */
+export const REGULATION_PDF_MAX_BYTES = 700 * 1024;
 
 export function hasPermission(
   profile: (Pick<UserProfile, "role" | "active"> & { levels?: readonly LevelId[] }) | null | undefined,

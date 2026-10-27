@@ -4,7 +4,7 @@
  */
 import type { GuideContent } from "../types";
 
-export const UPDATED = "23/10/2026";
+export const UPDATED = "27/10/2026";
 
 export const INTRO =
   "Phần mềm **Nền nếp** giúp Trường Ngôi Sao Hoàng Mai ghi nhận, chấm điểm và đánh giá nền nếp học sinh ở cả ba cấp Tiểu học, THCS và THPT. Cán bộ nền nếp ghi sự việc ngay trên điện thoại, điểm trừ và xếp hạng thi đua được tính tự động, GVCN nhận báo cáo và phản hồi cho lớp mình, Ban Giám hiệu theo dõi tình hình qua các chỉ số, cảnh báo và báo cáo định kỳ. Hãy bắt đầu với lộ trình dành cho vai trò của thầy/cô bên dưới, rồi tra cứu từng màn hình khi cần.";

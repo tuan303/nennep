@@ -1,6 +1,6 @@
 /**
  * Hướng dẫn sử dụng – nhóm "Bắt đầu": đăng nhập, giao diện chung, vai trò & quyền, dùng trên điện thoại.
- * Labels are copied from the real screens (dang-nhap/_components, app/shell, settings/lib/users.ts, constants.ts MATRIX).
+ * Labels are copied from the real screens (dang-nhap/_components, app/shell, regulations, settings/lib/users.ts, constants.ts MATRIX).
  * Public repo: fictional examples only (no real names, Mã HS, phones or e-mails).
  */
 import type { GuideSection } from "../types";
@@ -80,11 +80,11 @@ const giaoDienChung: GuideSection = {
   icon: "LayoutGrid",
   group: "batdau",
   roles: "all",
-  summary: "Cách chọn cấp học, đọc màu nhận diện, dùng bộ lọc chung, menu trên máy tính và điện thoại, và trạng thái đồng bộ.",
+  summary: "Cách chọn cấp học, đọc màu nhận diện, dùng bộ lọc chung, menu trên máy tính và điện thoại, mở quy chế khen thưởng, kỷ luật và trạng thái đồng bộ.",
   blocks: [
     {
       kind: "p",
-      text: "Trên máy tính, **thanh menu bên trái** chia chức năng thành các nhóm Tổng quan · Ghi nhận · Điều hành · Quản trị – mỗi người chỉ thấy những trang mình được phép dùng. Bấm [[Thu gọn]] ở cuối thanh để thu nhỏ menu. **Thanh trên cùng** có tên trang, nút chọn cấp học, trạng thái đồng bộ và ảnh đại diện (menu tài khoản); thanh bộ lọc nằm ngay bên dưới (màn hình hẹp hơn dùng nút [[Bộ lọc]] trên thanh trên cùng).",
+      text: "Trên máy tính, **thanh menu bên trái** chia chức năng thành các nhóm Tổng quan · Ghi nhận · Điều hành · Quản trị – mỗi người chỉ thấy những trang mình được phép dùng. Bấm [[Thu gọn]] ở cuối thanh để thu nhỏ menu. **Thanh trên cùng** có tên trang, nút chọn cấp học, hai nút [[Quy chế khen thưởng]] · [[Quy chế kỷ luật]], trạng thái đồng bộ và ảnh đại diện (menu tài khoản); thanh bộ lọc nằm ngay bên dưới (màn hình hẹp hơn dùng nút [[Bộ lọc]] trên thanh trên cùng).",
     },
     {
       kind: "list",
@@ -100,6 +100,16 @@ const giaoDienChung: GuideSection = {
       text: "Mỗi cấp có **màu nhận diện** riêng (đồng bộ với các phần mềm khác của trường): **Tiểu học – vàng**, **THCS – xanh lá**, **THPT – xanh navy**; trang Toàn trường dùng **đỏ NSHM**. Thanh màu đầu trang, nút cấp đang chọn và dòng nhãn cấp phía trên tiêu đề đổi theo màu này để thầy/cô luôn biết mình đang xem cấp nào.",
     },
     { kind: "demo", demo: "level-colors", caption: "Màu nhận diện 3 cấp học và màu Toàn trường." },
+    {
+      kind: "list",
+      title: "Quy chế khen thưởng và Quy chế kỷ luật",
+      items: [
+        "Hai nút [[Quy chế khen thưởng]] và [[Quy chế kỷ luật]] ở thanh trên cùng mở quy chế của nhà trường – **một bộ chung cho cả ba cấp học**, mọi tài khoản đều đọc được. Khi thanh trên cùng hẹp, hai nút chỉ còn biểu tượng (rê chuột để xem tên); máy tính bảng dùng một nút [[Quy chế]] có menu chọn; trên điện thoại, bấm [[Thêm]] rồi chọn ô **Quy chế khen thưởng** hoặc **Quy chế kỷ luật**.",
+        "Trang quy chế ghi năm học và dòng “Cập nhật lúc …” (lần sửa gần nhất). Nút chuyển ngay dưới tiêu đề đổi qua lại giữa hai quy chế; **mục lục** các điều nằm bên trái (trên điện thoại và máy tính bảng: nút [[Mục lục]]) – bấm một điều để chuyển tới.",
+        "Bấm [[In]] để in hoặc lưu PDF khổ A4 (không kèm menu và các nút); [[Tải bản PDF gốc]] tải văn bản gốc của nhà trường khi đã được đưa lên.",
+        "Quản trị toàn trường bấm [[Sửa]] (hoặc [[Soạn nội dung]] khi quy chế chưa có nội dung) để cập nhật tên, năm học và nội dung – có phần xem trước ngay bên cạnh (trên điện thoại: thẻ [[Xem trước]]) – rồi bấm [[Lưu]]; người khác thấy bản mới khi mở lại trang quy chế (chậm nhất vài phút). Trong khung sửa còn có [[Tải file PDF lên]] (khi đã có file: [[Thay file PDF]]) và [[Xóa file PDF]] cho file PDF gốc.",
+      ],
+    },
     {
       kind: "p",
       text: "**Bộ lọc chung** dùng cho các trang thống kê (Tổng quan, Xếp hạng, Khối & lớp, Báo GVCN, Học sinh, Dữ liệu & rà soát…). Bộ lọc được ghi lên địa chỉ trang, nên tải lại trang hoặc gửi đường dẫn cho đồng nghiệp vẫn giữ nguyên phạm vi đang xem; khi đổi cấp học, các lọc khối, lớp, nhóm lỗi, lỗi và học sinh được bỏ.",
@@ -130,7 +140,7 @@ const giaoDienChung: GuideSection = {
         "Thanh trên cùng gọn hơn: logo, ô chọn cấp học, nút [[Bộ lọc]] (kèm số bộ lọc đang áp dụng) và ảnh đại diện.",
         "Bấm [[Bộ lọc]] để mở bảng chọn từ dưới lên; chọn xong bấm [[Xem kết quả]], hoặc [[Xóa lọc]] để bỏ tất cả.",
         "Ngay dưới thanh trên cùng là dòng kỳ báo cáo với mũi tên ‹ › và các “viên” bộ lọc đang áp dụng – bấm dấu × trên viên để bỏ nhanh bộ lọc đó.",
-        "Thanh menu dưới gồm [[Tổng quan]], [[Xếp hạng]], nút tròn vàng [[Nhập]] ở giữa (với người được nhập sự việc; người khác thấy [[Báo GVCN]] ở vị trí này), [[Học sinh]] và [[Thêm]]. Bấm [[Thêm]] để mở **Tất cả chức năng** – các trang còn lại và mục Tài khoản (Đổi mật khẩu, Đăng xuất).",
+        "Thanh menu dưới gồm [[Tổng quan]], [[Xếp hạng]], nút tròn vàng [[Nhập]] ở giữa (với người được nhập sự việc; người khác thấy [[Báo GVCN]] ở vị trí này), [[Học sinh]] và [[Thêm]]. Bấm [[Thêm]] để mở **Tất cả chức năng** – các trang còn lại, hai ô Quy chế khen thưởng · Quy chế kỷ luật, Hướng dẫn sử dụng và mục Tài khoản (Đổi mật khẩu, Đăng xuất).",
         "Bảng nhiều cột tự chuyển thành dạng thẻ dễ đọc trên màn hình nhỏ.",
       ],
     },
@@ -203,12 +213,14 @@ const vaiTroQuyen: GuideSection = {
         ["Nhập/Xuất Excel, nút Xuất Excel trên các trang", "✓", "–", "–", "–"],
         ["Quản lý học sinh, Cài đặt", "✓", "–", "–", "–"],
         ["Người dùng và Nhật ký", "Quản trị toàn trường", "–", "–", "–"],
+        ["Đọc, in Quy chế khen thưởng, Quy chế kỷ luật và tải bản PDF gốc", "✓", "✓", "✓", "✓"],
+        ["Sửa quy chế khen thưởng, kỷ luật (nội dung và file PDF gốc)", "Quản trị toàn trường", "–", "–", "–"],
       ],
     },
     {
       kind: "note",
       title: "Cấp học được xem",
-      text: "Quản trị gán cho mỗi tài khoản các cấp được xem; để trống nghĩa là tất cả cấp học. Cấp của GVCN lấy theo các lớp chủ nhiệm. Quản trị chỉ được giao một vài cấp vẫn cấu hình được cấp của mình, nhưng không quản lý tài khoản và không xem Nhật ký – hai việc này dành cho quản trị toàn trường.",
+      text: "Quản trị gán cho mỗi tài khoản các cấp được xem; để trống nghĩa là tất cả cấp học. Cấp của GVCN lấy theo các lớp chủ nhiệm. Quản trị chỉ được giao một vài cấp vẫn cấu hình được cấp của mình, nhưng không quản lý tài khoản, không xem Nhật ký và không sửa quy chế – các việc này dành cho quản trị toàn trường.",
     },
     {
       kind: "tip",

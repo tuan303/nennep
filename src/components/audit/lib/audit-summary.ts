@@ -222,6 +222,18 @@ function reportPlanText(d: Detail): string {
   return join([period && `Báo cáo ${period.toLocaleLowerCase("vi")}`, items !== undefined ? `${formatNumberVN(items)} công việc` : undefined]);
 }
 
+/**
+ * "Nội dung · Quy chế …" | "File PDF gốc · quy-che.pdf · 92 KB" | "Xóa file PDF gốc · quy-che.pdf" (UPDATE_REGULATION;
+ * `name` is a file name here, not a student's "họ tên").
+ */
+function regulationText(d: Detail): string {
+  if (d.part === "content") return join(["Nội dung", str(d.title)]);
+  if (d.part !== "pdf") return "";
+  if (d.deleted === true) return join(["Xóa file PDF gốc", str(d.name)]);
+  const size = numOf(d.size);
+  return join(["File PDF gốc", str(d.name), size !== undefined ? `${formatNumberVN(Math.round(size / 1024))} KB` : undefined]);
+}
+
 function genericText(d: Detail): string {
   return Object.entries(d)
     .filter(([, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
@@ -355,6 +367,8 @@ export function summarizeAudit(log: Pick<AuditLog, "action" | "detail" | "ip">):
       return clip(join([str(d.code), changesText(d)]) || genericText(d));
     case "UPDATE_REPORT_PLAN":
       return clip(reportPlanText(d) || genericText(d));
+    case "UPDATE_REGULATION":
+      return clip(regulationText(d) || genericText(d));
     case "UPDATE_REWARD":
     case "UPDATE_STUDENT":
     case "UPDATE_CONFIG":

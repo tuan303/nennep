@@ -307,6 +307,29 @@ Digest document shapes: `{ levelId, kind: "inc", week, items, updatedAt }`, `{ l
     and `note` omitted; `rev + 1`, `updatedAt`, `updatedBy` (email), `updatedByName`; audit `UPDATE_REPORT_PLAN` (entity `"reportPlan"`,
     entityId = doc id, `detail: { mode, key, items: <count> }`). An empty list without note is a valid save: the doc stays with `items: []`
     so the rev chain continues. Same items + note as the stored plan → nothing written, the stored plan is returned (same `rev`, no audit).
+- `regulations.ts` (Quy chế khen thưởng / Quy chế kỷ luật, top bar; one set for the whole school): `listRegulations(user) → Regulation[]`,
+  `saveRegulation(ctx, id, input)`, `readRegulationPdf(user, id) → { name, data: Buffer }`, `saveRegulationPdf(ctx, id, input)`,
+  `deleteRegulationPdf(ctx, id, { baseRev })` (all writes → `Regulation`), `regulationIdFromParam(raw)` (not a `RegulationId` → 404
+  `Không tìm thấy quy chế.`), `decodePdf(data)`, `decodeBase64Strict(data)`, `cleanPdfName(raw, id)`, `pdfContentDisposition(name)`,
+  `pdfTooLargeError(bytes?)`, `regulationRef(id)`, `regulationFileRef(id)`, `RegulationPdfDeleteSchema`, `REGULATION_PDF_BODY_MAX_BYTES`,
+  `REGULATION_MSG`, types `RegulationPutData`, `RegulationPdfPutData`, `RegulationPdfDeleteData`, `RegulationFileDoc`.
+  - `regulations/{id}` = `Regulation` (text in REGULATION_MARKUP + `pdf` meta); the original PDF is `regulationFiles/{id}`
+    `{ name, size, contentType: "application/pdf", data: base64, uploadedAt, uploadedBy (email) }`, so the list never carries file bytes.
+    The text and the PDF live only in Firestore (never in the repo). Not part of `LevelDataset`: no digest, no version bump.
+  - Reads: `view.dashboard` (every role, no level check). Writes: `regulations.manage` = ADMIN **without** level restriction
+    (`ALL_LEVEL_PERMISSIONS`; a level-limited ADMIN gets 403).
+  - Every write is one transaction: `(baseRev ?? 0) ≠ (stored rev ?? 0)` → 409 `REGULATION_MSG.stale` (an omitted `baseRev` means "not created
+    yet"); `rev + 1`, `updatedAt`, `updatedBy` (email), `updatedByName`; audit `UPDATE_REGULATION` (entity `"regulation"`, entityId = id, no
+    `levelId`) with `detail: { part: "content", title }`, `{ part: "pdf", name, size }` or `{ part: "pdf", deleted: true, name }`.
+  - Content: the first save creates the doc (rev 1); CRLF → LF; the `pdf` meta is kept; same title + school year + body → nothing written,
+    the stored regulation is returned (same `rev`, no audit).
+  - PDF upload: the regulation must exist (404 `Chưa có nội dung quy chế – lưu nội dung trước`); `data` is strict base64 (standard alphabet,
+    canonical padding, no whitespace or `data:` prefix → 400); the decoded bytes start with `%PDF-` (400) and are ≤ `REGULATION_PDF_MAX_BYTES`
+    (700 KB → 413 `Tệp PDF quá lớn (… KB). Dung lượng tối đa là 700 KB …`; a request body above `REGULATION_PDF_BODY_MAX_BYTES` gets the same
+    413 without the size). The stored name is NFC, without folder part/control characters, and ends in `.pdf` (empty → `<title>.pdf`); the
+    regulation's `pdf.uploadedAt` = its `updatedAt`. Delete: 404 `Quy chế chưa có tệp PDF gốc.` when there is none (after the baseRev check).
+  - Download headers: `Content-Type: application/pdf`, `Content-Disposition: inline; filename="<ASCII>"; filename*=UTF-8''<RFC 5987>`,
+    `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`.
 - `evidence.ts`: `saveEvidence(ctx, input) → id` (`incident.create | reward.create | reward.propose` + level), `readEvidence(user, id)`, `decodeImageDataUrl(dataUrl)` (JPEG/PNG/WebP, magic bytes checked, ≤ `EVIDENCE_MAX_BYTES` = 700 KB), `EvidenceDoc`.
 - `session.ts`: `recordLogin(user, ip?) → MeResponse` (sets `lastLoginAt` and audits LOGIN in one batch), `recordLogout(user, ip?)`,
   `recordLoginFailed(email, reason, ip) → "recorded" | "invalid-email" | "duplicate" | "daily-cap" | "error"`: anonymous, so bounded –
@@ -348,6 +371,11 @@ Editors cannot modify a reward that is already "Đã xác nhận". Changing a st
 | `DELETE /api/inspections/:id` | inspection.manage; ADMIN any, EDITOR own ≤ 24 h | body `{ reason }` → `{ ok: true }`; soft delete, 409 if already deleted |
 | `GET /api/report-plans?level&mode&key` | view.dashboard + level (GVCN: levels of their classes) | `ReportPlanQuerySchema` (`level` → `levelId`; Monday / `yyyy-mm` key, else 400) → `ReportPlanResponse { plan }`, `null` when nothing was saved |
 | `PUT /api/report-plans` | report.plan (ADMIN, EDITOR) + level | `ReportPlanPutSchema` (≤ 30 items, `baseRev` → 409) → `ReportPlan`; audit UPDATE_REPORT_PLAN (see `report-plans.ts`) |
+| `GET /api/regulations` | view.dashboard (every role) | `ListResponse<Regulation>` in `REGULATION_IDS` order, never-saved ones omitted; no file bytes |
+| `PUT /api/regulations/:id` | regulations.manage (ADMIN without level restriction) | `RegulationPutSchema` (`baseRev` → 409; unknown id → 404) → `Regulation`; audit UPDATE_REGULATION (see `regulations.ts`) |
+| `GET /api/regulations/:id/pdf` | view.dashboard (every role) | PDF bytes, `Content-Disposition: inline` + `filename*`, `Cache-Control: private, no-store`; 404 when none |
+| `PUT /api/regulations/:id/pdf` | regulations.manage | `RegulationPdfPutSchema` (strict base64, `%PDF-`, ≤ 700 KB → 413; content must exist → 404; `baseRev` → 409) → `Regulation` |
+| `DELETE /api/regulations/:id/pdf` | regulations.manage | JSON body `{ baseRev }` → `Regulation` without `pdf`; 404 when there is no PDF |
 | `GET /api/evidence/:id` | level access | bytes, `Cache-Control: private, max-age=86400, immutable` |
 | `GET /api/health` | public | `{ ok: true, time }` |
 
@@ -378,7 +406,7 @@ Tips:
 - The emulator uses gRPC. REST transport is used only against real Firestore.
 - Run: `npx vitest run src/lib/server/__tests__/` (server-core files are `core-*.test.ts`; REQ_V2 server rules are covered by
   `v2-{inspections,rewards,feedback,duplicates,settings}.test.ts`, project ids `demo-test-v2-*`; the report plans by `report-plans.test.ts`,
-  `demo-test-report-plans`).
+  `demo-test-report-plans`; the regulations by `regulations.test.ts`, `demo-test-regulations`, with short fake text and fake PDF bytes only).
 - `setupTestProject` also clears the dataset memo (`invalidateDatasetCache`) and the LOGIN_FAILED state. After writing digests directly
   (without a version bump) call `invalidateDatasetCache()`.
 - Never call the Auth emulator's keyed client endpoints (`/v1/accounts:signUp?key=…`, `signInWithPassword`) from tests: they target the

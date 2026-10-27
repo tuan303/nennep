@@ -275,6 +275,24 @@ export interface ActionHistoryEntry {
   note?: string;
 }
 
+export type RegulationId = "khen-thuong" | "ky-luat";
+
+/**
+ * Quy chế khen thưởng / Quy chế kỷ luật (school-wide, read by every signed-in user). `body` is written in the light
+ * markup of REGULATION_MARKUP (src/lib/contract.ts). The original PDF, when uploaded, lives in regulationFiles/{id}.
+ */
+export interface Regulation {
+  id: RegulationId;
+  title: string; // "Quy chế khen thưởng và ghi nhận học sinh"
+  schoolYear: string; // "2026–2027"
+  body: string;
+  pdf?: { name: string; size: number; uploadedAt: string };
+  rev: number; // incremented by every content or PDF change (optimistic concurrency: baseRev)
+  updatedAt: string;
+  updatedBy: string; // email
+  updatedByName: string;
+}
+
 /** One task of "Công tác phối hợp tuần/tháng mới" (Báo cáo tuần/tháng, section 5). */
 export interface ReportPlanItem {
   content: string; // Nội dung công việc (required)
@@ -356,7 +374,8 @@ export type AuditAction =
   | "CREATE_INSPECTION"
   | "UPDATE_INSPECTION"
   | "DELETE_INSPECTION"
-  | "UPDATE_REPORT_PLAN";
+  | "UPDATE_REPORT_PLAN"
+  | "UPDATE_REGULATION";
 
 export interface AuditLog {
   id: string;

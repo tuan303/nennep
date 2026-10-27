@@ -130,6 +130,16 @@ reportPlans ("Công tác phối hợp tuần/tháng mới" = section 5 of Báo c
   `report.plan` (ADMIN, EDITOR) + level; replaces the whole plan (empty items + "" note clears it); send
   `baseRev: plan?.rev ?? 0` → 409 CONFLICT when someone saved in between (show the message, offer a reload).
 
+regulations (Quy chế khen thưởng / Quy chế kỷ luật – one set for the whole school; not part of LevelDataset, no meta/versions bump)
+- list(): ListResponse<Regulation> – GET /api/regulations, any active signed-in user; a regulation never saved is omitted.
+- put(id: RegulationId, RegulationPutInput { title, schoolYear, body (REGULATION_MARKUP, ≤ 60 000), baseRev? }): Regulation –
+  `regulations.manage` (ADMIN without level restriction); send `baseRev: regulation?.rev ?? 0` → 409 CONFLICT when someone saved in between.
+- putPdf(id, RegulationPdfPutInput { name, data: base64 (no data: prefix), baseRev? }): Regulation – replaces the original PDF
+  (≤ REGULATION_PDF_MAX_BYTES decoded, %PDF signature checked by the server). Content and PDF share `rev`.
+- deletePdf(id, baseRev): Regulation – DELETE with JSON body `{ baseRev }`.
+- pdf(id, signal?): Blob – authenticated GET of the PDF bytes (404 NOT_FOUND when none); downloadPdf(id, fileName): void-Promise – fetches
+  with the user's token and saves it as `fileName` (".pdf" appended when missing). A plain <a href> cannot be used (Bearer token).
+
 incidents
 - create(IncidentCreateInput): Incident – REQ_V2: optional `notDuplicateOf?: string[]` ("Không trùng, vẫn lưu" in the duplicate dialog)
 - get(id): Incident
@@ -312,13 +322,19 @@ FILTER / PERIOD
 
 CHROME (already mounted by the (app) layout; exported for reuse)
 - Layout: `Providers({ children })` (SessionProvider → DataProvider → Tooltip.Provider + Toaster), `AppShell({ children })`, `loginHref(path): string`.
-- Navigation pieces: `Sidebar`, `TopBar`, `BottomNav`, `MoreSheet({ open, onOpenChange, groups: NavGroup[], activeId?, extras?: readonly FooterNavItem[] })` (`extras` = last tiles for every role, default `FOOTER_NAV_ITEMS`).
+- Navigation pieces: `Sidebar`, `TopBar`, `BottomNav`, `MoreSheet({ open, onOpenChange, groups: NavGroup[], activeId?, extras?: readonly FooterNavItem[], activeExtraHref? })` (`extras` = last tiles for every role, default `FOOTER_NAV_ITEMS`; the tab bar passes `bottomNavModel().extras` = the two quy chế + the guide, and `activeExtraHref` on a quy chế page, which also lights the "Thêm" tab).
 - Top-bar pieces: `LevelSwitcher({ variant?: "auto"|"segmented"|"select", className? })`, `SyncIndicator({ className? })`, `UserMenu({ className? })`, `profileScopeText(profile): string`.
+- Quy chế in the top bar (every signed-in user, no permission): `RegulationLinks({ pathname, className? })` – "Quy chế khen thưởng" (Award) ·
+  "Quy chế kỷ luật" (Scale), neutral grey, pressed on its page; shown ≥ 1024px. The bar is a size container (`@container`): icons only below
+  1000px of bar width, the short label ("Khen thưởng" / "Kỷ luật") from 1000px, the full title from 1124px; the accessible name is always
+  the full title. `RegulationMenu({ pathname, className? })` – one "Quy chế" icon button with a dropdown of the two, shown 640–1023px.
+  Phones (< 640px) reach them through the "Thêm" tiles (no room in the bar next to Bộ lọc and the avatar).
 - `ChangePasswordDialog({ open, onOpenChange })`.
 - Screens: `AppLoadingScreen({ message?, onSignOut? })`, `AccountBlocked({ className? })`, `AccountBlockedScreen()`, `StatusScreen({ icon, tone?, code?, title, description?, home?: { href, label } | null, showBack?, onRetry?, retryLabel?, footer?, children? })`, `NotFoundScreen()`.
 - Brand: `Logo({ size?: "sm"|"md"|"lg", tone?: "dark"|"light", showText?, className? })`, `LogoMark({ size?: "xs"|"sm"|"md"|"lg"|"xl", label?, className? })`, `STAR_PATH` (24×24 star path).
 - Credit: `CreditLine({ tone?: "light"|"onDark", printable? = false, className? })` and `CREDIT_TEXT` ("© Designed & Developed by Tuan™"). Shown at the foot of every page: login, every signed-in page (AppShell), the guide and the status screens (404, errors, blocked account); hidden when printing unless `printable`.
-- Hooks: `useNavModel(): { groups, bottom, footer, pathname, route? }` (`footer` = `FOOTER_NAV_ITEMS`), `usePageChrome(): { title, showFilters, showLevelSwitcher }`, `useSignOut(): () => Promise<void>`.
+- Hooks: `useNavModel(): { groups, bottom, footer, pathname, route? }` (`footer` = `FOOTER_NAV_ITEMS`), `usePageChrome(): { title, showFilters, showLevelSwitcher }` (on /quy-che/[id]: the regulation title, no filters, no level switcher), `useSignOut(): () => Promise<void>`.
+- Level accent (`<html data-cap>`): the school-wide pages /toan-truong and /quy-che/* keep the NSHM red.
 
 NAV / ROUTES (pure)
 - `APP_ROUTES: Record<AppRouteId, AppRoute>` and `APP_ROUTE_LIST`.
@@ -326,7 +342,8 @@ NAV / ROUTES (pure)
   - AppRouteId: overview | school | ranking | classes | gvcn | reports | students | entry | rewards | actions | studentAdmin | data | excel | audit | settings.
   - REQ_V2: `reports` = /bao-cao (`view.dashboard`, after Báo GVCN, FileText icon, no global filter bar); `rewards` opens with `reward.propose` (GVCN see Điểm thưởng for proposals). /nhap-lieu's page guard is `incident.create` OR `inspection.manage`.
 - `routeMetadata(id): Metadata`, `routeForPath(pathname)`, `isRouteActive(href, pathname)`, `canSeeRoute(route, { can, levelCount })`.
-- `NAV_GROUPS`, `NAV_ICONS`, `visibleNavGroups(ctx)`, `bottomNavModel(ctx): { slots: BottomSlot[]; more: NavGroup[]; extras: FooterNavItem[] }`, `activeNavItem(items, pathname)`.
+- `NAV_GROUPS`, `NAV_ICONS`, `visibleNavGroups(ctx)`, `bottomNavModel(ctx): { slots: BottomSlot[]; more: NavGroup[]; extras: FooterNavItem[] }` (`extras` = `[...REGULATION_NAV_ITEMS, ...FOOTER_NAV_ITEMS]` for every role), `activeNavItem(items, pathname)`.
+- Quy chế (not AppRoutes – every signed-in user, never in the sidebar): `REGULATION_ROUTES: readonly RegulationRoute[]` ({ id: "quy-che-khen-thuong" | "quy-che-ky-luat", regulationId, href, title, shortLabel, description }, top-bar order), `REGULATION_ROUTE_BASE` ("/quy-che"), `regulationHref(id, anchor?)` ("/quy-che/ky-luat#dieu-5"), `regulationIdForPath(pathname)`, `isRegulationId(value)`; nav-config: `REGULATION_NAV_ITEMS` (FooterNavItem shape), `REGULATION_ICONS` (khen-thuong → Award, ky-luat → Scale). `FooterNavItem.id` = "guide" | RegulationRoute["id"].
 - User guide link (no permission, every role): `GUIDE_ROUTE` ({ id: "guide", href: "/huong-dan", title: "Hướng dẫn sử dụng", shortLabel, description }; not an AppRoute), `guideHref(sectionId?)` (e.g. `guideHref("xep-hang")` → "/huong-dan#xep-hang" – use it for in-app help links), `GUIDE_NAV_ITEM`, `FOOTER_NAV_ITEMS` (pinned at the bottom of the sidebar/tablet rail and last tile of the phone "Thêm" sheet), type `FooterNavItem`.
 - Filter bar defaults per route:
   - Shown on /, /xep-hang, /lop, /bao-gvcn, /hoc-sinh, /du-lieu; hidden elsewhere.
@@ -335,7 +352,7 @@ NAV / ROUTES (pure)
 ROUTES
 - `/dang-nhap` (login; "Hướng dẫn sử dụng" button under the card).
 - `/huong-dan` (src/app/huong-dan, outside `(app)`): public user guide – no sign-in guard, no dataset, static. Renderer and schema in `@/components/guide`, content (pure data, `GUIDE: GuideContent`) in `src/components/guide/content/`, checked by `src/components/guide/__tests__/content.test.ts` (ids, routes, links, no personal data). Section anchors are the section ids (`/huong-dan#<id>`).
-- `src/app/(app)/` pages for `/`, `/toan-truong`, `/xep-hang`, `/lop`, `/bao-gvcn`, `/bao-cao` (REQ_V2), `/hoc-sinh`, `/nhap-lieu`, `/diem-thuong`, `/hanh-dong`, `/quan-ly-hoc-sinh`, `/du-lieu`, `/nhap-xuat`, `/nhat-ky`, `/cai-dat`.
+- `src/app/(app)/` pages for `/`, `/toan-truong`, `/xep-hang`, `/lop`, `/bao-gvcn`, `/bao-cao` (REQ_V2), `/hoc-sinh`, `/nhap-lieu`, `/diem-thuong`, `/hanh-dong`, `/quan-ly-hoc-sinh`, `/du-lieu`, `/nhap-xuat`, `/nhat-ky`, `/cai-dat` – plus `/quy-che/[id]` (below).
   - Each `page.tsx` is a small "use client" page inside the right RequirePermission (/toan-truong also uses LevelGuard minLevels=2).
   - Each route folder also has a `layout.tsx` that only exports the tab title; keep it.
 - REQ_V2 tab/view params: /nhap-lieu `?tab=kiem-tra` (Đợt kiểm tra), /xep-hang `?view=bang|bien-dong|bao-phu`, /du-lieu `?tab=trung-lap` (Có thể trùng), /hanh-dong `?tab=canh-bao`, /cai-dat `?tab=canh-bao`, /bao-cao `?mode=week|month&key=…&to=bgh|khoi-N|lop-X&detail=0|1`.
@@ -345,7 +362,50 @@ ROUTES
   editor draft; `ReportPlanEditor` (above the A4 preview, `report.plan` only) edits it and `ReportDocument({ …, plan })` prints the
   draft for an editor (WYSIWYG) and the saved plan for everyone else. Pure helpers (next period label, draft ↔ PUT body, validation)
   in src/components/report/lib/report-plan.ts. Unsaved plan edits are guarded (`useLeaveGuard`; period changes go through `requestLeave`).
+- `/quy-che/[id]` (`khen-thuong` | `ky-luat`; any other id → in-shell 404): server `page.tsx` (validates the id, `generateMetadata` tab
+  title, `generateStaticParams`) rendering the client `RegulationScreen` – no RequirePermission (the shell already requires an active
+  signed-in account). See REGULATIONS below. `#dieu-5` anchors jump to the article once the content is loaded.
 - Also: `/manifest.webmanifest`, `/icon.svg`, `/apple-icon.png`, `/icons/*.png`.
+
+### REGULATIONS (Quy chế khen thưởng / kỷ luật)
+Content lives in Firestore only (`regulations/{id}`, PDF in `regulationFiles/{id}`) – never commit the regulation text; tests use short fake text.
+
+MARKUP – `src/lib/regulations/markup.ts` (pure, server-safe; REGULATION_MARKUP of src/lib/contract.ts)
+- `parseRegulation(body): ParsedRegulation { blocks: RegulationBlock[]; toc: RegulationTocItem[]; articleCount }`.
+  - Blocks: `chapter` ("## …", also "#") and `article` ("### …", also "####"–"######") with `id`; `paragraph` (consecutive lines joined
+    with a space); `list` { ordered, items: { marker ("1." / "2)" / "1.2." as written; "" for bullets "-", "–", "—", "•", "*"), text } };
+    `table` { head (first row), rows } (separator row optional/ignored anywhere, ragged rows padded, "\|" = literal pipe);
+    `note` { paragraphs } ("> …"; an empty ">" line splits paragraphs).
+  - Tolerant of CRLF / CR, tabs, runs of blank lines. A list item / heading / table row / note interrupts a paragraph; a plain line
+    right after a list item or note continues it; lists of the same kind separated by blank lines stay one list.
+  - Anchors are deterministic and unique: "Điều 5…" → `dieu-5`, "CHƯƠNG II…" → `chuong-ii` (also "Phần", "Mục" + number), other titles
+    → `slugifyVN(text)` (no diacritics, đ → d, ≤ 64 chars at a word boundary); repeats get `-2`, `-3`; empty slug → `muc-N`.
+  - `toc`: chapters with their articles as `children`; articles before the first chapter are top-level.
+- `parseInline(text): { text, bold }[]` ("**bold**"; unpaired markers stay text), `plainText(text)`, `slugifyVN(text)`, `splitTableRow(line)`,
+  `hasRegulationContent(body)`.
+
+COMPONENTS – `src/components/regulations/` ("use client" unless noted)
+- `RegulationScreen({ id })` – the page: `RegulationHeader` (eyebrow "Toàn trường · Năm học …", title, "Cập nhật lúc dd/mm/yyyy hh:mm – Tên"),
+  `RegulationActions` (Sửa [regulations.manage] · Tải bản PDF gốc [when `pdf`] · In), `RegulationSwitch` (links, so the leave guard can ask),
+  then loading skeleton / `ErrorState` with retry / `RegulationEditor` / `RegulationDocument` / `RegulationEmpty` ("Soạn nội dung" for the
+  admin, "Tải bản PDF gốc" when only the PDF exists).
+- `RegulationDocument({ id, regulation, parsed, activeAnchor?, onNavigate })` – sticky table of contents ≥ 1024px (GuideToc + guide's
+  `useScrollSpy`), "Mục lục · N điều" button + Sheet below; `<article data-regulation-doc>` with a print-only header (school, title, năm học).
+- `RegulationBody({ blocks, anchors? = true })` (no hooks; SSR-safe) – tables become "header: value" cards below 640px from 3 columns on
+  (the table itself is printed); `anchors={false}` in the editor preview. `InlineText({ text })`.
+- `RegulationEditor({ id, regulation?, onSaved, onClose, onReload })` – tên, năm học, monospace body (counter /60 000, cheat-sheet),
+  live preview (side by side ≥ 1024px, "Soạn thảo | Xem trước" below; deferred parse), Lưu (`baseRev`, Ctrl/⌘ + S or Enter), Hủy (confirm
+  when dirty), `useLeaveGuard` while dirty. 409 → alert with "Sao chép nội dung đang sửa" + "Tải lại bản mới nhất" (replaces the draft).
+  PDF block (after the first save): current file (name · size · date), "Thay file PDF" (.pdf, ≤ 700 KB, `%PDF-` signature, base64),
+  "Xóa file PDF" (confirm). A PDF change bumps `rev`: the draft stays and is rebased on the returned version.
+- `RegulationPrintStyles()` (scoped A4 stylesheet: chrome hidden, headings kept with their text, tables/notes not split) and
+  `printWithTitle(title)`.
+- `useRegulations(): { status, error?, get(id), reloading, reload(): Promise<items>, put(reg) }` – GET /api/regulations once per signed-in
+  user (uid) and tab, shared module cache (`lib/regulation-store.ts`, `createRegulationStore(fetchList)`, pure + tested); `put` after a save,
+  `reload` on 409 / "Thử lại" (a failed reload keeps what is shown and rejects).
+- Pure helpers `lib/regulation-form.ts`: `canManageRegulations(profile)`, `regulationUpdatedLine(reg)`, `fileSizeText`, `pdfInfoLine`,
+  `schoolYearOf(today)`, `draftFromRegulation(id, reg, today)`, `sameDraft`, `draftErrors` (schema limits, Vietnamese messages),
+  `regulationPutInput(draft, baseRev)`, `pdfFileProblem`, `hasPdfSignature`, `bytesToBase64`, `pdfUploadName`, `readPdfFile(file)`.
 
 ### WIDGETS (public API)
 IMPORT FROM "@/components/app/widgets" (barrel; all named exports).

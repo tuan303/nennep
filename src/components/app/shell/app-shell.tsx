@@ -12,6 +12,7 @@ import { FilterBar, FilterBarSkeleton, FilterChips, FilterChipsSkeleton } from "
 import { FilterSheet } from "./filter-sheet";
 import { CONTENT_MAX_W, GUTTER_X } from "./layout-classes";
 import { PageSkeleton } from "./page-skeleton";
+import { REGULATION_ROUTE_BASE } from "./routes";
 import { ShellProvider } from "./shell-context";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
@@ -45,12 +46,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 /**
  * Level identity on <html data-cap>: accents (header bar, selected level, tab underline, page eyebrow) take the colour
- * of the level being viewed; the school-wide page and every non-level screen keep the NSHM red (globals.css).
+ * of the level being viewed; the school-wide pages (Toàn trường, the quy chế) keep the NSHM red (globals.css).
  */
 function useLevelAccent() {
   const { levelId } = useLevel();
   const pathname = usePathname() ?? "/";
-  const schoolWide = pathname.startsWith("/toan-truong");
+  const schoolWide = pathname.startsWith("/toan-truong") || pathname.startsWith(`${REGULATION_ROUTE_BASE}/`);
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (schoolWide || !levelId) root.removeAttribute("data-cap");

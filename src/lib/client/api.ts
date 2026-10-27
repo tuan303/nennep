@@ -32,6 +32,8 @@ import type {
   OkResponse,
   RankingsResponse,
   RebuildSchema,
+  RegulationPdfPutInput,
+  RegulationPutInput,
   ReportPlanPutInput,
   ReportPlanResponse,
   ResetLevelSchema,
@@ -68,6 +70,8 @@ import type {
   LevelDataset,
   LevelId,
   PeriodMode,
+  Regulation,
+  RegulationId,
   ReportPlan,
   Reward,
   SchoolWeek,
@@ -77,7 +81,7 @@ import type {
 import { BAD_RESPONSE_MESSAGE, ApiClientError } from "./api-errors";
 import { downloadBlob } from "./download";
 import { clearEvidenceCache, evidenceObjectUrl, uploadEvidence } from "./evidence";
-import { readError, requestJson, seg, send } from "./http";
+import { readError, requestBlob, requestJson, seg, send } from "./http";
 
 export {
   ApiClientError,
@@ -179,6 +183,10 @@ async function dataset(levelId: LevelId, etag?: string): Promise<DatasetResult> 
   return { status: 200, dataset: data, etag: res.headers.get("ETag") ?? `"${data.version}"` };
 }
 
+function regulationPdf(id: RegulationId, signal?: AbortSignal): Promise<Blob> {
+  return requestBlob(`/api/regulations/${seg(id)}/pdf`, { headers: { Accept: "application/pdf" }, signal });
+}
+
 export const api = {
   /* auth */
   me: () => get<MeResponse>("/api/me"),
@@ -267,6 +275,27 @@ export const api = {
   reportPlans: {
     get: (levelId: LevelId, mode: ReportPlan["mode"], key: string) => get<ReportPlanResponse>("/api/report-plans", { level: levelId, mode, key }),
     put: (input: ReportPlanPutInput) => put<ReportPlan>("/api/report-plans", input),
+  },
+
+  /**
+   * Quy chế khen thưởng / kỷ luật (one set for the whole school): every signed-in user reads them, `regulations.manage`
+   * (unrestricted ADMIN) edits the content and the original PDF. `list` omits a regulation never saved. Writes send
+   * `baseRev: regulation?.rev ?? 0` (content and PDF share `rev`) → 409 CONFLICT when someone saved in between.
+   */
+  regulations: {
+    list: () => get<ListResponse<Regulation>>("/api/regulations"),
+    put: (id: RegulationId, input: RegulationPutInput) => put<Regulation>(`/api/regulations/${seg(id)}`, input),
+    /** Replace the original PDF (`data` = base64 of the file, no data: prefix; ≤ REGULATION_PDF_MAX_BYTES decoded). */
+    putPdf: (id: RegulationId, input: RegulationPdfPutInput) => put<Regulation>(`/api/regulations/${seg(id)}/pdf`, input),
+    deletePdf: (id: RegulationId, baseRev: number) =>
+      requestJson<Regulation>(`/api/regulations/${seg(id)}/pdf`, { method: "DELETE", body: { baseRev } }),
+    /** Authenticated GET of the original PDF bytes (404 NOT_FOUND when none was uploaded). */
+    pdf: regulationPdf,
+    /** "Tải bản PDF gốc": fetch with the user's token, then save as `fileName` (".pdf" added when missing). */
+    downloadPdf: async (id: RegulationId, fileName: string): Promise<void> => {
+      const name = fileName.trim();
+      downloadBlob(await regulationPdf(id), /\.pdf$/i.test(name) ? name : `${name || id}.pdf`, "application/pdf");
+    },
   },
 
   actions: {

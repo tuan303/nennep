@@ -67,6 +67,13 @@ describe("summarizeAudit", () => {
     expect(s("UPDATE_REPORT_PLAN", { mode: "week", key: "x", items: 2 })).toBe("2 công việc");
   });
 
+  it("regulations: content or original PDF (the file name is never labelled 'Họ tên')", () => {
+    expect(s("UPDATE_REGULATION", { part: "content", title: "Quy chế thử" })).toBe("Nội dung · Quy chế thử");
+    expect(s("UPDATE_REGULATION", { part: "pdf", name: "ban-goc-thu.pdf", size: 204800 })).toBe("File PDF gốc · ban-goc-thu.pdf · 200 KB");
+    expect(s("UPDATE_REGULATION", { part: "pdf", deleted: true, name: "ban-goc-thu.pdf" })).toBe("Xóa file PDF gốc · ban-goc-thu.pdf");
+    expect(s("UPDATE_REGULATION", { other: "x" })).toBe("other: x");
+  });
+
   it("is defensive and short", () => {
     expect(s("UPDATE_CONFIG")).toBe("");
     expect(s("REBUILD_DIGESTS", { incidents: 12, weeks: 5 })).toBe("incidents: 12 · weeks: 5");

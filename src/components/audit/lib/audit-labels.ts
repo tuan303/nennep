@@ -77,6 +77,7 @@ export const AUDIT_ACTION_META: Record<AuditAction, AuditActionMeta> = {
   CREATE_ACTION: { label: "Tạo hành động", kind: "create", group: G_ACT },
   UPDATE_ACTION: { label: "Cập nhật hành động", kind: "update", group: G_ACT },
   UPDATE_REPORT_PLAN: { label: "Cập nhật công tác phối hợp (báo cáo)", kind: "update", group: G_ACT },
+  UPDATE_REGULATION: { label: "Cập nhật quy chế", kind: "update", group: G_CFG },
   REBUILD_DIGESTS: { label: "Dựng lại dữ liệu tổng hợp", kind: "update", group: G_SYS },
 };
 
@@ -121,6 +122,7 @@ const ENTITY_LABELS: Record<string, string> = {
   classes: "Danh sách lớp",
   weeks: "Lịch tuần",
   reportPlan: "Công tác phối hợp",
+  regulation: "Quy chế",
 };
 
 export function entityLabel(entity: string | undefined): string {

@@ -14,7 +14,7 @@ import {
 
 describe("audit labels", () => {
   it("covers every action with a Vietnamese label", () => {
-    expect(AUDIT_ACTIONS).toHaveLength(36);
+    expect(AUDIT_ACTIONS).toHaveLength(37);
     expect(auditActionLabel("LOGIN")).toBe("Đăng nhập");
     expect(auditActionLabel("LOGIN_FAILED")).toBe("Đăng nhập thất bại");
     expect(auditActionLabel("CREATE_INCIDENT")).toBe("Tạo sự việc");
@@ -39,7 +39,7 @@ describe("audit labels", () => {
 
   it("filter options are grouped and searchable by code", () => {
     const opts = auditActionOptions();
-    expect(opts).toHaveLength(36);
+    expect(opts).toHaveLength(37);
     const login = opts.find((o) => o.value === "LOGIN");
     expect(login).toMatchObject({ label: "Đăng nhập", group: "Đăng nhập & tài khoản", description: "LOGIN" });
     expect(login?.keywords).toContain("LOGIN");
@@ -62,6 +62,7 @@ describe("audit labels", () => {
     expect(entityLabel("incident")).toBe("Sự việc");
     expect(entityLabel("importBatch")).toBe("Lô nhập dữ liệu");
     expect(entityLabel("reportPlan")).toBe("Công tác phối hợp");
+    expect(entityLabel("regulation")).toBe("Quy chế");
     expect(entityLabel("other")).toBe("other");
     expect(entityLabel(undefined)).toBe("");
     expect(roleLabel("EDITOR")).toBe("Cán bộ nền nếp");
