@@ -5,6 +5,9 @@
  * REQ_V2 §5.3: new rewards carry an integer 1–5 (`REWARD_POINT_LEVELS`) and a reason ≥ 5 chars; edits apply those
  * rules only to CHANGED points / reason (legacy values stay valid while unchanged). Callers with `reward.propose`
  * but without `reward.create` (GVCN) propose rewards for their own classes: status "Mới ghi nhận", `proposed: true`.
+ * GVCN notices (mail/outbox.ts): create / score-relevant edit (status only when it enters or leaves the counted
+ * statuses – a confirmed proposal is CONFIRMED) / delete / restore by staff queue NOTICE jobs in the same transaction
+ * when the route passes `onMailQueued` and Cài đặt → Email has them on. GVCN proposals never notify.
  */
 import type { DocumentReference } from "firebase-admin/firestore";
 import type { z } from "zod";
@@ -21,6 +24,7 @@ import { loadRewardDigests } from "./digests";
 import { Errors } from "./errors";
 import { db, nowIso } from "./firebase-admin";
 import { commitCode, nextCode } from "./ids";
+import { levelOfRecordId, planRecordNotices, withNotices, type NoticeCtx } from "./mail/outbox";
 import {
   assertBaseRev,
   assertCanEditRecord,
@@ -36,7 +40,7 @@ import {
 } from "./records";
 import { findClass, loadReference, type LevelReference } from "./reference";
 import { bumpVersions } from "./versions";
-import { readDoc, runTx, type Reader } from "./write";
+import { readDoc, type Reader } from "./write";
 
 export type RewardCreateData = z.output<typeof RewardCreateSchema>;
 export type RewardUpdateData = z.output<typeof RewardUpdateSchema>;
@@ -139,7 +143,7 @@ function auditDetail(r: Reward): Record<string, unknown> {
  * POST /api/rewards (reward.propose). `created: false` when the clientRequestId was already used.
  * Without `reward.create` (GVCN): own classes only (403), status forced "Mới ghi nhận", `proposed: true`.
  */
-export async function createReward(ctx: ServiceCtx, input: RewardCreateData): Promise<{ reward: Reward; created: boolean }> {
+export async function createReward(ctx: ServiceCtx & NoticeCtx, input: RewardCreateData): Promise<{ reward: Reward; created: boolean }> {
   const { user } = ctx;
   requireAnyPermission(user, ["reward.create", "reward.propose"]);
   requireLevel(user, input.levelId);
@@ -151,7 +155,7 @@ export async function createReward(ctx: ServiceCtx, input: RewardCreateData): Pr
   const today = ctx.today ?? todayVN();
   const levelId = input.levelId;
 
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelId, "reward", async (tx, notices) => {
     const previousId = await readIdempotency(tx, user.uid, input.clientRequestId, "reward");
     if (previousId) {
       const snap = await tx.get(rewardRef(previousId));
@@ -205,16 +209,17 @@ export async function createReward(ctx: ServiceCtx, input: RewardCreateData): Pr
     writeIdempotency(tx, user.uid, input.clientRequestId, "reward", reward.id);
     bumpVersions(tx, [levelId]);
     writeAudit(tx, auditOf(user, "CREATE_REWARD", { entity: "reward", entityId: reward.id, levelId, ip: ctx.ip, detail: auditDetail(reward) }));
+    notices.write(tx, levelId, planRecordNotices("reward", undefined, reward, { actorName: actorName(user), countedStatuses: ref.config.rewardCountedStatuses }));
     return { reward, created: true };
   });
 }
 
 /** PATCH /api/rewards/:id — ADMIN any; EDITOR own within the window and never a verified reward. */
-export async function updateReward(ctx: ServiceCtx, id: string, patch: RewardUpdateData): Promise<Reward> {
+export async function updateReward(ctx: ServiceCtx & NoticeCtx, id: string, patch: RewardUpdateData): Promise<Reward> {
   const { user } = ctx;
   const today = ctx.today ?? todayVN();
   if (patch.evidenceUrls) assertHttpUrls(patch.evidenceUrls);
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelOfRecordId(id), "reward", async (tx, notices) => {
     const before = await readReward(tx, id);
     requireLevel(user, before.levelId);
     if (before.deletedAt) throw Errors.conflict(REWARD_MSG.deleted);
@@ -276,38 +281,43 @@ export async function updateReward(ctx: ServiceCtx, id: string, patch: RewardUpd
     writeEvidenceLinks(tx, id, photos);
     bumpVersions(tx, [before.levelId]);
     writeAudit(tx, auditOf(user, "UPDATE_REWARD", { entity: "reward", entityId: id, levelId: before.levelId, ip: ctx.ip, detail: { code: before.code, changes } }));
+    notices.write(tx, before.levelId, planRecordNotices("reward", before, after, { actorName: actorName(user), countedStatuses: ref.config.rewardCountedStatuses }));
     return after;
   });
 }
 
 /** DELETE /api/rewards/:id — soft delete (record.delete). */
-export async function softDeleteReward(ctx: ServiceCtx, id: string, reason: string): Promise<Reward> {
+export async function softDeleteReward(ctx: ServiceCtx & NoticeCtx, id: string, reason: string): Promise<Reward> {
   const { user } = ctx;
   requirePermission(user, "record.delete");
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelOfRecordId(id), "reward", async (tx, notices) => {
     const before = await readReward(tx, id);
     requireLevel(user, before.levelId);
     if (before.deletedAt) throw Errors.conflict(REWARD_MSG.alreadyDeleted);
     const digest = await loadRewardDigests(tx, before.levelId, [before.week]);
+    // The notice says whether the deleted reward was counted: one more read, only when notices are on.
+    const countedStatuses = notices.enabled ? (await loadReference(before.levelId, tx)).config.rewardCountedStatuses : [];
     const after: Reward = { ...before, deletedAt: nowIso(), deletedBy: user.email, deleteReason: reason, rev: nextRev(before) };
     tx.set(rewardRef(id), after);
     digest.remove(id);
     digest.write(tx);
     bumpVersions(tx, [before.levelId]);
     writeAudit(tx, auditOf(user, "DELETE_REWARD", { entity: "reward", entityId: id, levelId: before.levelId, ip: ctx.ip, detail: { ...auditDetail(before), reason } }));
+    notices.write(tx, before.levelId, planRecordNotices("reward", before, after, { actorName: actorName(user), countedStatuses }));
     return after;
   });
 }
 
 /** POST /api/rewards/:id/restore (record.delete). */
-export async function restoreReward(ctx: ServiceCtx, id: string): Promise<Reward> {
+export async function restoreReward(ctx: ServiceCtx & NoticeCtx, id: string): Promise<Reward> {
   const { user } = ctx;
   requirePermission(user, "record.delete");
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelOfRecordId(id), "reward", async (tx, notices) => {
     const before = await readReward(tx, id);
     requireLevel(user, before.levelId);
     if (!before.deletedAt) throw Errors.conflict(REWARD_MSG.notDeleted);
-    assertRestorableWeek(before.week, (await loadReference(before.levelId, tx)).weeks);
+    const ref = await loadReference(before.levelId, tx);
+    assertRestorableWeek(before.week, ref.weeks);
     const digest = await loadRewardDigests(tx, before.levelId, [before.week]);
     const { deletedAt: _a, deletedBy: _b, deleteReason: _c, ...rest } = before;
     const after: Reward = { ...rest, updatedBy: user.email, updatedAt: nowIso(), rev: nextRev(before) };
@@ -319,6 +329,7 @@ export async function restoreReward(ctx: ServiceCtx, id: string): Promise<Reward
       tx,
       auditOf(user, "RESTORE_REWARD", { entity: "reward", entityId: id, levelId: before.levelId, ip: ctx.ip, detail: { ...auditDetail(before), deleteReason: before.deleteReason } }),
     );
+    notices.write(tx, before.levelId, planRecordNotices("reward", before, after, { actorName: actorName(user), countedStatuses: ref.config.rewardCountedStatuses }));
     return after;
   });
 }

@@ -16,7 +16,7 @@ import { usePageChrome } from "./use-nav";
  * Sticky top bar. Phones: logo · level select … sync · "Bộ lọc" · avatar (the quy chế are tiles of the "Thêm" sheet).
  * From 640px a "Quy chế" menu button joins the right side. Tablets/desktops: page title · level segmented control …
  * (≥ 1024px: Quy chế khen thưởng · Quy chế kỷ luật |) sync · ("Bộ lọc" < 1024px) · user menu.
- * The bar is a size container: the quy chế buttons show their labels only when the bar is wide enough.
+ * The free middle of the bar is a size container: the quy chế buttons show their labels only when they fit there.
  */
 export function TopBar() {
   const { title, showFilters, showLevelSwitcher } = usePageChrome();
@@ -38,8 +38,10 @@ export function TopBar() {
             <LevelSwitcher className="shrink-0" />
           </>
         ) : null}
-        {/* Quy chế: centred in the free middle of the bar from 1024px (a "Quy chế" menu below). */}
-        <div className="hidden min-w-0 flex-1 justify-center lg:flex">
+        {/* Quy chế: centred in the free middle of the bar from 1024px (a "Quy chế" menu below). This middle is its own
+            size container ("regs"): the links show labels only when the space left by the title and the level switch
+            fits them, and its minimum width (two icon-only links) makes the page title truncate instead of overlapping. */}
+        <div className="@container/regs hidden min-w-[4.75rem] flex-1 justify-center lg:flex">
           <RegulationLinks pathname={pathname} className="flex" />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">

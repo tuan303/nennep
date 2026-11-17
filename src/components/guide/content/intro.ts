@@ -4,7 +4,7 @@
  */
 import type { GuideContent } from "../types";
 
-export const UPDATED = "27/10/2026";
+export const UPDATED = "17/11/2026";
 
 export const INTRO =
   "Phần mềm **Nền nếp** giúp Trường Ngôi Sao Hoàng Mai ghi nhận, chấm điểm và đánh giá nền nếp học sinh ở cả ba cấp Tiểu học, THCS và THPT. Cán bộ nền nếp ghi sự việc ngay trên điện thoại, điểm trừ và xếp hạng thi đua được tính tự động, GVCN nhận báo cáo và phản hồi cho lớp mình, Ban Giám hiệu theo dõi tình hình qua các chỉ số, cảnh báo và báo cáo định kỳ. Hãy bắt đầu với lộ trình dành cho vai trò của thầy/cô bên dưới, rồi tra cứu từng màn hình khi cần.";
@@ -22,8 +22,9 @@ export const QUICK_STARTS: GuideContent["quickStarts"] = [
       "Sau mỗi buổi kiểm tra, mở tab [Đợt kiểm tra](/nhap-lieu?tab=kiem-tra) và ghi các lớp đã được kiểm tra.",
       "Ghi điểm thưởng tập thể ở [Điểm thưởng](/diem-thuong): chọn mức [[+1]] … [[+5]] và nêu rõ lý do.",
       "Cuối tuần, vào [Dữ liệu & rà soát](/du-lieu) xử lý các mục [[Cần rà soát]] và [[Có thể trùng]].",
+      "Gửi báo cáo tuần/tháng: mở [Báo cáo tuần/tháng](/bao-cao), lưu công tác phối hợp rồi bấm [[Gửi email]] để gửi BGH, tổ khối và GVCN.",
     ],
-    sectionIds: ["nhap-lieu", "dot-kiem-tra", "diem-thuong", "du-lieu", "dien-thoai"],
+    sectionIds: ["nhap-lieu", "dot-kiem-tra", "diem-thuong", "du-lieu", "email-thong-bao", "dien-thoai"],
   },
   {
     role: "GVCN",
@@ -36,8 +37,9 @@ export const QUICK_STARTS: GuideContent["quickStarts"] = [
       "Bấm [[Sao chép]] để dán báo cáo vào Zalo/tin nhắn, hoặc [[In / Lưu PDF]] để lưu hồ sơ.",
       "Xem [Khối & lớp](/lop) và [Học sinh](/hoc-sinh) để biết học sinh cần quan tâm; bấm tên học sinh để xem lịch sử của em.",
       "Đề xuất điểm thưởng cho lớp ở [Điểm thưởng](/diem-thuong) (trên điện thoại: [[Thêm]] → Điểm thưởng) – điểm được tính sau khi nhà trường xác nhận.",
+      "Khi nhà trường bật email thông báo, thầy/cô nhận thư mỗi khi điểm của lớp thay đổi – bấm [[Xem trên phần mềm]] trong thư để xem và phản hồi.",
     ],
-    sectionIds: ["tong-quan", "bao-gvcn", "khoi-lop", "hoc-sinh", "diem-thuong"],
+    sectionIds: ["tong-quan", "bao-gvcn", "khoi-lop", "hoc-sinh", "diem-thuong", "email-thong-bao"],
   },
   {
     role: "VIEWER",
@@ -62,8 +64,9 @@ export const QUICK_STARTS: GuideContent["quickStarts"] = [
       "[Quản lý học sinh](/quan-ly-hoc-sinh) → [[Import danh sách]] để cập nhật học sinh; trong năm dùng [[Thêm học sinh]], Chuyển lớp, Chuyển trường đi.",
       "Cài đặt → [[Người dùng]]: [[Thêm người dùng]] hoặc [[Tạo tài khoản GVCN hàng loạt]]; khi có người quên mật khẩu, dùng [[Đặt lại mật khẩu]].",
       "Khi BGH đã thông qua ngưỡng Vàng/Đỏ, bật [[Phê duyệt ngưỡng cảnh báo]], bấm [[Xác nhận phê duyệt]] rồi [[Lưu thay đổi]] – trước đó mọi lớp hiển thị Xám.",
+      "Cài đặt → [[Email]]: sau khi quản trị CNTT kết nối hộp thư ([Thiết lập gửi email](#thiet-lap-email)), bấm [[Gửi thư thử tới tôi]], bật **Thông báo cho GVCN** và nhập người nhận báo cáo của từng cấp.",
       "Định kỳ: xác nhận điểm thưởng, xử lý [Dữ liệu & rà soát](/du-lieu), xem [Nhật ký](/nhat-ky) và sao lưu bằng cách [[Xuất Excel]] workbook của từng cấp học.",
     ],
-    sectionIds: ["cai-dat", "nhap-xuat", "quan-ly-hoc-sinh", "du-lieu", "nhat-ky", "quy-tac-rag"],
+    sectionIds: ["cai-dat", "thiet-lap-email", "nhap-xuat", "quan-ly-hoc-sinh", "du-lieu", "nhat-ky", "quy-tac-rag"],
   },
 ];

@@ -1,7 +1,7 @@
 "use client";
 /** Controls of the report page (hidden when printing): period (tuần | tháng), recipient, detail toggle, actions. */
 import { useMemo } from "react";
-import { FileSpreadsheet, Printer } from "lucide-react";
+import { FileDown, FileSpreadsheet, Printer, Send } from "lucide-react";
 import { Button, Card, Field, SegmentedControl, Select, Switch } from "@/components/ui";
 import { PeriodPicker } from "@/components/app/shell/period-picker";
 import type { PeriodOptionLists } from "@/components/app/shell/period-utils";
@@ -24,6 +24,11 @@ export interface ReportToolbarProps {
   exporting?: boolean;
   /** Number of incidents of the scope (Excel disabled at 0). */
   rows: number;
+  /** "Tải PDF" (server-rendered A4 report); undefined hides it (no report to render). */
+  onDownloadPdf?: () => void;
+  downloadingPdf?: boolean;
+  /** "Gửi email" (report.send); undefined hides it. */
+  onSendMail?: () => void;
 }
 
 export function ReportToolbar(props: ReportToolbarProps) {
@@ -56,9 +61,19 @@ export function ReportToolbar(props: ReportToolbarProps) {
           <Button icon={Printer} onClick={props.onPrint}>
             In / Lưu PDF
           </Button>
+          {props.onDownloadPdf ? (
+            <Button variant="secondary" icon={FileDown} loading={props.downloadingPdf} onClick={props.onDownloadPdf}>
+              Tải PDF
+            </Button>
+          ) : null}
           {props.onExport ? (
             <Button variant="secondary" icon={FileSpreadsheet} loading={props.exporting} disabled={props.rows === 0} onClick={props.onExport}>
               Xuất Excel chi tiết
+            </Button>
+          ) : null}
+          {props.onSendMail ? (
+            <Button variant="outline" icon={Send} onClick={props.onSendMail}>
+              Gửi email
             </Button>
           ) : null}
         </div>

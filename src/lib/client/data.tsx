@@ -18,7 +18,7 @@ import { COL, META_VERSIONS_DOC } from "@/lib/firestore-paths";
 import type { LevelDataset, LevelId } from "@/lib/types";
 import { api } from "./api";
 import { DatasetController, pollWhileListenerDown, type DatasetStatus, type LevelEntry } from "./data-store";
-import { isLevelId, readStoredLevel, resolveLevel, writeStoredLevel } from "./level-pref";
+import { isLevelId, readLinkedLevel, readStoredLevel, resolveLevel, writeStoredLevel } from "./level-pref";
 import { useSession } from "./session";
 
 export type { DatasetStatus } from "./data-store";
@@ -99,6 +99,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const uid = enabled ? session.profile?.uid : undefined;
   const { accessibleLevels, profile } = session;
   const [chosen, setChosen] = useState<{ uid: string; levelId: LevelId }>();
+  // `?level=` of the URL that opened the app (links in emails); captured once, applied only once signed in.
+  const [linked] = useState(readLinkedLevel);
 
   // Drop cached data when the signed-in user changes (or signs out).
   useEffect(() => {
@@ -145,12 +147,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     () =>
       resolveLevel({
         chosen: chosen && chosen.uid === uid ? chosen.levelId : undefined,
+        linked: enabled ? linked : undefined,
         stored: enabled ? readStoredLevel() : undefined,
         profile,
         accessible: accessibleLevels,
       }),
-    [chosen, uid, enabled, profile, accessibleLevels],
+    [chosen, uid, enabled, linked, profile, accessibleLevels],
   );
+
+  // Opening a link to another level makes it the remembered level (a reload without `?level=` stays there).
+  useEffect(() => {
+    if (enabled && linked && accessibleLevels.includes(linked) && readStoredLevel() !== linked) writeStoredLevel(linked);
+  }, [enabled, linked, accessibleLevels]);
 
   const setLevelId = useCallback(
     (next: LevelId) => {

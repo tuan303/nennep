@@ -4,14 +4,18 @@ import { requireLevel } from "@/lib/server/auth";
 import { Errors } from "@/lib/server/errors";
 import { apiHandler, created, flagParam, levelParam, parseBody, withStatus } from "@/lib/server/handler";
 import { createIncident, listDeletedIncidents } from "@/lib/server/incidents";
+import { noticeHooks } from "@/lib/server/mail/notice-drain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Room for the GVCN notice drain scheduled after the response (notice-drain.ts). */
+export const maxDuration = 60;
 
 /** Create an incident → 201 (200 with the existing record when clientRequestId was already used). */
 export const POST = apiHandler({ permission: "incident.create" }, async ({ req, user, ip }) => {
+  const hooks = noticeHooks(req);
   const input = await parseBody(req, IncidentCreateSchema);
-  const { incident, created: isNew } = await createIncident({ user, ip }, input);
+  const { incident, created: isNew } = await createIncident({ user, ip, ...hooks }, input);
   return isNew ? created(incident) : withStatus(200, incident);
 });
 

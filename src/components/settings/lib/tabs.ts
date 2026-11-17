@@ -1,7 +1,7 @@
 /** Tabs of the Cài đặt screen: ids (deep link `?tab=`), labels and the permission each one needs. */
 import type { Permission } from "@/lib/constants";
 
-export type SettingsTabId = "cau-hinh" | "canh-bao" | "danh-muc" | "lop" | "lich-tuan" | "nguoi-dung" | "bao-tri";
+export type SettingsTabId = "cau-hinh" | "canh-bao" | "danh-muc" | "lop" | "lich-tuan" | "email" | "nguoi-dung" | "bao-tri";
 
 export interface SettingsTabDef {
   id: SettingsTabId;
@@ -43,6 +43,13 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     description: "Các tuần học trong năm, tuần tính thi đua và ghi chú.",
   },
   {
+    id: "email",
+    label: "Email",
+    permission: "settings.manage",
+    perLevel: true,
+    description: "Kết nối gửi thư, thông báo cho GVCN, người nhận báo cáo tuần/tháng, tên miền được phép và nhật ký gửi thư.",
+  },
+  {
     id: "nguoi-dung",
     label: "Người dùng",
     permission: "users.manage",
@@ -66,6 +73,7 @@ const ALIASES: Record<string, SettingsTabId> = {
   catalog: "danh-muc",
   classes: "lop",
   weeks: "lich-tuan",
+  mail: "email",
   users: "nguoi-dung",
   maintenance: "bao-tri",
 };

@@ -2,6 +2,11 @@
 
 /** Attribute that scopes the print rules to the report document. */
 export const REPORT_DOC_ATTR = "data-report-doc";
+/**
+ * Print: cells of a table wrap to fit A4, except those marked `whitespace-nowrap` (compact ranking tables, same as on
+ * screen); a table with this attribute (the wide detail register) wraps every cell.
+ */
+export const PRINT_WRAP_ATTR = "data-print-wrap";
 
 const PRINT_CSS = `
 @page { size: A4; margin: 12mm; }
@@ -14,6 +19,7 @@ const PRINT_CSS = `
   [${REPORT_DOC_ATTR}] .overflow-x-auto { overflow: visible !important; }
   [${REPORT_DOC_ATTR}] table { width: 100%; font-size: 8.5pt; }
   [${REPORT_DOC_ATTR}] th, [${REPORT_DOC_ATTR}] td { padding: 3px 4px !important; vertical-align: top !important; white-space: normal !important; }
+  [${REPORT_DOC_ATTR}] table:not([${PRINT_WRAP_ATTR}]) .whitespace-nowrap { white-space: nowrap !important; }
   [${REPORT_DOC_ATTR}] thead { display: table-header-group; }
   [${REPORT_DOC_ATTR}] tr, [${REPORT_DOC_ATTR}] li { break-inside: avoid; page-break-inside: avoid; }
 }

@@ -14,8 +14,9 @@ const LINK_ACTIVE = "bg-slate-900/[0.06] text-brand-900 ring-1 ring-inset ring-b
 
 /**
  * "Quy chế khen thưởng" · "Quy chế kỷ luật" in the top bar from 1024px, for every signed-in user. The labels follow
- * the free width of the bar (container query on the bar, which also depends on the sidebar being collapsed): icons
- * only, then the short label ("Khen thưởng"), then the full title – the accessible name is always the full title.
+ * the width of the "regs" container the top bar gives them (the space left by the page title, the level switch and
+ * the right-hand buttons): icons only (74 px), then the short label ("Khen thưởng", ≥ 14rem = 217 px + margin), then
+ * the full title (≥ 21rem = 328 px + margin) – the accessible name is always the full title.
  */
 export function RegulationLinks({ pathname, className }: { pathname: string; className?: string }) {
   return (
@@ -27,8 +28,8 @@ export function RegulationLinks({ pathname, className }: { pathname: string; cla
           <Tooltip key={it.id} content={it.title}>
             <Link href={it.href} aria-label={it.title} aria-current={active ? "page" : undefined} className={cn(LINK, active ? LINK_ACTIVE : LINK_IDLE)}>
               <Icon aria-hidden strokeWidth={2.25} />
-              <span className="hidden @min-[860px]:inline @min-[1000px]:hidden">{it.shortLabel}</span>
-              <span className="hidden @min-[1000px]:inline">{it.title}</span>
+              <span className="hidden @min-[14rem]/regs:inline @min-[21rem]/regs:hidden">{it.shortLabel}</span>
+              <span className="hidden @min-[21rem]/regs:inline">{it.title}</span>
             </Link>
           </Tooltip>
         );

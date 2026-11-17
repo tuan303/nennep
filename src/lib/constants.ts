@@ -6,6 +6,8 @@ import type {
   LevelConfig,
   LevelId,
   LevelMeta,
+  MailJobKind,
+  MailJobStatus,
   Priority,
   RagStatus,
   RewardStatus,
@@ -174,6 +176,40 @@ export const DEFAULT_5S_CODES = ["L03", "L04", "L11", "L14"];
 /** Editors may edit their own incidents/rewards within this window (Admins: always). */
 export const EDITOR_EDIT_WINDOW_HOURS = 24;
 
+/* ---------------------------------- Email ---------------------------------- */
+
+/** Display name of the sending mailbox when MAIL_SENDER_NAME is not set. */
+export const MAIL_DEFAULT_SENDER_NAME = "Nền nếp NSHM";
+/** A job is FAILED after this many attempts (retryable errors back off with nextAttemptDelayMs). */
+export const MAIL_JOB_MAX_ATTEMPTS = 5;
+/** Report email: failed PDF renders before it goes out without the PDF (at once when Chromium cannot even start). */
+export const REPORT_PDF_MAX_ATTEMPTS = 2;
+/** Addresses per message (to + cc) and per recipient list of Cài đặt → Email. */
+export const MAIL_MAX_RECIPIENTS = 50;
+/** Messages (targets) of one "Gửi email" click of Báo cáo tuần/tháng. */
+export const MAIL_MAX_TARGETS = 200;
+/**
+ * Report email recipients (to + cc of every message) accepted per VN day for the whole school – every level sends from
+ * the one mailbox, which Exchange Online limits to ~10,000 recipients per 24 h; the rest is headroom for GVCN notices.
+ */
+export const MAIL_DAILY_REPORT_RECIPIENTS = 3000;
+/** "Lời nhắn" of a report email (characters). */
+export const MAIL_NOTE_MAX = 1000;
+
+export const MAIL_JOB_STATUS_LABELS: Record<MailJobStatus, string> = {
+  PENDING: "Đang chờ",
+  SENDING: "Đang gửi",
+  SENT: "Đã gửi",
+  FAILED: "Lỗi",
+  SKIPPED: "Bỏ qua",
+};
+
+export const MAIL_JOB_KIND_LABELS: Record<MailJobKind, string> = {
+  NOTICE: "Thông báo GVCN",
+  REPORT: "Báo cáo",
+  TEST: "Thư thử",
+};
+
 /* ------------------------------------------------------------------------- */
 /* Permission matrix (02_PhanQuyen + GVCN role). Server MUST enforce;        */
 /* client uses the same helpers only to hide/disable UI.                      */
@@ -203,6 +239,7 @@ export type Permission =
   | "incident.remediate" // biện pháp xử lý/khắc phục + status via POST /api/incidents/:id/feedback, any class of an accessible level
   | "inspection.manage" // ghi nhận / sửa / xóa đợt kiểm tra
   | "report.plan" // "Công tác phối hợp tuần/tháng mới" of Báo cáo tuần/tháng (PUT /api/report-plans)
+  | "report.send" // Gửi báo cáo tuần/tháng qua email (POST /api/reports/mail)
   | "regulations.manage"; // Quy chế khen thưởng / kỷ luật: edit content, replace the original PDF (school-wide)
 
 const MATRIX: Record<Role, Permission[]> = {
@@ -230,6 +267,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "incident.remediate",
     "inspection.manage",
     "report.plan",
+    "report.send",
     "regulations.manage",
   ],
   EDITOR: [
@@ -244,6 +282,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "incident.remediate",
     "inspection.manage",
     "report.plan",
+    "report.send",
   ],
   VIEWER: ["view.dashboard", "view.allClassesDetail", "actions.view"],
   GVCN: ["view.dashboard", "incident.gvcnFeedback", "reward.propose"],

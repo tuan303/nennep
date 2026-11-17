@@ -2,9 +2,12 @@ import { DeleteSchema, IncidentUpdateSchema, type OkResponse } from "@/lib/contr
 import type { Incident } from "@/lib/types";
 import { apiHandler, parseBody } from "@/lib/server/handler";
 import { getIncidentForViewer, softDeleteIncident, updateIncident } from "@/lib/server/incidents";
+import { noticeHooks } from "@/lib/server/mail/notice-drain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Room for the GVCN notice drain scheduled after the response (notice-drain.ts). */
+export const maxDuration = 60;
 
 type Params = { id: string };
 
@@ -17,14 +20,16 @@ export const GET = apiHandler<Params>({ permission: "view.dashboard" }, async ({
 export const PATCH = apiHandler<Params>(
   { anyPermission: ["record.editAny", "record.editOwnRecent"] },
   async ({ req, user, ip, params }): Promise<Incident> => {
+    const hooks = noticeHooks(req);
     const patch = await parseBody(req, IncidentUpdateSchema);
-    return updateIncident({ user, ip }, params.id, patch);
+    return updateIncident({ user, ip, ...hooks }, params.id, patch);
   },
 );
 
 /** Soft delete with a reason (JSON body `{ reason }`). */
 export const DELETE = apiHandler<Params>({ permission: "record.delete" }, async ({ req, user, ip, params }): Promise<OkResponse> => {
+  const hooks = noticeHooks(req);
   const { reason } = await parseBody(req, DeleteSchema);
-  await softDeleteIncident({ user, ip }, params.id, reason);
+  await softDeleteIncident({ user, ip, ...hooks }, params.id, reason);
   return { ok: true };
 });

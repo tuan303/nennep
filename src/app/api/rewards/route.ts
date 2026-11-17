@@ -3,10 +3,13 @@ import type { Reward } from "@/lib/types";
 import { requireLevel } from "@/lib/server/auth";
 import { Errors } from "@/lib/server/errors";
 import { apiHandler, created, flagParam, levelParam, parseBody, withStatus } from "@/lib/server/handler";
+import { noticeHooks } from "@/lib/server/mail/notice-drain";
 import { createReward, listDeletedRewards } from "@/lib/server/rewards";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Room for the GVCN notice drain scheduled after the response (notice-drain.ts). */
+export const maxDuration = 60;
 
 /**
  * Create a reward → 201 (200 with the existing record for a repeated clientRequestId).
@@ -14,8 +17,9 @@ export const dynamic = "force-dynamic";
  * "Mới ghi nhận", `proposed: true`).
  */
 export const POST = apiHandler({ permission: "reward.propose" }, async ({ req, user, ip }) => {
+  const hooks = noticeHooks(req);
   const input = await parseBody(req, RewardCreateSchema);
-  const { reward, created: isNew } = await createReward({ user, ip }, input);
+  const { reward, created: isNew } = await createReward({ user, ip, ...hooks }, input);
   return isNew ? created(reward) : withStatus(200, reward);
 });
 

@@ -144,8 +144,8 @@ describe("RegulationLinks / RegulationMenu", () => {
     expect(html).toContain(">Khen thưởng</span>");
     expect(html).toContain(">Quy chế khen thưởng</span>");
     expect(html).toContain(">Kỷ luật</span>");
-    expect(html).toContain("@min-[860px]:inline");
-    expect(html).toContain("@min-[1000px]:inline");
+    expect(html).toContain("@min-[14rem]/regs:inline");
+    expect(html).toContain("@min-[21rem]/regs:inline");
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
   });
 

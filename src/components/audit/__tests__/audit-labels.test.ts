@@ -14,7 +14,7 @@ import {
 
 describe("audit labels", () => {
   it("covers every action with a Vietnamese label", () => {
-    expect(AUDIT_ACTIONS).toHaveLength(37);
+    expect(AUDIT_ACTIONS).toHaveLength(41);
     expect(auditActionLabel("LOGIN")).toBe("Đăng nhập");
     expect(auditActionLabel("LOGIN_FAILED")).toBe("Đăng nhập thất bại");
     expect(auditActionLabel("CREATE_INCIDENT")).toBe("Tạo sự việc");
@@ -39,7 +39,7 @@ describe("audit labels", () => {
 
   it("filter options are grouped and searchable by code", () => {
     const opts = auditActionOptions();
-    expect(opts).toHaveLength(37);
+    expect(opts).toHaveLength(41);
     const login = opts.find((o) => o.value === "LOGIN");
     expect(login).toMatchObject({ label: "Đăng nhập", group: "Đăng nhập & tài khoản", description: "LOGIN" });
     expect(login?.keywords).toContain("LOGIN");

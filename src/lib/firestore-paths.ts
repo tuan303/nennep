@@ -16,6 +16,11 @@
  * counters/{name}                          { seq: number }    e.g. "NN_THCS_20261021"
  * idempotency/{uid}_{clientRequestId}      { kind, id, createdAt }
  * importBatches/{batchId}                  summary of an import / reset batch
+ * mailSettings/{levelId}                   MailSettings       (Cài đặt → Email; absent → defaults)
+ * mailOutbox/{mailJobId()}                 MailJob            (ids sort newest first, see mailJobId)
+ * printJobs/{nonce}                        short-lived print job of a report PDF (spec + createdAt + expiresAt)
+ * mailBudget/{yyyy-mm-dd}                  { day, reportRecipients, updatedAt }: report email recipients accepted that
+ *                                          VN day, all levels (the shared mailbox's daily limit); the cron deletes old days
  *
  * READ MODEL (denormalised "digests", rewritten inside the same transaction as every write):
  * digests/{levelId}__ref                   { levelId, config, classes[], catalog[], weeks[], updatedAt }
@@ -48,6 +53,10 @@ export const COL = {
   reportPlans: "reportPlans",
   regulations: "regulations", // {id: RegulationId} → Regulation
   regulationFiles: "regulationFiles", // {id: RegulationId} → { name, size, contentType: "application/pdf", data: base64, uploadedAt, uploadedBy }
+  mailSettings: "mailSettings", // {levelId} → MailSettings
+  mailOutbox: "mailOutbox", // {mailJobId()} → MailJob
+  printJobs: "printJobs", // {nonce} → print job of a report PDF
+  mailBudget: "mailBudget", // {yyyy-mm-dd} → report email recipients accepted that VN day (all levels)
 } as const;
 
 export const SUB = { classes: "classes", catalog: "catalog", weeks: "weeks" } as const;
@@ -67,3 +76,18 @@ export const counterId = (prefix: "NN" | "KT" | "HD" | "DKT", levelId: LevelId, 
 export const idempotencyId = (uid: string, clientRequestId: string) => `${uid}_${clientRequestId}`;
 /** reportPlans/{id}: "THPT_week_2026-10-19" | "THCS_month_2026-10". */
 export const reportPlanId = (levelId: LevelId, mode: "week" | "month", key: string) => `${levelId}_${mode}_${key}`;
+
+/** Largest epoch ms of a 13-digit timestamp (year 2286): the base of the inverted time prefix of mailJobId. */
+const MAIL_JOB_ID_EPOCH_MAX = 9_999_999_999_999;
+const MAIL_JOB_ID_SUFFIX = 8;
+
+/**
+ * mailOutbox/{id}: `${9999999999999 − now, 13 digits}_${8 random base36}` – ascending document-id order is newest
+ * first, so `where("levelId", "==", x).limit(n)` lists the latest jobs without a composite index.
+ */
+export function mailJobId(now: number = Date.now(), random: () => number = Math.random): string {
+  const inverted = String(Math.max(0, MAIL_JOB_ID_EPOCH_MAX - Math.floor(now))).padStart(13, "0");
+  let suffix = "";
+  for (let i = 0; i < MAIL_JOB_ID_SUFFIX; i++) suffix += Math.min(35, Math.floor(random() * 36)).toString(36);
+  return `${inverted}_${suffix}`;
+}

@@ -3,9 +3,10 @@
  * /bao-cao – Báo cáo tuần/tháng (REQ_V2 §6.5). URL: global `mode` (week | month; others → current week) + `key`,
  * `to=bgh | khoi-N | lop-CODE` (limited by role; GVCN → own classes) and `detail=0|1`. Section 5 "Công tác phối hợp
  * tuần/tháng mới" is stored per level + period (GET/PUT /api/report-plans): `report.plan` users edit it above the A4
- * preview, which prints their draft; everyone else sees the saved plan.
+ * preview, which prints their draft; everyone else sees the saved plan. "Tải PDF" downloads the server-rendered A4
+ * report; "Gửi email" (`report.send`) emails it to BGH / tổ khối / GVCN (dialog in ./mail).
  */
-import { useCallback, useDeferredValue, useMemo } from "react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CalendarX2, FileText, School } from "lucide-react";
 import { requestLeave } from "@/components/entry/lib/leave-guard";
@@ -18,6 +19,9 @@ import { LEVELS } from "@/lib/constants";
 import type { LevelDataset } from "@/lib/types";
 import { reportFileBase } from "./lib/report-export";
 import { buildPeriodReport, parseDetail, recipientOptions, reportPeriod, resolveRecipient, type ReportMode } from "./lib/report-model";
+import { planPeriodOf } from "./lib/report-plan";
+import { ReportMailDialog } from "./mail/report-mail-dialog";
+import { useReportPdf } from "./mail/use-report-pdf";
 import { ReportDocument } from "./report-document";
 import { ReportPlanEditor, ReportPlanLoadError } from "./report-plan-editor";
 import { ReportPrintStyles } from "./report-print";
@@ -63,6 +67,10 @@ export function ReportScreen({ ds }: { ds: LevelDataset }) {
   const plan = useReportPlan(ds.levelId, chosen ? period : undefined, canPlan);
   // The preview follows the draft as typed; deferred so typing never waits for the whole A4 document.
   const printedPlan = useDeferredValue(plan.printed);
+  const pdf = useReportPdf(report, detail, plan.dirty);
+  const mailPeriod = planPeriodOf(period);
+  const canSendMail = can("report.send") && !!report && !!mailPeriod;
+  const [mailOpen, setMailOpen] = useState(false);
   // Reload / tab close, in-app links, the level switcher and a period change ask before dropping unsaved plan edits.
   const leaveGuard = useLeaveGuard({
     when: plan.dirty,
@@ -149,6 +157,9 @@ export function ReportScreen({ ds }: { ds: LevelDataset }) {
         onExport={can("excel.export") ? () => void exportExcel() : undefined}
         exporting={exporting}
         rows={report?.detail.length ?? 0}
+        onDownloadPdf={report ? () => void pdf.download() : undefined}
+        downloadingPdf={pdf.downloading}
+        onSendMail={canSendMail ? () => setMailOpen(true) : undefined}
       />
       {report ? (
         <>
@@ -167,6 +178,22 @@ export function ReportScreen({ ds }: { ds: LevelDataset }) {
           <EmptyState icon={CalendarX2} title="Chưa có lịch tuần" description="Cấp học chưa có tuần học trong lịch (Cài đặt → Lịch tuần) nên chưa lập được báo cáo." />
         </Card>
       )}
+      {canSendMail && report && mailPeriod ? (
+        <ReportMailDialog
+          open={mailOpen}
+          onOpenChange={setMailOpen}
+          levelId={ds.levelId}
+          period={mailPeriod}
+          periodLabel={report.periodLabel}
+          options={recipients}
+          classes={ds.classes}
+          selectedKey={chosen.key}
+          detail={detail}
+          planDirty={plan.dirty}
+          canManageMail={can("settings.manage")}
+          selfEmail={profile?.email}
+        />
+      ) : null}
       {leaveGuard}
     </div>
   );

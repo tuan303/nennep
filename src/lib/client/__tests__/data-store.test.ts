@@ -259,6 +259,13 @@ describe("resolveLevel", () => {
     expect(resolveLevel({ stored: "TH", accessible: all })).toBe("TH");
     expect(resolveLevel({ chosen: "THPT", stored: "TH", accessible: ["THCS"] })).toBe("THCS");
   });
+  it("a link's level (?level=) comes after an explicit choice and before the stored one, when accessible", () => {
+    expect(resolveLevel({ linked: "THPT", stored: "TH", accessible: all })).toBe("THPT");
+    expect(resolveLevel({ chosen: "THCS", linked: "THPT", stored: "TH", accessible: all })).toBe("THCS");
+    expect(resolveLevel({ linked: "THPT", stored: "TH", accessible: ["TH", "THCS"] })).toBe("TH");
+    const profile = { role: "GVCN" as const, gvcnClasses: [{ levelId: "TH" as const, classCode: "1A1" }] };
+    expect(resolveLevel({ profile, linked: "THPT", accessible: ["TH", "THPT"] })).toBe("THPT");
+  });
   it("defaults GVCN to the level of the first homeroom class", () => {
     const profile = { role: "GVCN" as const, gvcnClasses: [{ levelId: "THPT" as const, classCode: "10A1" }] };
     expect(resolveLevel({ profile, accessible: ["THPT"] })).toBe("THPT");

@@ -290,7 +290,7 @@ const baoCao: GuideSection = {
   group: "xem",
   roles: "all",
   route: "/bao-cao",
-  summary: "Báo cáo nền nếp khổ A4 theo tuần hoặc tháng, gửi Ban Giám hiệu, tổ khối hoặc GVCN: công tác phối hợp tuần/tháng mới, in, lưu PDF và xuất Excel chi tiết.",
+  summary: "Báo cáo nền nếp khổ A4 theo tuần hoặc tháng, gửi Ban Giám hiệu, tổ khối hoặc GVCN: công tác phối hợp tuần/tháng mới, in, lưu PDF, gửi email và xuất Excel chi tiết.",
   blocks: [
     {
       kind: "steps",
@@ -302,6 +302,7 @@ const baoCao: GuideSection = {
         "Bật/tắt [[Kèm bảng chi tiết]] (mặc định bật với tổ khối và GVCN, tắt với BGH).",
         "Quản trị và Cán bộ nền nếp: ghi **Công tác phối hợp tuần mới** (báo cáo tháng: **tháng mới**) ở thẻ ngay dưới các nút điều khiển rồi bấm [[Lưu]] – xem phần dưới.",
         "Xem trước bản A4 ngay trên màn hình, rồi bấm [[In / Lưu PDF]]. Quản trị có thêm [[Xuất Excel chi tiết]].",
+        "Gửi qua email: Quản trị và Cán bộ nền nếp bấm [[Gửi email]] để gửi báo cáo (kèm file PDF) cho BGH, tổ khối hoặc GVCN từng lớp; [[Tải PDF]] tải đúng bản A4 về máy – xem [Email thông báo & gửi báo cáo](#email-thong-bao).",
       ],
     },
     {

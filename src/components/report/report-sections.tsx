@@ -22,6 +22,7 @@ import type { RankingRow } from "@/lib/types";
 import { SEVERITY_LABEL, SEVERITY_TONE } from "../dashboard/lib/warning-model";
 import { groupShares, type ReportDetailRow, type ReportGradeRanking, type ReportKpi, type ReportRanking } from "./lib/report-model";
 import { textLines, type ReportPlanContent } from "./lib/report-plan";
+import { PRINT_WRAP_ATTR } from "./report-print";
 
 export function ReportSection({ index, title, children, note }: { index: number; title: string; children: ReactNode; note?: ReactNode }) {
   return (
@@ -38,12 +39,24 @@ export function ReportSection({ index, title, children, note }: { index: number;
 
 /* ---------------------------------- KPIs ---------------------------------- */
 
-function deltaText(k: ReportKpi): { text: string; tone: "ok" | "bad" | "muted" } | undefined {
+function deltaText(k: ReportKpi): { text: string; tone: "ok" | "bad" | "muted"; arrow?: "up" | "down" } | undefined {
   if (k.delta === undefined) return undefined;
   if (k.delta === 0) return { text: "= không đổi", tone: "muted" };
   const up = k.delta > 0;
   const good = up === (k.goodWhen === "up");
-  return { text: `${up ? "▲ +" : "▼ −"}${fmtNumber(Math.abs(k.delta))}`, tone: good ? "ok" : "bad" };
+  return { text: `${up ? "+" : "−"}${fmtNumber(Math.abs(k.delta))}`, tone: good ? "ok" : "bad", arrow: up ? "up" : "down" };
+}
+
+/**
+ * ▲ / ▼ of a KPI change, drawn as SVG: Lexend has no geometric-shape glyphs and the serverless Chromium that prints
+ * the emailed PDF has no fallback font for them (they would print as empty boxes).
+ */
+function DeltaArrow({ dir }: { dir: "up" | "down" }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 10 10" fill="currentColor" className="mr-1 inline-block size-[0.7em] align-baseline">
+      <path d={dir === "up" ? "M5 1 9.5 9H.5Z" : "M5 9 .5 1h9Z"} />
+    </svg>
+  );
 }
 
 export function KpiBlock({ kpis, previousNoun }: { kpis: ReportKpi[]; previousNoun?: string }) {
@@ -59,6 +72,7 @@ export function KpiBlock({ kpis, previousNoun }: { kpis: ReportKpi[]; previousNo
             </dd>
             {d ? (
               <dd className={cn("num text-2xs font-semibold", d.tone === "ok" ? "text-ok-strong" : d.tone === "bad" ? "text-bad-strong" : "text-slate-500")}>
+                {d.arrow ? <DeltaArrow dir={d.arrow} /> : null}
                 {d.text}
                 {previousNoun ? <span className="font-normal text-slate-500"> so với {previousNoun}</span> : null}
               </dd>
@@ -460,7 +474,7 @@ export function WarningsBlock({ warnings, max = 12 }: { warnings: EarlyWarning[]
           <span className="min-w-0 flex-1 text-slate-800">{w.message}</span>
         </li>
       ))}
-      {warnings.length > max ? <li className="text-xs text-slate-500">và {fmtNumber(warnings.length - max)} cảnh báo khác (xem Hành động → Cảnh báo sớm).</li> : null}
+      {warnings.length > max ? <li className="text-xs text-slate-500">và {fmtNumber(warnings.length - max)} cảnh báo khác (xem trang Hành động, mục Cảnh báo sớm).</li> : null}
     </ul>
   );
 }
@@ -562,7 +576,7 @@ export const DetailBlock = memo(function DetailBlock({ rows }: { rows: ReportDet
         ))}
       </ul>
       <div className="hidden overflow-x-auto sm:block print:block">
-        <table className="w-full min-w-[880px] border-collapse print:min-w-0">
+        <table {...{ [PRINT_WRAP_ATTR]: "" }} className="w-full min-w-[880px] border-collapse print:min-w-0">
           <thead>
             <tr>
               {DETAIL_HEAD.map((h) => (

@@ -140,6 +140,16 @@ export const FAQ: GuideContent["faq"] = [
     a: "Khi bấm sang trang khác hoặc đổi cấp học, phần mềm hỏi “Bỏ sự việc đang nhập?” – chọn [[Ở lại]] để giữ thông tin và nhập tiếp; nếu chọn [[Bỏ và rời trang]] thì phần chưa lưu bị bỏ. Nếu lỡ rời trang mà không có câu hỏi này (ví dụ nút quay lại của trình duyệt), thông tin vẫn được giữ trong thẻ trình duyệt đó và tự khôi phục khi mở lại form (thông báo “Đã khôi phục sự việc đang nhập dở”). Tải lại trang hoặc đóng thẻ thì không giữ được.",
     sectionId: "nhap-lieu",
   },
+  {
+    q: "GVCN không nhận được email thông báo?",
+    a: "Kiểm tra lần lượt: (1) Cài đặt → [[Email]] của cấp học đã bật **Gửi thông báo cho GVCN** và đúng loại (trừ điểm, cộng điểm); (2) lớp có email GVCN – tài khoản GVCN được gán lớp hoặc **Email GVCN** ở Lớp & GVCN – thuộc **tên miền được phép**; (3) thay đổi do Quản trị hoặc Cán bộ nền nếp làm trực tiếp trên phần mềm – nhập từ Excel và thao tác của GVCN không gửi thư; (4) dòng tương ứng ở **Nhật ký gửi thư** (Lỗi hay Bỏ qua và lý do); (5) nhờ GVCN xem cả hộp thư rác.",
+    sectionId: "email-thong-bao",
+  },
+  {
+    q: "Vì sao chưa bấm được Gửi trong hộp thoại Gửi email?",
+    a: "Thường do còn thay đổi chưa lưu ở **Công tác phối hợp** (hộp thoại nhắc “Lưu công tác phối hợp trước khi gửi”) – bấm [[Lưu]] trước. Nếu hộp thoại báo chưa cấu hình gửi email, Quản trị xem Cài đặt → [[Email]] → **Kết nối gửi thư**.",
+    sectionId: "email-thong-bao",
+  },
 ];
 
 export const GLOSSARY: GuideContent["glossary"] = [
@@ -179,5 +189,7 @@ export const GLOSSARY: GuideContent["glossary"] = [
   { term: "Xóa mềm", definition: "Bản ghi bị ẩn khỏi thống kê nhưng vẫn được lưu kèm người xóa và lý do; Quản trị khôi phục được." },
   { term: "Workbook", definition: "File Excel xuất toàn bộ dữ liệu của một cấp học (nhập liệu, học sinh, danh mục, xếp hạng…); có thể chỉnh rồi nhập lại." },
   { term: "Bản chụp HTML", definition: "Báo cáo một trang mở được không cần mạng, dùng để lưu trữ/chia sẻ; không dùng để nhập lại." },
+  { term: "Thông báo GVCN", definition: "Email tự động gửi GVCN khi điểm của lớp thay đổi do Quản trị hoặc Cán bộ nền nếp ghi, sửa, xóa hay khôi phục; bật/tắt ở Cài đặt → Email." },
+  { term: "Tên miền được phép", definition: "Các tên miền email mà phần mềm được gửi thư tới (mặc định: tên miền của hộp thư nhà trường); địa chỉ khác không nhận được thư." },
   { term: "Sĩ số nguồn", definition: "Sĩ số lớp theo danh sách của trường (khai ở Lớp & GVCN), dùng để so với số học sinh đang học trong phần mềm." },
 ];

@@ -317,6 +317,120 @@ export interface ReportPlan {
   updatedByName: string;
 }
 
+/* ---------------------------------- Email ---------------------------------- */
+
+/**
+ * Cài đặt → Email of a level (doc mailSettings/{levelId}). Every address is normalised (lower-case, deduplicated).
+ * Absent doc → defaults (notices off, both kinds on, empty lists, rev 0).
+ */
+export interface MailSettings {
+  levelId: LevelId;
+  /** Thông báo cho GVCN: master switch + which scoring actions send a notice. */
+  notices: { enabled: boolean; incidents: boolean; rewards: boolean };
+  /** Người nhận báo cáo: Ban Giám hiệu, each grade (keyed by String(grade)), always-CC list. */
+  report: { bgh: string[]; grades: Record<string, string[]>; cc: string[] };
+  /** Tên miền được phép; [] → only the domain of MAIL_SENDER. */
+  allowedDomains: string[];
+  /** Incremented by every save (optimistic concurrency: PUT baseRev). */
+  rev: number;
+  updatedAt?: string;
+  updatedBy?: string; // email
+}
+
+export type MailJobKind = "NOTICE" | "REPORT" | "TEST";
+export type MailJobStatus = "PENDING" | "SENDING" | "SENT" | "FAILED" | "SKIPPED";
+/** What happened to the record, from the point of view of the class receiving the notice. */
+export type NoticeEvent = "CREATED" | "UPDATED" | "DELETED" | "RESTORED" | "MOVED_OUT" | "CONFIRMED";
+
+/** Everything a GVCN notice email shows (no lookups at send time except the recipients). */
+export interface NoticeSnapshot {
+  record: "incident" | "reward";
+  recordId: string; // Firestore doc id
+  code: string; // "NN-20261021-0001" | "KT-20261021-0001"
+  date: string; // yyyy-mm-dd
+  week: string; // Monday yyyy-mm-dd
+  classCode: string;
+  grade: number;
+  /** incident: issue (Nội dung lỗi); reward: reason. */
+  title: string;
+  errorCode?: string;
+  category?: string;
+  group?: string;
+  unit?: Unit;
+  scope?: Scope;
+  occurrenceCount?: number;
+  /** >= 0; the sign is given by `record` (incident = trừ, reward = cộng). */
+  points: number;
+  /** Display names of the named students (incident only; [] for rewards). */
+  students: string[];
+  unnamedCount?: number;
+  detail?: string;
+  reporter?: string;
+  status: string;
+  /** Reward only: whether its status is counted in the competition score. */
+  counted?: boolean;
+}
+
+export interface NoticePayload {
+  event: NoticeEvent;
+  snapshot: NoticeSnapshot;
+  /** UPDATED: Vietnamese labels of the score-relevant fields that changed (NOTICE_FIELD_LABELS). */
+  changes?: string[];
+  /** MOVED_OUT: the new class code. */
+  movedTo?: string;
+  actorName: string;
+}
+
+export interface ReportJobPayload {
+  mode: "week" | "month";
+  key: string; // week: Monday yyyy-mm-dd; month: yyyy-mm
+  /** Recipient key of the report: "bgh" | "khoi-6" | "lop-6A01". */
+  to: string;
+  /** Include the incident detail table. */
+  detail: boolean;
+  /** "Ban Giám hiệu" | "Tổ khối 6" | "GVCN lớp 6A01". */
+  addressee: string;
+  note?: string;
+  /** uid whose permissions build the report (the sender). */
+  viewerUid: string;
+  /** Display name of the sender (signature of the email). */
+  preparedBy: string;
+}
+
+export interface TestJobPayload {
+  kind: "TEST";
+}
+
+export type MailJobPayload = NoticePayload | ReportJobPayload | TestJobPayload;
+
+/**
+ * One outgoing email (doc mailOutbox/{mailJobId()}): queued PENDING, claimed SENDING (lease), then SENT / SKIPPED /
+ * FAILED, or back to PENDING with a backoff (`nextAttemptAt`) after a retryable error.
+ */
+export interface MailJob {
+  id: string;
+  levelId: LevelId;
+  kind: MailJobKind;
+  status: MailJobStatus;
+  /** NOTICE: resolved at send time (stored once sent); REPORT / TEST: set at enqueue. */
+  to: string[];
+  cc: string[];
+  /** Set when the message is built. */
+  subject?: string;
+  payload: MailJobPayload;
+  /** REPORT: one batch per "Gửi" click. */
+  batchId?: string;
+  attempts: number;
+  nextAttemptAt: string; // ISO
+  leaseUntil?: string; // ISO, while SENDING
+  createdAt: string;
+  createdBy: string; // uid
+  createdByName: string;
+  sentAt?: string;
+  lastError?: string; // Vietnamese
+  skipReason?: string; // Vietnamese
+}
+
 export interface ActionItem {
   id: string; // `${levelId}_${code}`
   code: string; // "HD-20261021-001"
@@ -375,7 +489,11 @@ export type AuditAction =
   | "UPDATE_INSPECTION"
   | "DELETE_INSPECTION"
   | "UPDATE_REPORT_PLAN"
-  | "UPDATE_REGULATION";
+  | "UPDATE_REGULATION"
+  | "UPDATE_MAIL_SETTINGS" // entity "mailSettings", entityId = levelId; detail: counts only (never addresses)
+  | "SEND_REPORT_EMAIL" // entity "mailBatch", entityId = batchId; detail: mode, key, targets, recipients, detail flag
+  | "SEND_TEST_EMAIL" // entity "mailJob", entityId = job id
+  | "RETRY_EMAIL"; // entity "mailJob", entityId = job id
 
 export interface AuditLog {
   id: string;

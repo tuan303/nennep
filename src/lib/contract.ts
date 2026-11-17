@@ -5,7 +5,7 @@
  * - Success: HTTP 200/201 with the documented response type as the JSON body (no wrapper).
  * - Error:   HTTP 4xx/5xx with body `ApiErrorBody` – `message` is Vietnamese and safe to show to users.
  * - Auth:    every endpoint except POST /api/auth/login-failed and GET /api/health requires
- *            `Authorization: Bearer <Firebase ID token>`.
+ *            `Authorization: Bearer <Firebase ID token>` (GET /api/cron/mail: `Bearer <CRON_SECRET>` instead).
  * - The server re-validates EVERY input with the schemas below and recomputes all derived fields
  *   (points, week, month, semester, grade, relatedStudentCount, dataCheck). Client values for derived
  *   fields are ignored.
@@ -72,16 +72,30 @@
  *  DELETE /api/regulations/:id/pdf          → { baseRev } (JSON body)     → Regulation               (regulations.manage; audit UPDATE_REGULATION)
  *  GET    /api/report-plans?level&mode&key  → –                           → ReportPlanResponse       (view.dashboard + level access; GVCN too)
  *  PUT    /api/report-plans                 → ReportPlanPutSchema         → ReportPlan               (report.plan + level; audit UPDATE_REPORT_PLAN; baseRev → 409)
+ *  GET    /api/settings/:level/mail         → –                           → MailSettingsResponse     (settings.manage + level; defaults when never saved)
+ *  PUT    /api/settings/:level/mail         → MailSettingsSchema          → MailSettingsResponse     (settings.manage + level; grades of the level only; audit UPDATE_MAIL_SETTINGS, counts only; baseRev → 409)
+ *  POST   /api/settings/:level/mail/test    → {}                          → MailTestResponse         (settings.manage + level; sent now to the caller's own email; 5 per 10 min; audit SEND_TEST_EMAIL)
+ *  GET    /api/mail/log?level&limit         → MailLogQuerySchema          → MailLogResponse          (settings.manage + level; newest first, limit ≤ 200)
+ *  POST   /api/mail/jobs/:id/retry          → {}                          → OkResponse               (settings.manage + level, or report.send for own jobs; FAILED/SKIPPED → PENDING; audit RETRY_EMAIL)
+ *  GET    /api/mail/batches/:id             → –                           → MailBatchResponse        (report.send + level of the jobs; re-schedules a stalled drain)
+ *  GET    /api/reports/mail/recipients?level&fresh → ReportMailRecipientsQuerySchema → ReportMailRecipientsResponse (report.send + level; fresh=1: settings read uncached)
+ *  POST   /api/reports/mail                 → ReportMailSendSchema        → ReportMailSendResponse   (report.send + level + recipient rules of the report; 400 blocked domains; 409 not configured; 429 daily recipient budget; audit SEND_REPORT_EMAIL)
+ *  GET    /api/reports/pdf?level&mode&key&to&detail → ReportPdfQuerySchema → application/pdf bytes   (view.dashboard + level + recipient rules of the report; works without mail configuration)
+ *  GET    /api/cron/mail                    → Bearer CRON_SECRET          → MailCronResponse         (cron only, 401 otherwise; drains every kind, deletes print jobs older than 1 h)
  *  GET    /api/health                       → –                           → { ok: true; time: string }
  */
 import { z } from "zod";
-import { LEVEL_IDS } from "./constants";
+import { LEVEL_IDS, MAIL_MAX_RECIPIENTS, MAIL_MAX_TARGETS, MAIL_NOTE_MAX } from "./constants";
+import { dedupeEmails, isDomain, isEmail, normalizeDomain, normalizeEmail } from "./mail/address";
 import type {
   ActionItem,
   AuditLog,
   ClassInfo,
   GradeRanking,
   LevelId,
+  MailJob,
+  MailJobStatus,
+  MailSettings,
   Period,
   Regulation,
   ReportPlan,
@@ -689,6 +703,214 @@ export const WeeksPutSchema = z.union([
   z.object({ regenerate: z.literal(true) }),
 ]);
 export type WeeksPutInput = z.input<typeof WeeksPutSchema>;
+
+/* ---------------------------------- email --------------------------------- */
+
+/** One address: normalised (trimmed, lower-case, "mailto:" / "<…>" removed), then checked with `isEmail`. */
+export const zEmail = z
+  .string()
+  .max(320, "Địa chỉ email quá dài")
+  .transform(normalizeEmail)
+  .superRefine((v, ctx) => {
+    if (!isEmail(v)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: v ? `Địa chỉ email không hợp lệ: ${v}` : "Thiếu địa chỉ email" });
+  });
+
+/** Addresses of one list (≤ MAIL_MAX_RECIPIENTS), deduplicated after normalisation. */
+const zEmailList = (min = 0) =>
+  z
+    .array(zEmail)
+    .min(min, "Cần ít nhất 1 địa chỉ email")
+    .max(MAIL_MAX_RECIPIENTS, `Tối đa ${MAIL_MAX_RECIPIENTS} địa chỉ email trong một danh sách`)
+    .transform(dedupeEmails);
+
+/** "example.edu.vn" (normalised: lower-case, no "@", no trailing dot). */
+const zMailDomain = z
+  .string()
+  .max(253, "Tên miền quá dài")
+  .transform(normalizeDomain)
+  .superRefine((v, ctx) => {
+    if (!isDomain(v)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Tên miền không hợp lệ: ${v || "(trống)"} – ví dụ: example.edu.vn` });
+  });
+
+/** Recipient key of Báo cáo tuần/tháng (same syntax as `?to=` of /bao-cao): "bgh" | "khoi-6" | "lop-6A01". */
+export const zReportRecipientKey = z
+  .string()
+  .trim()
+  .regex(/^(bgh|khoi-\d{1,2}|lop-[\w.-]{1,20})$/, "Người nhận báo cáo không hợp lệ");
+
+/**
+ * PUT /api/settings/:level/mail – replaces the mail settings of the level. Every address must pass `isEmail`
+ * (≤ MAIL_MAX_RECIPIENTS per list); `report.grades` is keyed by String(grade) and the server rejects grades outside
+ * the level (400). `allowedDomains` [] → only the domain of MAIL_SENDER. Stale `baseRev` → 409.
+ */
+export const MailSettingsSchema = z.object({
+  notices: z.object({ enabled: z.boolean(), incidents: z.boolean(), rewards: z.boolean() }),
+  report: z.object({
+    bgh: zEmailList(),
+    grades: z.record(z.string().regex(/^\d{1,2}$/, "Khối không hợp lệ"), zEmailList()).default({}),
+    cc: zEmailList(),
+  }),
+  allowedDomains: z
+    .array(zMailDomain)
+    .max(20, "Tối đa 20 tên miền")
+    .transform((list) => [...new Set(list)]),
+  baseRev: zBaseRev,
+});
+export type MailSettingsInput = z.input<typeof MailSettingsSchema>;
+
+/** Sending configuration as seen by the app (never any secret). */
+export interface MailStatus {
+  /** All of MS_GRAPH_TENANT_ID, MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET, MAIL_SENDER are set. */
+  configured: boolean;
+  /** Sending mailbox (MAIL_SENDER). */
+  sender?: string;
+  /** Display name of the sender (MAIL_SENDER_NAME, default MAIL_DEFAULT_SENDER_NAME). */
+  senderName?: string;
+  /** Effective allowed recipient domains (settings list, or the sender's domain). */
+  allowedDomains: string[];
+  /** Base URL of the links in emails (APP_BASE_URL → Vercel production URL → request origin → localhost). */
+  baseUrl: string;
+  /** Names of the missing environment variables (no values). */
+  missing: string[];
+  /**
+   * Why report PDFs are off on this server (Vietnamese, shown after "File PDF đính kèm đang tắt:"): no print-job key,
+   * or a PRINT_JOB_SECRET shorter than 32 characters. Absent = PDFs can be created.
+   */
+  pdfWarning?: string;
+}
+
+export interface MailSettingsResponse {
+  settings: MailSettings;
+  status: MailStatus;
+}
+
+/** POST /api/settings/:level/mail/test: `error` = Vietnamese reason when the test message could not be sent. */
+export interface MailTestResponse {
+  ok: boolean;
+  error?: string;
+}
+
+/** Query of GET /api/mail/log. */
+export const MailLogQuerySchema = z.object({
+  level: zLevelId,
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+
+/** A job of the mail log: everything but the payload, plus a one-line Vietnamese label. */
+export interface MailJobView extends Omit<MailJob, "payload"> {
+  /** "Thông báo GVCN · 6A01 · NN-20261021-0001" | "Báo cáo · Tổ khối 6" | "Thư thử". */
+  label: string;
+}
+
+export interface MailLogResponse {
+  items: MailJobView[];
+}
+
+/**
+ * Query of GET /api/reports/mail/recipients. `fresh=1` (Cài đặt → Email coverage): read the mail settings from
+ * Firestore, not the per-instance cache – a save on another instance must show at once.
+ */
+export const ReportMailRecipientsQuerySchema = z.object({ level: zLevelId, fresh: z.enum(["0", "1"]).default("0") });
+
+export interface ReportMailClassRecipients {
+  classCode: string;
+  grade: number;
+  /** ClassInfo.homeroomTeacher. */
+  teacher?: string;
+  /** Allowed addresses of the class's GVCN (active GVCN accounts ∪ ClassInfo.homeroomEmail). */
+  recipients: string[];
+  /** No allowed address: the class cannot receive its report (shown "Chưa có email GVCN"). */
+  missing: boolean;
+}
+
+/** Default recipients of the "Gửi email" dialog (only addresses inside the allowed domains). */
+export interface ReportMailRecipientsResponse {
+  status: MailStatus;
+  bgh: string[];
+  cc: string[];
+  grades: { grade: number; recipients: string[] }[];
+  classes: ReportMailClassRecipients[];
+  /** Addresses from the settings / class list dropped because their domain is not allowed. */
+  blocked: string[];
+}
+
+export const ReportMailTargetSchema = z.object({
+  to: zReportRecipientKey,
+  recipients: zEmailList(1),
+});
+
+/**
+ * POST /api/reports/mail – one email (job) per target, all in one batch. The period must exist in the level calendar,
+ * each `to` must be a recipient the caller may address, every recipient inside the allowed domains (400 listing the
+ * blocked ones). cc = settings.report.cc ∪ (ccSelf ? the caller's email).
+ */
+export const ReportMailSendSchema = z
+  .object({
+    levelId: zLevelId,
+    /** Include the incident detail table. */
+    detail: z.boolean(),
+    /** Send a copy (CC) to the caller. */
+    ccSelf: z.boolean(),
+    note: z.string().trim().max(MAIL_NOTE_MAX, `Lời nhắn tối đa ${MAIL_NOTE_MAX} ký tự`).optional(),
+    targets: z
+      .array(ReportMailTargetSchema)
+      .min(1, "Chọn ít nhất 1 người nhận")
+      .max(MAIL_MAX_TARGETS, `Tối đa ${MAIL_MAX_TARGETS} thư trong một lần gửi`)
+      .superRefine((targets, ctx) => {
+        const seen = new Set<string>();
+        for (const t of targets) {
+          if (seen.has(t.to)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Người nhận bị trùng: ${t.to}` });
+          seen.add(t.to);
+        }
+      }),
+  })
+  .and(zReportPeriod);
+export type ReportMailSendInput = z.input<typeof ReportMailSendSchema>;
+
+export interface ReportMailSendResponse {
+  batchId: string;
+  /** Number of jobs (emails) queued. */
+  jobs: number;
+}
+
+export interface MailBatchItem {
+  id: string;
+  to: string[];
+  /** ReportJobPayload.addressee ("Ban Giám hiệu", "Tổ khối 6", "GVCN lớp 6A01"). */
+  addressee: string;
+  status: MailJobStatus;
+  lastError?: string;
+  /** SKIPPED: why the email was not sent (e.g. the sender lost access to the recipient). */
+  skipReason?: string;
+  sentAt?: string;
+}
+
+/** GET /api/mail/batches/:id – progress of one "Gửi" click; `done` when no job is PENDING or SENDING. */
+export interface MailBatchResponse {
+  batchId: string;
+  items: MailBatchItem[];
+  counts: Record<MailJobStatus, number>;
+  done: boolean;
+}
+
+/** Query of GET /api/reports/pdf (same period / recipient / detail as the report screen). */
+export const ReportPdfQuerySchema = z
+  .object({
+    level: zLevelId,
+    to: zReportRecipientKey,
+    detail: z.enum(["0", "1"]).default("0"),
+  })
+  .and(zReportPeriod);
+
+/** GET /api/cron/mail. */
+export interface MailCronResponse {
+  ok: true;
+  sent: number;
+  failed: number;
+  skipped: number;
+  retried: number;
+  printJobsDeleted: number;
+}
 
 /* ---------------------------------- users --------------------------------- */
 

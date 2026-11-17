@@ -1,6 +1,8 @@
 /**
- * Hướng dẫn sử dụng – nhóm "Điều hành": Hành động (bản tóm tắt quyết định, cảnh báo sớm, sổ hành động, quá hạn & leo thang).
- * Labels follow src/components/actions/** and constants.ts (ACTION_STATUS_LABELS, PRIORITY_LABELS).
+ * Hướng dẫn sử dụng – nhóm "Điều hành": Hành động (bản tóm tắt quyết định, cảnh báo sớm, sổ hành động, quá hạn & leo thang)
+ * and Email thông báo & gửi báo cáo.
+ * Labels follow src/components/actions/**, src/components/report/mail/** and constants.ts (ACTION_STATUS_LABELS,
+ * PRIORITY_LABELS, MAIL_JOB_STATUS_LABELS).
  */
 import type { GuideSection } from "../types";
 
@@ -87,4 +89,69 @@ const hanhDong: GuideSection = {
   ],
 };
 
-export const DIEUHANH_SECTIONS: GuideSection[] = [hanhDong];
+const emailThongBao: GuideSection = {
+  id: "email-thong-bao",
+  title: "Email thông báo & gửi báo cáo",
+  icon: "Mail",
+  group: "dieuhanh",
+  roles: ["ADMIN", "EDITOR", "GVCN"],
+  route: "/bao-cao",
+  summary: "GVCN nhận email ngay khi điểm của lớp thay đổi; Quản trị và Cán bộ nền nếp gửi báo cáo tuần/tháng qua email kèm file PDF.",
+  blocks: [
+    {
+      kind: "p",
+      text: "Phần mềm gửi email từ **hộp thư dùng chung của nhà trường** (Microsoft 365). Có hai loại thư: **thông báo cho GVCN** – gửi tự động, và **báo cáo tuần/tháng** – do người dùng bấm gửi. Quản trị bật/tắt thông báo và đặt người nhận mặc định ở Cài đặt → [[Email]] của từng cấp học (xem [Cài đặt](#cai-dat)).",
+    },
+    {
+      kind: "list",
+      title: "Thông báo cho GVCN – khi nào có thư",
+      items: [
+        "**Trừ điểm (sự việc)**: khi Quản trị hoặc Cán bộ nền nếp ghi sự việc mới; sửa sự việc làm thay đổi điểm (ngày, lớp, lỗi, điểm trừ, học sinh, số HS chưa rõ tên, số lần, phạm vi); xóa hoặc khôi phục sự việc.",
+        "**Cộng điểm (điểm thưởng)**: khi ghi điểm thưởng; khi đề xuất của GVCN được **xác nhận**; khi sửa ngày, lớp, điểm hoặc trạng thái làm khoản thưởng được tính / thôi được tính; khi xóa hoặc khôi phục.",
+        "Mỗi thay đổi là **một thư riêng** gửi GVCN của lớp. Tiêu đề nêu lớp, số điểm, nội dung và ngày; thân thư có mã bản ghi (`NN-…`, `KT-…`), học sinh liên quan, người ghi, các mục đã sửa và nút [[Xem trên phần mềm]].",
+        "Đổi lớp của một sự việc hay điểm thưởng: lớp cũ nhận thư “chuyển sang lớp khác”, lớp mới nhận thư ghi nhận.",
+        "Người nhận: tài khoản GVCN đang hoạt động được gán lớp chủ nhiệm và **Email GVCN** của lớp ở Cài đặt → Lớp & GVCN, chỉ trong các **tên miền được phép**. Lớp chưa có email thì không có thư (nhật ký ghi **Bỏ qua**).",
+      ],
+    },
+    {
+      kind: "note",
+      title: "Không gửi thông báo khi",
+      text: "GVCN tự thao tác (đề xuất điểm thưởng, phản hồi, biện pháp khắc phục), nhập sổ nền nếp từ Excel, ghi đợt kiểm tra, hoặc sửa những nội dung không làm đổi điểm (chi tiết, minh chứng…).",
+    },
+    {
+      kind: "steps",
+      title: "Gửi báo cáo tuần/tháng qua email (Quản trị, Cán bộ nền nếp)",
+      items: [
+        "Mở [Báo cáo tuần/tháng](/bao-cao), chọn **Kỳ báo cáo** và **Người nhận** như khi in.",
+        "Nếu vừa sửa **Công tác phối hợp**, bấm [[Lưu]] trước – khi còn thay đổi chưa lưu, nút gửi báo “Lưu công tác phối hợp trước khi gửi”.",
+        "Bấm [[Gửi email]]. Hộp thoại có ba nhóm: **Ban Giám hiệu**, **Tổ khối** (mỗi khối một dòng) và **GVCN từng lớp** (chọn tất cả hoặc từng lớp; lớp chưa có email hiện “Chưa có email GVCN”). Người nhận đang chọn trên thanh công cụ được chọn sẵn.",
+        "Bỏ chọn hoặc thêm địa chỉ nếu cần; bật/tắt [[Kèm bảng chi tiết sự việc]] và [[Gửi bản sao cho tôi]]; ghi **Lời nhắn** ngắn (tối đa 1000 ký tự).",
+        "Kiểm tra dòng “Sẽ gửi … thư · … người nhận” rồi bấm [[Gửi]]. Danh sách tiến độ cho biết từng thư **Đang chờ**, **Đang gửi**, **Đã gửi** hoặc **Lỗi**; thư lỗi có nút [[Gửi lại]]. Có thể đóng hộp thoại hoặc chuyển trang – thư vẫn được gửi tiếp và phần mềm báo kết quả khi xong; mở lại [[Gửi email]] (đúng cấp học đó) để xem thư lỗi.",
+      ],
+    },
+    {
+      kind: "list",
+      title: "Thư báo cáo gồm",
+      items: [
+        "Tiêu đề dạng “[Nền nếp] Báo cáo nền nếp … – Kính gửi: …”, lời chào và lời nhắn của người gửi.",
+        "Tóm tắt: Sự việc, Lượt vi phạm, Điểm trừ, Điểm thưởng (so với kỳ trước), lớp dẫn đầu hoặc Top 3, vấn đề nổi bật, số cảnh báo sớm và công tác phối hợp.",
+        "File **PDF** đính kèm đúng bản A4 trên màn hình và nút mở báo cáo trên phần mềm. File quá lớn, hoặc tạo PDF không thành công sau 2 lần thử, thì thư chỉ có liên kết và ghi rõ điều đó.",
+        "GVCN chỉ nhận báo cáo của lớp mình – mỗi lớp một thư riêng.",
+      ],
+    },
+    {
+      kind: "tip",
+      text: "Chỉ cần file? Bấm [[Tải PDF]] trên thanh công cụ của báo cáo để tải đúng bản A4 – dùng được cả khi chưa cấu hình email. [[In / Lưu PDF]] vẫn in trực tiếp từ trình duyệt.",
+    },
+    {
+      kind: "warn",
+      text: "Thư chỉ gửi tới địa chỉ thuộc **tên miền được phép** (mặc định: tên miền của hộp thư nhà trường) để tránh gửi nhầm dữ liệu học sinh ra ngoài; địa chỉ khác bị từ chối ngay khi bấm Gửi.",
+    },
+    {
+      kind: "note",
+      text: "Đây là thư tự động – người nhận không trả lời thư; GVCN phản hồi trực tiếp trên phần mềm (Báo GVCN → [[Phản hồi]]). Quản trị xem mọi thư đã gửi, lỗi và lý do ở Cài đặt → Email → **Nhật ký gửi thư**.",
+    },
+  ],
+};
+
+export const DIEUHANH_SECTIONS: GuideSection[] = [hanhDong, emailThongBao];

@@ -1,5 +1,6 @@
 /**
- * Hướng dẫn sử dụng – nhóm "Quản trị": Quản lý học sinh, Dữ liệu & rà soát, Nhập/Xuất Excel, Nhật ký, Cài đặt.
+ * Hướng dẫn sử dụng – nhóm "Quản trị": Quản lý học sinh, Dữ liệu & rà soát, Nhập/Xuất Excel, Nhật ký, Cài đặt,
+ * Thiết lập gửi email (Microsoft 365 + Vercel checklist; placeholders only – the repo and the guide are public).
  * Labels follow src/components/{student-admin,data-inspect,excel-io,audit,settings}/**.
  */
 import type { GuideSection } from "../types";
@@ -230,11 +231,11 @@ const caiDat: GuideSection = {
   group: "quantri",
   roles: ["ADMIN"],
   route: "/cai-dat",
-  summary: "Cấu hình thi đua và phê duyệt ngưỡng, cảnh báo sớm, danh mục lỗi, lớp & GVCN, lịch tuần, người dùng và bảo trì.",
+  summary: "Cấu hình thi đua và phê duyệt ngưỡng, cảnh báo sớm, danh mục lỗi, lớp & GVCN, lịch tuần, email, người dùng và bảo trì.",
   blocks: [
     {
       kind: "p",
-      text: "[Cài đặt](/cai-dat) gồm các tab: [[Cấu hình thi đua]], [[Cảnh báo sớm]], [[Danh mục lỗi]], [[Lớp & GVCN]], [[Lịch tuần]], [[Người dùng]], [[Bảo trì]]. Mọi tab (trừ Người dùng) áp dụng cho **cấp học đang chọn** ở thanh trên cùng. Sửa xong bấm [[Lưu thay đổi]] ở thanh dưới của tab ([[Hoàn tác]] để bỏ); rời trang khi còn thay đổi chưa lưu, phần mềm sẽ hỏi lại.",
+      text: "[Cài đặt](/cai-dat) gồm các tab: [[Cấu hình thi đua]], [[Cảnh báo sớm]], [[Danh mục lỗi]], [[Lớp & GVCN]], [[Lịch tuần]], [[Email]], [[Người dùng]], [[Bảo trì]]. Mọi tab (trừ Người dùng) áp dụng cho **cấp học đang chọn** ở thanh trên cùng. Sửa xong bấm [[Lưu thay đổi]] ở thanh dưới của tab ([[Hoàn tác]] để bỏ); rời trang khi còn thay đổi chưa lưu, phần mềm sẽ hỏi lại.",
     },
     {
       kind: "list",
@@ -299,6 +300,17 @@ const caiDat: GuideSection = {
       ],
     },
     {
+      kind: "list",
+      title: "Email",
+      items: [
+        "**Kết nối gửi thư**: **Đã cấu hình** (kèm hộp thư gửi, tên miền nhận thư, địa chỉ liên kết trong thư) hoặc **Chưa cấu hình** (kèm tên các biến môi trường còn thiếu – xem [Thiết lập gửi email](#thiet-lap-email)); nút [[Gửi thư thử tới tôi]] gửi ngay một thư tới email đăng nhập của bạn.",
+        "**Thông báo cho GVCN**: công tắc **Gửi thông báo cho GVCN** và hai lựa chọn **Khi trừ điểm (sự việc)**, **Khi cộng điểm (điểm thưởng)**. Dòng “… lớp có email GVCN” liệt kê các lớp chưa có email – bổ sung ở [[Lớp & GVCN]] hoặc gán tài khoản GVCN ở [[Người dùng]].",
+        "**Người nhận báo cáo**: email của **Ban Giám hiệu**, từng **Tổ khối** và **Luôn gửi kèm (CC)** – là người nhận mặc định khi bấm [[Gửi email]] ở Báo cáo tuần/tháng (tối đa 50 địa chỉ mỗi danh sách). Gõ hoặc dán nhiều địa chỉ cùng lúc, cách nhau bởi dấu phẩy, chấm phẩy hoặc xuống dòng; địa chỉ sai hiện màu đỏ (bấm vào để sửa), địa chỉ ngoài tên miền được phép hiện màu vàng.",
+        "**Tên miền được phép**: thư chỉ gửi tới địa chỉ thuộc các tên miền này, cách nhau bởi dấu phẩy (để trống = chỉ tên miền của hộp thư gửi).",
+        "**Nhật ký gửi thư**: các thư gần nhất của cấp học – Thời gian, Loại, Nội dung, Người nhận, Trạng thái (Đang chờ, Đang gửi, Đã gửi, Lỗi, Bỏ qua) và lý do lỗi; bấm [[Làm mới]] để cập nhật, [[Gửi lại]] ở thư **Lỗi** hoặc **Bỏ qua** sau khi đã khắc phục.",
+      ],
+    },
+    {
       kind: "steps",
       title: "Người dùng (quản trị toàn trường)",
       items: [
@@ -334,4 +346,92 @@ const caiDat: GuideSection = {
   ],
 };
 
-export const QUANTRI_SECTIONS: GuideSection[] = [quanLyHocSinh, duLieu, nhapXuat, nhatKy, caiDat];
+const thietLapEmail: GuideSection = {
+  id: "thiet-lap-email",
+  title: "Thiết lập gửi email (Microsoft 365)",
+  icon: "Send",
+  group: "quantri",
+  roles: ["ADMIN"],
+  route: "/cai-dat",
+  summary: "Việc của quản trị CNTT: hộp thư dùng chung, đăng ký ứng dụng trong Microsoft Entra, cấp quyền gửi thư bằng Exchange Online PowerShell, biến môi trường trên Vercel và thư thử.",
+  blocks: [
+    {
+      kind: "p",
+      text: "Phần mềm gửi thư qua Microsoft Graph bằng quyền **ứng dụng** (không cần ai đăng nhập hộp thư) và chỉ được gửi từ **một hộp thư dùng chung**. Làm một lần theo thứ tự dưới đây; cần quyền **Exchange Administrator** (hoặc nhóm Organization Management) và quyền quản trị dự án trên Vercel. Trong các lệnh, thay phần trong dấu `< >` bằng giá trị của trường.",
+    },
+    {
+      kind: "steps",
+      title: "1. Tạo hộp thư dùng chung",
+      items: [
+        "Vào **Exchange admin center** → Recipients → Mailboxes → [[Add a shared mailbox]].",
+        "Đặt tên hiển thị (ví dụ “Nền nếp NSHM”) và địa chỉ thuộc tên miền của trường. Hộp thư dùng chung không cần giấy phép và không cần thêm thành viên.",
+      ],
+    },
+    {
+      kind: "steps",
+      title: "2. Đăng ký ứng dụng trong Microsoft Entra",
+      items: [
+        "Vào **Microsoft Entra admin center** → App registrations → [[New registration]]: đặt tên (ví dụ “Nen nep - gui thu”), chọn **Single tenant**, không cần Redirect URI.",
+        "Ở trang Overview, ghi lại **Application (client) ID** và **Directory (tenant) ID**.",
+        "Mở **Enterprise applications**, tìm ứng dụng vừa tạo và ghi lại **Object ID** của nó (khác Object ID ở App registrations) – dùng ở bước 3.",
+        "**Không** thêm quyền Microsoft Graph (Mail.Send) ở API permissions: quyền gửi thư được cấp riêng cho đúng hộp thư ở bước 3. Nếu đã lỡ cấp Mail.Send ở đây thì gỡ đi – quyền đó cho phép gửi từ mọi hộp thư của trường.",
+        "Certificates & secrets → [[New client secret]]: chọn thời hạn (ví dụ 24 tháng), bấm Add rồi sao chép ngay cột **Value** (chỉ hiện một lần). Ghi lịch tạo secret mới trước ngày hết hạn.",
+      ],
+    },
+    {
+      kind: "steps",
+      title: "3. Cấp quyền gửi thư bằng Exchange Online PowerShell (RBAC for Applications)",
+      items: [
+        "Mở PowerShell, cài mô-đun nếu chưa có (`Install-Module ExchangeOnlineManagement`) rồi đăng nhập: `Connect-ExchangeOnline`.",
+        "Khai báo ứng dụng với Exchange: `New-ServicePrincipal -AppId <Application (client) ID> -ObjectId <Object ID ở Enterprise applications> -DisplayName \"Nen nep - gui thu\"`.",
+        "Tạo phạm vi chỉ gồm hộp thư dùng chung: `New-ManagementScope -Name \"Nen nep - hop thu gui\" -RecipientRestrictionFilter \"PrimarySmtpAddress -eq '<hộp thư gửi>'\"`.",
+        "Gán quyền gửi thư trong phạm vi đó: `New-ManagementRoleAssignment -App <Application (client) ID> -Role \"Application Mail.Send\" -CustomResourceScope \"Nen nep - hop thu gui\"`.",
+        "Kiểm tra: `Test-ServicePrincipalAuthorization -Identity <Application (client) ID> -Resource <hộp thư gửi>` – dòng **Application Mail.Send** phải có **InScope** là True; thử với một hộp thư khác thì phải là False.",
+      ],
+    },
+    {
+      kind: "note",
+      text: "Quyền vừa gán trong Exchange có thể mất từ 30 phút đến 2 giờ mới có hiệu lực; trong thời gian đó thư thử có thể báo “Ứng dụng chưa được cấp quyền gửi thư…”.",
+    },
+    {
+      kind: "table",
+      caption: "4. Biến môi trường trên Vercel (Project → Settings → Environment Variables, môi trường Production). Phần mềm chỉ hiển thị tên biến còn thiếu, không bao giờ hiển thị giá trị.",
+      head: ["Biến", "Giá trị"],
+      rows: [
+        ["`MS_GRAPH_TENANT_ID`", "Directory (tenant) ID."],
+        ["`MS_GRAPH_CLIENT_ID`", "Application (client) ID."],
+        ["`MS_GRAPH_CLIENT_SECRET`", "**Value** của client secret – bí mật, chỉ dán vào Vercel."],
+        ["`MAIL_SENDER`", "Địa chỉ hộp thư dùng chung ở bước 1."],
+        ["`MAIL_SENDER_NAME`", "Tên người gửi hiển thị (không bắt buộc, mặc định “Nền nếp NSHM”)."],
+        ["`APP_BASE_URL`", "Địa chỉ chính thức của phần mềm, dùng cho liên kết trong thư và để tạo file PDF (không bắt buộc; mặc định là địa chỉ production trên Vercel)."],
+        ["`CRON_SECRET`", "Chuỗi ngẫu nhiên dài; Vercel dùng nó cho lần chạy tự động mỗi ngày (17:00) để gửi nốt các thư còn chờ."],
+      ],
+    },
+    {
+      kind: "steps",
+      title: "5. Triển khai lại và gửi thư thử",
+      items: [
+        "Biến môi trường chỉ có hiệu lực từ lần triển khai mới: vào Deployments, chọn bản mới nhất → [[Redeploy]].",
+        "Đăng nhập phần mềm bằng tài khoản Quản trị → Cài đặt → [[Email]]. Thẻ **Kết nối gửi thư** phải hiện **Đã cấu hình** và đúng hộp thư gửi; nếu vẫn **Chưa cấu hình**, thẻ liệt kê tên các biến còn thiếu.",
+        "Bấm [[Gửi thư thử tới tôi]] – thư được gửi ngay tới email đăng nhập của bạn. Nếu lỗi, đọc thông báo và dòng tương ứng ở **Nhật ký gửi thư**.",
+        "Ở từng cấp học: bật **Thông báo cho GVCN**, nhập **Người nhận báo cáo** (Ban Giám hiệu, từng Tổ khối, CC), kiểm tra **Tên miền được phép** rồi bấm [[Lưu thay đổi]].",
+      ],
+    },
+    {
+      kind: "table",
+      caption: "Lỗi thường gặp khi gửi thư thử",
+      head: ["Thông báo", "Cách xử lý"],
+      rows: [
+        ["Ứng dụng chưa được cấp quyền gửi thư từ hộp thư …", "Kiểm tra bước 3 (đúng Application (client) ID, đúng địa chỉ trong phạm vi) và chờ quyền có hiệu lực."],
+        ["Không tìm thấy hộp thư gửi …", "`MAIL_SENDER` sai địa chỉ, hoặc hộp thư dùng chung chưa được tạo."],
+        ["Sai Tenant ID / Client ID / Client secret hoặc secret đã hết hạn", "Kiểm tra lại ba biến `MS_GRAPH_…`; secret hết hạn thì tạo secret mới, cập nhật trên Vercel rồi Redeploy."],
+      ],
+    },
+    {
+      kind: "warn",
+      text: "Client secret là mật khẩu của ứng dụng: chỉ lưu trên Vercel, không đưa vào mã nguồn, tài liệu, tin nhắn hay email. Khi nghi bị lộ, xóa secret đó trong Microsoft Entra, tạo secret mới và cập nhật Vercel.",
+    },
+  ],
+};
+
+export const QUANTRI_SECTIONS: GuideSection[] = [quanLyHocSinh, duLieu, nhapXuat, nhatKy, caiDat, thietLapEmail];

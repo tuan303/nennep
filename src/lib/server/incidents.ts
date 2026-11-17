@@ -6,6 +6,9 @@
  * - Attached photos are linked to the record (`evidence.attachedTo`), removed ones unlinked.
  * - REQ_V2: remediation (biện pháp khắc phục) through the feedback endpoint; "không trùng" reviews (`notDuplicateOf`)
  *   on create and through `markNotDuplicate` (the duplicate check itself is the engine's, never blocking).
+ * - GVCN notices (mail/outbox.ts): create / score-relevant edit / delete / restore by staff queue NOTICE jobs in the
+ *   same transaction when the route passes `onMailQueued` and Cài đặt → Email has them on. GVCN feedback and
+ *   "không trùng" reviews never notify.
  */
 import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import type { z } from "zod";
@@ -23,6 +26,7 @@ import { loadIncidentDigests } from "./digests";
 import { Errors } from "./errors";
 import { db, nowIso } from "./firebase-admin";
 import { commitCode, nextCode } from "./ids";
+import { levelOfRecordId, planRecordNotices, withNotices, type NoticeCtx } from "./mail/outbox";
 import {
   assertBaseRev,
   assertCanEditRecord,
@@ -134,7 +138,7 @@ async function readNotDuplicateIds(tx: Transaction, levelId: LevelId, ids: reado
 }
 
 /** POST /api/incidents. Returns `created: false` when the clientRequestId was already used (idempotent). */
-export async function createIncident(ctx: ServiceCtx, input: IncidentCreateData): Promise<{ incident: Incident; created: boolean }> {
+export async function createIncident(ctx: ServiceCtx & NoticeCtx, input: IncidentCreateData): Promise<{ incident: Incident; created: boolean }> {
   const { user } = ctx;
   requirePermission(user, "incident.create");
   requireLevel(user, input.levelId);
@@ -142,7 +146,7 @@ export async function createIncident(ctx: ServiceCtx, input: IncidentCreateData)
   const today = ctx.today ?? todayVN();
   const levelId = input.levelId;
 
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelId, "incident", async (tx, notices) => {
     // ---------------- reads ----------------
     const previousId = await readIdempotency(tx, user.uid, input.clientRequestId, "incident");
     if (previousId) {
@@ -218,6 +222,7 @@ export async function createIncident(ctx: ServiceCtx, input: IncidentCreateData)
     writeIdempotency(tx, user.uid, input.clientRequestId, "incident", incident.id);
     bumpVersions(tx, [levelId]);
     writeAudit(tx, auditOf(user, "CREATE_INCIDENT", { entity: "incident", entityId: incident.id, levelId, ip: ctx.ip, detail: auditDetail(incident) }));
+    notices.write(tx, levelId, planRecordNotices("incident", undefined, incident, { actorName: actorName(user) }));
     return { incident, created: true };
   });
 }
@@ -250,11 +255,11 @@ async function resolveEditContext(tx: Transaction, before: Incident, patch: Inci
 }
 
 /** PATCH /api/incidents/:id — ADMIN any; EDITOR own within the edit window. Recomputes every derived field. */
-export async function updateIncident(ctx: ServiceCtx, id: string, patch: IncidentUpdateData): Promise<Incident> {
+export async function updateIncident(ctx: ServiceCtx & NoticeCtx, id: string, patch: IncidentUpdateData): Promise<Incident> {
   const { user } = ctx;
   const today = ctx.today ?? todayVN();
   if (patch.evidenceUrls) assertHttpUrls(patch.evidenceUrls);
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelOfRecordId(id), "incident", async (tx, notices) => {
     const before = await readIncident(tx, id);
     requireLevel(user, before.levelId);
     if (before.deletedAt) throw Errors.conflict(INCIDENT_MSG.deleted);
@@ -318,15 +323,16 @@ export async function updateIncident(ctx: ServiceCtx, id: string, patch: Inciden
     writeEvidenceLinks(tx, id, photos);
     bumpVersions(tx, [before.levelId]);
     writeAudit(tx, auditOf(user, "UPDATE_INCIDENT", { entity: "incident", entityId: id, levelId: before.levelId, ip: ctx.ip, detail: { code: before.code, changes } }));
+    notices.write(tx, before.levelId, planRecordNotices("incident", before, after, { actorName: actorName(user) }));
     return after;
   });
 }
 
 /** DELETE /api/incidents/:id — soft delete (record.delete), removed from the week digest. */
-export async function softDeleteIncident(ctx: ServiceCtx, id: string, reason: string): Promise<Incident> {
+export async function softDeleteIncident(ctx: ServiceCtx & NoticeCtx, id: string, reason: string): Promise<Incident> {
   const { user } = ctx;
   requirePermission(user, "record.delete");
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelOfRecordId(id), "incident", async (tx, notices) => {
     const before = await readIncident(tx, id);
     requireLevel(user, before.levelId);
     if (before.deletedAt) throw Errors.conflict(INCIDENT_MSG.alreadyDeleted);
@@ -337,15 +343,16 @@ export async function softDeleteIncident(ctx: ServiceCtx, id: string, reason: st
     digests.write(tx);
     bumpVersions(tx, [before.levelId]);
     writeAudit(tx, auditOf(user, "DELETE_INCIDENT", { entity: "incident", entityId: id, levelId: before.levelId, ip: ctx.ip, detail: { ...auditDetail(before), reason } }));
+    notices.write(tx, before.levelId, planRecordNotices("incident", before, after, { actorName: actorName(user) }));
     return after;
   });
 }
 
 /** POST /api/incidents/:id/restore — undo a soft delete (record.delete), re-added to its week digest. */
-export async function restoreIncident(ctx: ServiceCtx, id: string): Promise<Incident> {
+export async function restoreIncident(ctx: ServiceCtx & NoticeCtx, id: string): Promise<Incident> {
   const { user } = ctx;
   requirePermission(user, "record.delete");
-  return runTx(async (tx) => {
+  return withNotices(ctx, levelOfRecordId(id), "incident", async (tx, notices) => {
     const before = await readIncident(tx, id);
     requireLevel(user, before.levelId);
     if (!before.deletedAt) throw Errors.conflict(INCIDENT_MSG.notDeleted);
@@ -371,6 +378,7 @@ export async function restoreIncident(ctx: ServiceCtx, id: string): Promise<Inci
         detail: { ...auditDetail(before), deletedAt: before.deletedAt, deleteReason: before.deleteReason },
       }),
     );
+    notices.write(tx, before.levelId, planRecordNotices("incident", before, after, { actorName: actorName(user) }));
     return after;
   });
 }

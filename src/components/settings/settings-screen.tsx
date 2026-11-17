@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { BellRing, CalendarDays, Globe, Layers, ListChecks, School, Settings, SlidersHorizontal, Users, Wrench, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarDays, Globe, Layers, ListChecks, Mail, School, Settings, SlidersHorizontal, Users, Wrench, type LucideIcon } from "lucide-react";
 import { Badge, PageHeader, SkeletonCard, Tabs, TabsContent, TabsList, TabsTrigger, toast } from "@/components/ui";
 import { DatasetGate, useShellOptions } from "@/components/app/shell";
 import { SAME_PATH } from "@/components/entry/lib/leave-guard";
@@ -15,6 +15,7 @@ import { ClassesTab } from "./classes/classes-tab";
 import { ConfigTab } from "./config/config-tab";
 import { EarlyWarningTab } from "./early-warning/early-warning-tab";
 import { SETTINGS_TABS, resolveTab, visibleTabs, type SettingsTabDef, type SettingsTabId } from "./lib/tabs";
+import { MailTab } from "./mail/mail-tab";
 import { MaintenanceTab } from "./maintenance/maintenance-tab";
 import { SettingsProvider } from "./shared/settings-context";
 import { UsersTab } from "./users/users-tab";
@@ -26,13 +27,14 @@ const ICONS: Record<SettingsTabId, LucideIcon> = {
   "danh-muc": ListChecks,
   lop: School,
   "lich-tuan": CalendarDays,
+  email: Mail,
   "nguoi-dung": Users,
   "bao-tri": Wrench,
 };
 
 const TAB_SKELETON = <SkeletonCard rows={6} label="Đang tải cài đặt…" />;
 
-function TabBody({ id }: { id: SettingsTabId }) {
+function TabBody({ id, levelId }: { id: SettingsTabId; levelId: LevelId }) {
   switch (id) {
     case "cau-hinh":
       return <DatasetGate fallback={TAB_SKELETON}>{(ds) => <ConfigTab key={ds.levelId} ds={ds} />}</DatasetGate>;
@@ -44,6 +46,9 @@ function TabBody({ id }: { id: SettingsTabId }) {
       return <DatasetGate fallback={TAB_SKELETON}>{(ds) => <ClassesTab key={ds.levelId} ds={ds} />}</DatasetGate>;
     case "lich-tuan":
       return <DatasetGate fallback={TAB_SKELETON}>{(ds) => <WeeksTab key={ds.levelId} ds={ds} />}</DatasetGate>;
+    case "email":
+      // Mail settings are not part of LevelDataset: the tab loads them itself (remounted per level).
+      return <MailTab key={levelId} levelId={levelId} />;
     case "nguoi-dung":
       return <UsersTab />;
     case "bao-tri":
@@ -151,7 +156,7 @@ export function SettingsScreen() {
           .map((t) => (
             <TabsContent key={t.id} value={t.id} forceMount className="data-[state=inactive]:hidden">
               <TabIntro def={t} levelId={levelId} />
-              <TabBody id={t.id} />
+              <TabBody id={t.id} levelId={levelId} />
             </TabsContent>
           ))}
       </Tabs>
@@ -165,7 +170,7 @@ export function SettingsScreen() {
           icon={Settings}
           eyebrow={currentDef?.perLevel === false ? "Toàn trường" : `Cấp ${LEVELS[levelId].name}`}
           title="Cài đặt"
-          description="Cấu hình thi đua, cảnh báo sớm, danh mục lỗi, lớp & GVCN, lịch tuần, người dùng và bảo trì hệ thống."
+          description="Cấu hình thi đua, cảnh báo sớm, danh mục lỗi, lớp & GVCN, lịch tuần, email, người dùng và bảo trì hệ thống."
         />
         {body}
       </div>
