@@ -36,7 +36,7 @@ export function ConnectionCard({ status, userEmail, testing, onTest, className }
     <Card
       icon={PlugZap}
       title="Kết nối gửi thư"
-      subtitle="Microsoft 365 – thư gửi từ hộp thư dùng chung của nhà trường."
+      subtitle="Microsoft 365 – thư gửi từ hộp thư của nhà trường."
       className={className}
       actions={
         status.configured ? (

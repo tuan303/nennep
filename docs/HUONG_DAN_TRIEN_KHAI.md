@@ -56,15 +56,16 @@ Thay thế: dùng 3 biến `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIRE
 ### Gửi email qua Microsoft 365 (tùy chọn)
 
 Thiếu các biến dưới đây phần mềm vẫn chạy bình thường, chỉ không gửi thư (Cài đặt → Email báo **Chưa cấu hình** và
-liệt kê tên biến còn thiếu). Các bước tạo hộp thư dùng chung, đăng ký ứng dụng trong Microsoft Entra và cấp quyền gửi thư
-bằng Exchange Online PowerShell có trong trang **Hướng dẫn → Thiết lập gửi email (Microsoft 365)** của phần mềm.
+liệt kê tên biến còn thiếu). Các bước chuẩn bị hộp thư gửi, đăng ký ứng dụng trong Microsoft Entra và cấp quyền gửi thư
+(RBAC for Applications, hoặc quyền Mail.Send trong Entra kèm giới hạn về đúng hộp thư gửi khi tổ chức Exchange chưa bật
+tùy biến) có trong trang **Hướng dẫn → Thiết lập gửi email (Microsoft 365)** của phần mềm.
 
 | Biến | Bắt buộc để gửi thư | Giá trị |
 |---|---|---|
 | `MS_GRAPH_TENANT_ID` | ✔ | Directory (tenant) ID |
 | `MS_GRAPH_CLIENT_ID` | ✔ | Application (client) ID của ứng dụng đã đăng ký |
 | `MS_GRAPH_CLIENT_SECRET` | ✔ (bí mật) | Value của client secret – chỉ dán vào Vercel, ghi lịch tạo lại trước ngày hết hạn |
-| `MAIL_SENDER` | ✔ | địa chỉ hộp thư dùng chung dùng để gửi |
+| `MAIL_SENDER` | ✔ | địa chỉ hộp thư gửi (nên là hộp thư dùng chung; hộp thư người dùng có giấy phép cũng được) |
 | `MAIL_SENDER_NAME` | tùy chọn | tên người gửi hiển thị (mặc định “Nền nếp NSHM”) |
 | `APP_BASE_URL` | nên đặt | địa chỉ chính thức của phần mềm (tên miền riêng, **không** bật Vercel Deployment Protection), dùng cho liên kết trong thư và để tạo file PDF báo cáo |
 | `CRON_SECRET` | nên đặt (bí mật) | chuỗi ngẫu nhiên dài; Vercel dùng cho lần chạy tự động 17:00 hằng ngày để gửi nốt thư còn chờ |

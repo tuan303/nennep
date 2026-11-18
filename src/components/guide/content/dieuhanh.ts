@@ -100,7 +100,7 @@ const emailThongBao: GuideSection = {
   blocks: [
     {
       kind: "p",
-      text: "Phần mềm gửi email từ **hộp thư dùng chung của nhà trường** (Microsoft 365). Có hai loại thư: **thông báo cho GVCN** – gửi tự động, và **báo cáo tuần/tháng** – do người dùng bấm gửi. Quản trị bật/tắt thông báo và đặt người nhận mặc định ở Cài đặt → [[Email]] của từng cấp học (xem [Cài đặt](#cai-dat)).",
+      text: "Phần mềm gửi email từ **hộp thư của nhà trường** (Microsoft 365). Có hai loại thư: **thông báo cho GVCN** – gửi tự động, và **báo cáo tuần/tháng** – do người dùng bấm gửi. Quản trị bật/tắt thông báo và đặt người nhận mặc định ở Cài đặt → [[Email]] của từng cấp học (xem [Cài đặt](#cai-dat)).",
     },
     {
       kind: "list",

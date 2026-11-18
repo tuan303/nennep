@@ -1,6 +1,6 @@
 /**
  * Microsoft Graph transport with a fake fetch (no network, no emulators, fake credentials): token request and cache,
- * sendMail body, error mapping (retryable or not, Vietnamese hints, Retry-After), 401 refresh, size guard.
+ * sendMail body, error mapping (retryable or not, Vietnamese hints, Retry-After), 401 refresh, 403 token drop, size guard.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -118,6 +118,50 @@ describe("createGraphTransport – success", () => {
     await createGraphTransport(CONFIG, { fetch }).send(MAIL);
     expect(calls.map((c) => c.url)).toEqual([TOKEN_URL, SEND_URL, TOKEN_URL, SEND_URL]);
     expect(new Headers(calls[3].init.headers).get("authorization")).toBe("Bearer new");
+  });
+
+  it("a 403 drops the cached token: the next send gets a new one (permission granted meanwhile), without a retry", async () => {
+    const { fetch, calls } = fakeFetch([token("before-consent"), graphError(403, "ErrorAccessDenied", "Access is denied."), token("after-consent"), accepted, accepted]);
+    const t = createGraphTransport(CONFIG, { fetch });
+    await expect(t.send(MAIL)).rejects.toMatchObject({ retryable: false, status: 403 });
+    await t.send(MAIL);
+    await t.send(MAIL); // the new token is cached again
+    expect(calls.map((c) => c.url)).toEqual([TOKEN_URL, SEND_URL, TOKEN_URL, SEND_URL, SEND_URL]);
+    const auth = calls.filter((c) => c.url === SEND_URL).map((c) => new Headers(c.init.headers).get("authorization"));
+    expect(auth).toEqual(["Bearer before-consent", "Bearer after-consent", "Bearer after-consent"]);
+  });
+
+  it("a 403 keeps a newer token that another send fetched meanwhile", async () => {
+    let releaseDenied: () => void = () => {};
+    const deniedLater = new Promise<void>((r) => (releaseDenied = r));
+    let now = 1_000_000;
+    const replies: Reply[] = [token("old", 120), accepted, token("new", 3600), accepted, accepted];
+    const calls: Call[] = [];
+    let first = true;
+    const fetchFn = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const call = { url: String(input), init: init ?? {} };
+      calls.push(call);
+      if (call.url === SEND_URL && first) {
+        first = false;
+        await deniedLater; // the refused send of the old token answers only after the token was renewed
+        return json(403, { error: { code: "ErrorAccessDenied", message: "Access is denied." } });
+      }
+      const reply = replies.shift();
+      if (!reply) throw new Error(`unexpected request ${call.url}`);
+      return reply(call);
+    };
+    const t = createGraphTransport(CONFIG, { fetch: fetchFn as typeof fetch, now: () => now });
+    const denied = t.send(MAIL).catch((e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 0));
+    await t.send(MAIL); // still "old"
+    now += 120_000; // "old" is past its refresh point → "new"
+    await t.send(MAIL);
+    releaseDenied();
+    expect(await denied).toMatchObject({ status: 403 });
+    await t.send(MAIL); // "new" is still cached
+    const auth = calls.filter((c) => c.url === SEND_URL).map((c) => new Headers(c.init.headers).get("authorization"));
+    expect(auth).toEqual(["Bearer old", "Bearer old", "Bearer new", "Bearer new"]);
+    expect(calls.filter((c) => c.url === TOKEN_URL)).toHaveLength(2);
   });
 
   it("omits attachments when there are none", () => {

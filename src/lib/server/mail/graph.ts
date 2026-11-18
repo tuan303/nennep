@@ -1,12 +1,15 @@
 /**
- * Microsoft Graph transport (Microsoft 365, shared mailbox):
+ * Microsoft Graph transport (Microsoft 365, one sending mailbox – shared or licensed user):
  * - app-only token: client credentials at https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token with scope
  *   https://graph.microsoft.com/.default, cached until 60 s before it expires (one request at a time);
  * - POST https://graph.microsoft.com/v1.0/users/{MAIL_SENDER}/sendMail: HTML body, to/cc, base64 file attachments,
  *   from = the mailbox with MAIL_SENDER_NAME, saveToSentItems, auto-replies suppressed.
  * Errors become MailSendError with a Vietnamese message: 408 / 429 / 5xx / network → retryable (Retry-After honoured);
  * 400 / 401 / 403 / 404 / 413 → not retryable, with a hint for the IT admin. A 401 from sendMail retries once with a
- * fresh token. Requests above GRAPH_MAX_REQUEST_BYTES are refused – callers drop the attachment first.
+ * fresh token. A 403 drops the cached token (when it is still the one that was refused): the Mail.Send application
+ * permission is part of the token, so a permission granted in Microsoft Entra after the token was issued only shows
+ * with a new one – the next send gets it instead of waiting up to an hour for the old token to expire.
+ * Requests above GRAPH_MAX_REQUEST_BYTES are refused – callers drop the attachment first.
  * Each sendMail request times out after 30 s, or earlier so that it ends GRAPH_DEADLINE_MARGIN_MS before the caller's
  * deadline (SendOptions.deadline). A sendMail request is never started with less than graphMinSendMs (10 s, up to
  * 13 s for the largest requests) left – also not the one after the fresh-token retry of a 401: a request cut off by
@@ -59,8 +62,8 @@ export function graphSendMailUrl(sender: string): string {
 export const GRAPH_MSG = {
   credentials: (code?: string) => `Sai Tenant ID / Client ID / Client secret hoặc secret đã hết hạn${code ? ` (${code})` : ""}.`,
   accessDenied: (sender: string) =>
-    `Ứng dụng chưa được cấp quyền gửi thư từ hộp thư ${sender} (Exchange Online: gán vai trò "Application Mail.Send" cho ứng dụng trên hộp thư này).`,
-  mailboxNotFound: (sender: string) => `Không tìm thấy hộp thư gửi ${sender} (kiểm tra MAIL_SENDER và hộp thư dùng chung trên Microsoft 365).`,
+    `Ứng dụng chưa được cấp quyền gửi thư từ hộp thư ${sender} (cấp trong Microsoft Entra: quyền Mail.Send loại Application đã bấm Grant admin consent và – nếu có giới hạn theo nhóm hộp thư – hộp thư này nằm trong nhóm; cấp bằng RBAC for Applications: vai trò "Application Mail.Send" trên hộp thư này, có hiệu lực sau 30 phút – 2 giờ, khi đó không cấp thêm Mail.Send trong Entra).`,
+  mailboxNotFound: (sender: string) => `Không tìm thấy hộp thư gửi ${sender} (kiểm tra MAIL_SENDER, hộp thư có trong Exchange admin center và – nếu là hộp thư người dùng – còn giấy phép Exchange Online).`,
   invalidRecipients: "Microsoft 365 từ chối thư vì có địa chỉ người nhận không hợp lệ.",
   tooLarge: "Thư quá lớn để gửi qua Microsoft 365 (tối đa khoảng 3,5 MB).",
   busy: (status: number) => `Microsoft 365 tạm thời chưa nhận thư (HTTP ${status}) – hệ thống sẽ tự gửi lại.`,
@@ -280,7 +283,8 @@ export function createGraphTransport(config: GraphTransportConfig, deps: GraphTr
       if (bytes > GRAPH_MAX_REQUEST_BYTES) throw new MailSendError(GRAPH_MSG.tooLarge, false, undefined, 413);
       const minSend = graphMinSendMs(bytes);
       for (let attempt = 1; ; attempt++) {
-        const authorization = `Bearer ${await accessToken(deadline, minSend)}`;
+        const used = await accessToken(deadline, minSend);
+        const authorization = `Bearer ${used}`;
         // Checked again after the token wait and before the retry of a 401 (nothing has been sent before either).
         const timeout = sendTimeout(deadline, minSend);
         const res = await request(graphSendMailUrl(config.sender), { method: "POST", headers: { authorization, "content-type": "application/json" }, body }, timeout);
@@ -293,6 +297,8 @@ export function createGraphTransport(config: GraphTransportConfig, deps: GraphTr
           token = undefined; // revoked / rotated secret: one retry with a fresh token
           continue;
         }
+        // Permission just granted in Entra: the next send asks for a new token (a newer cached one is kept).
+        if (res.status === 403 && token?.value === used) token = undefined;
         throw sendMailError(res.status, errorBody, config.sender, parseRetryAfter(res.headers.get("retry-after"), now()));
       }
     },
